@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>灵溯 · K12 科创协作平台 — 项目进度汇报</title>
+<style>
+  :root{
+    --ink:#233126; --moss:#496e45; --moss-d:#315833; --sage:#81957c;
+    --line:#e7ece4; --bg:#f6f8f4; --card:#ffffff; --amber:#c98a2b; --amber-bg:#fdf3e3;
+    --green:#2e7d4f; --green-bg:#eaf5ee; --blue:#2f5fb0; --blue-bg:#e9f0fb;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",Segoe UI,sans-serif;
+    color:var(--ink);background:var(--bg);line-height:1.7;}
+  .wrap{max-width:1000px;margin:0 auto;padding:48px 40px 64px;}
+  header{border-bottom:3px solid var(--moss);padding-bottom:22px;margin-bottom:34px;}
+  .eyebrow{color:var(--moss);font-weight:600;letter-spacing:2px;font-size:13px;margin:0 0 8px;}
+  h1{margin:0;font-size:30px;font-weight:700;color:var(--moss-d);}
+  .sub{color:#6b7469;font-size:14px;margin-top:8px;}
+  h2{font-size:21px;color:var(--moss-d);margin:44px 0 8px;display:flex;align-items:center;gap:10px;}
+  h2::before{content:"";width:6px;height:22px;background:var(--moss);border-radius:3px;display:inline-block;}
+  .lead{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px 26px;
+    font-size:16px;color:#37443a;}
+  .lead b{color:var(--moss-d);}
+  h3.role{font-size:17px;color:var(--moss-d);margin:30px 0 10px;padding-left:12px;border-left:4px solid var(--sage);
+    display:flex;align-items:center;gap:10px;}
+  .cnt{font-size:12px;background:var(--green-bg);color:var(--green);padding:2px 10px;border-radius:20px;font-weight:600;}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;
+    border:1px solid var(--line);margin-top:4px;}
+  th,td{text-align:left;padding:12px 16px;font-size:14px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{background:#eef3ea;color:var(--moss-d);font-weight:600;}
+  tr:last-child td{border-bottom:none;}
+  .mod{font-weight:600;color:var(--ink);white-space:nowrap;}
+  .pill{font-size:12px;font-weight:600;padding:2px 9px;border-radius:20px;white-space:nowrap;}
+  .pill.g{background:var(--green-bg);color:var(--green);}
+  .pill.a{background:var(--amber-bg);color:var(--amber);}
+  .note{font-size:13px;color:#6b7469;margin:6px 0 0;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px;}
+  @media(max-width:720px){.grid{grid-template-columns:1fr;}}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;
+    box-shadow:0 1px 2px rgba(35,49,38,.04);}
+  .card h4{margin:0 0 8px;font-size:15.5px;color:var(--ink);}
+  .card p{margin:0;font-size:13.5px;color:#5a6459;}
+  .value{background:var(--green-bg);border:1px solid #cfe9d8;border-radius:12px;padding:12px 16px;
+    font-size:13.5px;color:#28593c;margin-top:10px;}
+  .badge{display:inline-block;font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;margin-bottom:8px;}
+  .badge.plan{background:var(--amber-bg);color:var(--amber);}
+  footer{margin-top:48px;padding-top:18px;border-top:1px solid var(--line);color:#8a9289;font-size:12px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">项目进度汇报</p>
+    <h1>灵溯 · K12 科创协作平台</h1>
+    <p class="sub">面向中小学的科技创新项目协作平台 &nbsp;|&nbsp; 汇报日期：2026 年 8 月 18 日</p>
+  </header>
+
+  <h2>一、整体进展</h2>
+  <div class="lead">
+    平台主体功能已接近完成，可支持<b>学生做项目、教师做指导、管理员管全校</b>三类角色全程在线协作。
+    目前整体完成度约 <b>92%</b>，已具备投产条件；下一步将重点打磨
+    <b>“AI 智能助手如何真正帮学生把项目做出来、做扎实”</b>这一增值能力。
+  </div>
+
+  <h2>二、各端已实现的功能模块清单</h2>
+  <p class="note">下表按使用端逐一列出已实现的功能模块，均为开发完成、测试通过的能力，状态均为“已完成”。</p>
+
+  <!-- 学生端 -->
+  <h3 class="role">① 学生端 —— 做项目 <span class="cnt">10 个模块</span></h3>
+  <table>
+    <thead><tr><th style="width:22%">功能模块</th><th>已实现内容</th><th style="width:14%">状态</th></tr></thead>
+    <tbody>
+      <tr><td class="mod">项目创建</td><td>新建科创项目，填写题目、研究问题、方案概要</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">组队协作</td><td>邀请同校同学加入；查看自己参与的所有项目与进度</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">研究旅程引导</td><td>系统拆成 22 个标准步骤，逐步引导；前一步完成才解锁后一步</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">材料撰写</td><td>按步骤在线写材料，每步配有写作指引，知道“要写什么”</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">材料提交</td><td>提交前需确认“内容真实”，再交给教师审核</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">参考范本</td><td>每步提供空白模板，学生可直接下载动手写</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">AI 辅助写作</td><td>内置 15 个写作助手；AI 给建议学生自行选用；用量按学校配额可控</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">公开案例申请</td><td>项目完成后可申请成为“公开案例”供全校学习</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">报告导出</td><td>一键导出项目报告，方便参赛或存档</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">我的消息</td><td>组员加入、教师审核结果等通知集中查看，未读红点提醒</td><td><span class="pill g">已完成</span></td></tr>
+    </tbody>
+  </table>
+
+  <!-- 教师端 -->
+  <h3 class="role">② 教师端 —— 做指导 <span class="cnt">7 个模块</span></h3>
+  <table>
+    <thead><tr><th style="width:22%">功能模块</th><th>已实现内容</th><th style="width:14%">状态</th></tr></thead>
+    <tbody>
+      <tr><td class="mod">项目认领</td><td>认领学生提交、尚未分配指导老师的新项目</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">组员分配</td><td>直接把项目分配给本班学生，无需学生再确认</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">材料审核</td><td>逐份查看学生材料；通过或退回并写明修改意见；仅主指导老师可审</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">成员管理</td><td>确认学生的组员邀请</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">学生公告</td><td>向自己指导的学生发送项目通知</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">模板配置</td><td>覆盖本校材料的写作指引与参考范本</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">案例一级审核</td><td>对学生“公开案例”申请做一级审核</td><td><span class="pill g">已完成</span></td></tr>
+    </tbody>
+  </table>
+
+  <!-- 管理员端 -->
+  <h3 class="role">③ 管理员端 —— 管全校 <span class="cnt">6 个模块</span></h3>
+  <table>
+    <thead><tr><th style="width:22%">功能模块</th><th>已实现内容</th><th style="width:14%">状态</th></tr></thead>
+    <tbody>
+      <tr><td class="mod">学校与账号</td><td>管理学校授权状态、使用配额、邀请码；开通 / 停用账号</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">赛事管理</td><td>创建与维护科创赛事信息（唯一可管理赛事的角色）</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">平台公告</td><td>面向全校发布平台级通知，全员可见</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">案例二级治理</td><td>对公开案例做上线 / 下线治理</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">服务监控</td><td>查看平台服务运行状态，保障稳定</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">全局 AI 模板</td><td>统一管理全校可用的 AI 助手模板</td><td><span class="pill g">已完成</span></td></tr>
+    </tbody>
+  </table>
+
+  <!-- 通用能力 -->
+  <h3 class="role">④ 平台通用能力 <span class="cnt">3 个模块</span></h3>
+  <table>
+    <thead><tr><th style="width:22%">功能模块</th><th>已实现内容</th><th style="width:14%">状态</th></tr></thead>
+    <tbody>
+      <tr><td class="mod">消息通知中心</td><td>成员变动、审核结果、案例发布等自动通知；个人消息与平台公告统一管理</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">材料模板与范本</td><td>每个步骤配好写作指引与参考范本；教师可按校情覆盖</td><td><span class="pill g">已完成</span></td></tr>
+      <tr><td class="mod">AI 智能助手系统</td><td>15 个面向中小学生的科创写作助手（开题/实验/报告/答辩等），管理员配置、教师可定制；AI 仅给可改建议</td><td><span class="pill g">已完成</span></td></tr>
+    </tbody>
+  </table>
+
+  <h2>三、正在推进：让 AI 真正“读懂”学生的项目</h2>
+  <p class="note">过去 AI 助手像一个独立的问答工具，学生要自己把背景复制进去问。下一步让 AI 直接“看到”学生当前在做的步骤和已写的内容，在写材料的地方就能帮上忙。</p>
+  <div class="grid">
+    <div class="card">
+      <span class="badge plan">方案中 · 即将开发</span>
+      <h4>① 写材料时的随身 AI 助手</h4>
+      <p>学生在写某份研究报告时，右侧直接出现 AI 助手：自动带上“这份材料的要求”和“你已写的内容”，给针对性建议，还能一键把建议插入正文。</p>
+      <div class="value">价值：不用复制粘贴、不用跳出页面，写材料效率最高可提升一倍以上。</div>
+    </div>
+    <div class="card">
+      <span class="badge plan">方案中 · 即将开发</span>
+      <h4>② AI 中心“关联到当前步骤”</h4>
+      <p>在 AI 问答中心，学生可选择“我正在做第几步”，系统自动把该步骤的背景带入，让建议更有针对性。</p>
+      <div class="value">价值：降低学生“不知道怎么问 AI”的门槛，建议更贴合实际项目。</div>
+    </div>
+    <div class="card">
+      <span class="badge plan">方案中 · 即将开发</span>
+      <h4>③ 跨步骤内容“自动体检”</h4>
+      <p>AI 通读整个项目各步骤内容，自动检查前后是否矛盾（如报告结论声称的效果，实验记录里却没有对应数据），提前预警。</p>
+      <div class="value">价值：保障研究严谨性，减少教师反复打回，项目质量更扎实。</div>
+    </div>
+  </div>
+
+  <h2>四、推进计划（通俗时间线）</h2>
+  <table>
+    <thead><tr><th style="width:44%">阶段</th><th style="width:18%">状态</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>基础打通：让 AI 能读取“当前步骤”信息</td><td><span class="pill a">准备开始</span></td><td>三项能力共用的底层支撑</td></tr>
+      <tr><td>能力② AI 中心关联步骤</td><td><span class="pill a">准备开始</span></td><td>改动最小，先验证效果</td></tr>
+      <tr><td>能力① 写材料时的随身助手</td><td><span class="pill a">准备开始</span></td><td>价值最高，重点投入</td></tr>
+      <tr><td>能力③ 跨步骤自动体检</td><td><span class="pill a">准备开始</span></td><td>质量保障，独立模块</td></tr>
+      <tr><td>整体测试与上线验证</td><td><span class="pill a">准备开始</span></td><td>确保稳定、安全、合规</td></tr>
+    </tbody>
+  </table>
+
+  <h2>五、风险与保障</h2>
+  <div class="card">
+    <p style="margin:0;">
+      <b>合规底线：</b>AI 全程只产出“学生可自行修改的建议草稿”，<b>绝不</b>替学生虚构数据、引用或实验结果，
+      也<b>绝不</b>替学生提交、审核或发布内容。所有 AI 使用均留痕可查，符合中小学生数据安全要求。
+    </p>
+  </div>
+
+  <footer>
+    本报告面向非技术读者，已对实现细节做通俗化处理，功能模块按使用端逐一列出。如需查看技术版进度（含具体改造项与测试情况），可另行提供。
+  </footer>
+
+</div>
+</body>
+</html>

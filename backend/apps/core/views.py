@@ -1,0 +1,1189 @@
+import clamd
+import redis
+import requests
+
+from django.conf import settings
+from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.password_validation import validate_password
+from django.core.files.base import File
+from django.http import FileResponse, Http404
+from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
+from django.utils.decorators import method_decorator
+from django.db import transaction
+from django.db.models import Q
+from rest_framework import status, viewsets
+from rest_framework.views import APIView
+from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import AllowAny
+from rest_framework.throttling import AnonRateThrottle
+from rest_framework.response import Response
+from django.utils import timezone
+from datetime import timedelta
+import hashlib
+import secrets
+from pathlib import Path
+from io import BytesIO
+from .models import AIGenerationLog, Account, AgentTemplate, Announcement, AnnouncementRead, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, UploadPart, UploadSession
+from .notifiers import notify
+from .serializers import AIGenerationLogSerializer, AgentTemplateSerializer, AnnouncementSerializer, AuditEventSerializer, CompetitionSerializer, MaterialAttachmentSerializer, MaterialRevisionSerializer, MaterialSerializer, MemberInvitationSerializer, NotificationSerializer, ProjectMemberSerializer, ProjectSerializer, ProjectTaskSerializer, PublicCaseRequestSerializer, ReportExportSerializer, SchoolSerializer, TemplateSerializer, UploadSessionSerializer
+from .tasks import generate_ai_response, generate_report_export, process_uploaded_material
+from .workflows.cases import resubmit_public_case_request, validate_public_case_request
+from .workflows.materials import create_material_draft, review_material_revision, submit_material_revision
+from .workflows.memberships import assign_member, create_member_invitation, decide_member_invitation, respond_to_invitation
+from .workflows.projects import claim_project
+from .services import build_blank_reference
+from .workflows.ai import accessible_ai_logs, create_ai_request
+
+
+def school_queryset(queryset, user, field="school"):
+    if user.role == "platform_admin": return queryset
+    return queryset.filter(**{field: user.school})
+
+def teacher(user):
+    return user.role == "teacher"
+
+def platform_admin(user): return user.role == "platform_admin"
+
+
+def _dependency_status(check):
+    """Run a short, read-only dependency probe without exposing configuration."""
+    try:
+        check()
+        return "healthy"
+    except Exception:
+        return "unavailable"
+
+
+def _redis_status():
+    broker_url = getattr(settings, "CELERY_BROKER_URL", "").strip()
+    if not broker_url:
+        return "not_configured"
+    return _dependency_status(lambda: redis.Redis.from_url(
+        broker_url, socket_connect_timeout=2, socket_timeout=2,
+    ).ping())
+
+
+def _clamav_status():
+    host = getattr(settings, "CLAMAV_HOST", "").strip()
+    if not host:
+        return "not_configured"
+    return _dependency_status(lambda: clamd.ClamdNetworkSocket(
+        host=host,
+        port=getattr(settings, "CLAMAV_PORT", 3310),
+        timeout=min(getattr(settings, "CLAMAV_TIMEOUT", 120), 2),
+    ).ping())
+
+
+def _document_converter_status():
+    converter_url = getattr(settings, "DOCUMENT_CONVERTER_URL", "").strip()
+    if not converter_url:
+        return "not_configured"
+
+    def probe():
+        response = requests.get(f"{converter_url.rstrip('/')}/health", timeout=2)
+        response.raise_for_status()
+
+    return _dependency_status(probe)
+
+
+class LoginThrottle(AnonRateThrottle):
+    scope = "login"
+
+
+class RegisterThrottle(AnonRateThrottle):
+    scope = "register"
+
+def require_authorized_school(user):
+    if not platform_admin(user) and (not user.school or not user.school.is_authorized):
+        raise PermissionDenied("学校授权已停用或到期，当前仅可查看历史内容。")
+
+def project_member(project, user):
+    return project.leader_id == user.id or project.members.filter(account=user).exists() or project.primary_teacher_id == user.id
+
+
+def _can_manage_project(user, project):
+    """Whether the user can change lifecycle state of a project (archive / trash / restore)."""
+    return (
+        project.leader_id == user.id
+        or project.primary_teacher_id == user.id
+        or project.members.filter(account=user, role="leader").exists()
+    )
+
+
+def accessible_projects(user):
+    if platform_admin(user):
+        raise PermissionDenied("平台管理员不能访问学校项目过程数据。")
+    base = Project.objects.filter(school=user.school)
+    if user.role == Account.Role.STUDENT:
+        return base.filter(Q(leader=user) | Q(members__account=user)).distinct()
+    if user.role == Account.Role.TEACHER:
+        return base.filter(primary_teacher=user)
+    return base.none()
+
+
+def announcement_audience_queryset(queryset, user):
+    if platform_admin(user):
+        return queryset
+    audience = "students" if user.role == "student" else "teachers"
+    visible = Q(status="published", audience__in=["all", audience])
+    if user.role == "teacher":
+        visible |= Q(author=user)
+    return queryset.filter(visible)
+
+
+class CompetitionViewSet(viewsets.ModelViewSet):
+    serializer_class = CompetitionSerializer
+
+    def get_queryset(self):
+        if platform_admin(self.request.user):
+            return Competition.objects.all()
+        audience = "students" if self.request.user.role == Account.Role.STUDENT else "teachers"
+        return Competition.objects.filter(
+            Q(school__isnull=True) | Q(school=self.request.user.school),
+            status=Competition.Status.PUBLISHED,
+            audience__in=[Competition.Audience.ALL, audience],
+        )
+
+    def perform_create(self, serializer):
+        if not platform_admin(self.request.user): raise PermissionDenied("仅平台管理员可发布赛事。")
+        serializer.save(school=None)
+
+    def update(self, request, *args, **kwargs):
+        if not platform_admin(request.user): raise PermissionDenied("仅平台管理员可管理赛事。")
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        if not platform_admin(request.user): raise PermissionDenied("仅平台管理员可管理赛事。")
+        return super().destroy(request, *args, **kwargs)
+
+
+class AnnouncementViewSet(viewsets.ModelViewSet):
+    serializer_class = AnnouncementSerializer
+
+    def get_queryset(self):
+        if platform_admin(self.request.user):
+            return Announcement.objects.filter(school__isnull=True)
+        base = Announcement.objects.filter(Q(school__isnull=True) | Q(school=self.request.user.school))
+        return announcement_audience_queryset(base, self.request.user)
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        audience = serializer.validated_data.get("audience", "all")
+        if user.role == "teacher" and audience != "students":
+            raise PermissionDenied("教师只能发布面向学生的公告。")
+        if user.role not in ("teacher", "platform_admin"): raise PermissionDenied("仅教师或平台管理员可发布公告。")
+        if not platform_admin(user): require_authorized_school(user)
+        serializer.save(school=None if platform_admin(user) else user.school, author=user, published_at=timezone.now() if serializer.validated_data.get("status") == "published" else None)
+
+    def update(self, request, *args, **kwargs):
+        item = self.get_object()
+        if not platform_admin(request.user): require_authorized_school(request.user)
+        if platform_admin(request.user) and item.school_id is None:
+            return super().update(request, *args, **kwargs)
+        if request.user.role == Account.Role.TEACHER and item.author_id == request.user.id:
+            return super().update(request, *args, **kwargs)
+        raise PermissionDenied("无权修改该公告。")
+
+    def destroy(self, request, *args, **kwargs):
+        item = self.get_object()
+        if not platform_admin(request.user): require_authorized_school(request.user)
+        if platform_admin(request.user) and item.school_id is None or request.user.role == Account.Role.TEACHER and item.author_id == request.user.id:
+            return super().destroy(request, *args, **kwargs)
+        raise PermissionDenied("无权删除该公告。")
+
+    @action(detail=True, methods=["post"])
+    def mark_read(self, request, pk=None):
+        announcement = self.get_object()
+        AnnouncementRead.objects.get_or_create(announcement=announcement, account=request.user)
+        return Response(self.get_serializer(announcement).data)
+
+
+class ProjectViewSet(viewsets.ModelViewSet):
+    serializer_class = ProjectSerializer
+    def get_queryset(self):
+        if platform_admin(self.request.user):
+            raise PermissionDenied("平台管理员不能访问学校项目过程数据。")
+        base = school_queryset(Project.objects.prefetch_related("members__account"), self.request.user)
+        if self.request.user.role == "student":
+            base = base.filter(Q(leader=self.request.user) | Q(members__account=self.request.user)).distinct()
+        if self.request.user.role == "teacher":
+            base = base.filter(primary_teacher=self.request.user)
+        include_archived = self.request.query_params.get("include_archived") in ("1", "true", "yes")
+        include_trashed = self.request.query_params.get("include_trashed") in ("1", "true", "yes")
+        only_archived = self.request.query_params.get("only_archived") in ("1", "true", "yes")
+        if only_archived:
+            base = base.filter(is_archived=True)
+        elif not include_archived:
+            base = base.filter(is_archived=False)
+        if not include_trashed:
+            base = base.filter(deleted_at__isnull=True)
+        return base
+    def perform_create(self, serializer):
+        if self.request.user.role != "student": raise PermissionDenied("仅学生可创建项目草稿。")
+        require_authorized_school(self.request.user)
+        project = serializer.save(school=self.request.user.school, leader=self.request.user, primary_teacher=None, status=Project.Status.UNCLAIMED)
+        project.members.create(account=self.request.user, role="leader")
+        ProjectGrowth.objects.get_or_create(project=project)
+
+    def update(self, request, *args, **kwargs):
+        raise PermissionDenied("项目变更必须通过明确的业务操作完成。")
+
+    def destroy(self, request, *args, **kwargs):
+        raise PermissionDenied("项目不能直接删除，请使用归档或移入回收站。")
+
+    @action(detail=True, methods=["post"])
+    def update_basics(self, request, pk=None):
+        """Leader 编辑非流程类项目字段（标题/问题/方案/总结），并写审计。"""
+        project = self._get_scoped_project(request, pk)
+        if project.leader_id != request.user.id:
+            raise PermissionDenied("仅项目负责人可编辑项目基本信息。")
+        require_authorized_school(request.user)
+        allowed = ("title", "problem", "plan", "summary")
+        changed = {}
+        for field in allowed:
+            if field in request.data:
+                value = request.data[field]
+                if field == "title":
+                    value = (value or "").strip()
+                    if not value:
+                        return Response({"detail": "项目标题不能为空。"}, status=status.HTTP_400_BAD_REQUEST)
+                if getattr(project, field) != value:
+                    changed[field] = {"from": getattr(project, field), "to": value}
+                    setattr(project, field, value)
+        if not changed:
+            return Response(
+                {"detail": "没有需要更新的字段。", "project": self.get_serializer(project).data},
+                status=status.HTTP_200_OK,
+            )
+        project.save(update_fields=list(changed.keys()))
+        AuditEvent.objects.create(
+            school=project.school, actor=request.user,
+            action=AuditEvent.Action.PROJECT_UPDATED,
+            changes={"project_id": project.id, "title": project.title, "fields": list(changed.keys())},
+        )
+        return Response(self.get_serializer(project).data, status=status.HTTP_200_OK)
+
+    def _get_scoped_project(self, request, pk):
+        """Use AllProjectsManager so trashed items can still be restored by the owner."""
+        return get_object_or_404(Project.all_objects.filter(school=request.user.school), pk=pk)
+
+    @action(detail=False, methods=["get"])
+    def trashed(self, request):
+        """List projects that the caller has moved to the recycle bin."""
+        return Response(self.get_serializer(self._trashed_queryset(request), many=True).data)
+
+    def _trashed_queryset(self, request):
+        base = Project.all_objects.filter(school=request.user.school, deleted_at__isnull=False)
+        if request.user.role == Account.Role.STUDENT:
+            return base.filter(Q(leader=request.user) | Q(members__account=request.user)).distinct()
+        if request.user.role == Account.Role.TEACHER:
+            return base.filter(primary_teacher=request.user)
+        return base.none()
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        project = self._get_scoped_project(request, pk)
+        if not _can_manage_project(request.user, project):
+            raise PermissionDenied("仅项目负责人、指导教师或学校管理员可归档项目。")
+        if project.status != Project.Status.COMPLETED:
+            raise ValidationError({"status": "仅已完成的项目可以归档。"})
+        if project.is_archived:
+            return Response(self.get_serializer(project).data)
+        project.is_archived = True
+        project.archived_at = timezone.now()
+        project.save(update_fields=["is_archived", "archived_at"])
+        AuditEvent.objects.create(school=project.school, actor=request.user, action=AuditEvent.Action.PROJECT_ARCHIVED, changes={"project_id": project.id, "title": project.title})
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["post"])
+    def unarchive(self, request, pk=None):
+        project = self._get_scoped_project(request, pk)
+        if not _can_manage_project(request.user, project):
+            raise PermissionDenied("仅项目负责人、指导教师或学校管理员可恢复归档。")
+        if not project.is_archived:
+            return Response(self.get_serializer(project).data)
+        project.is_archived = False
+        project.archived_at = None
+        project.save(update_fields=["is_archived", "archived_at"])
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["post"])
+    def trash(self, request, pk=None):
+        project = self.get_object()
+        if not _can_manage_project(request.user, project):
+            raise PermissionDenied("仅项目负责人或指导教师可将项目移入回收站。")
+        if project.is_archived:
+            raise ValidationError({"status": "已归档项目不可删除，请先恢复。"})
+        if project.deleted_at:
+            return Response(self.get_serializer(project).data)
+        now = timezone.now()
+        project.deleted_at = now
+        project.trashed_at = now
+        project.save(update_fields=["deleted_at", "trashed_at"])
+        if request.user.primary_project_id == project.id:
+            request.user.primary_project = None
+            request.user.save(update_fields=["primary_project"])
+        AuditEvent.objects.create(school=project.school, actor=request.user, action=AuditEvent.Action.PROJECT_TRASHED, changes={"project_id": project.id, "title": project.title})
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["post"])
+    def restore(self, request, pk=None):
+        project = self._get_scoped_project(request, pk)
+        if not _can_manage_project(request.user, project):
+            raise PermissionDenied("仅项目负责人或指导教师可恢复项目。")
+        if not project.deleted_at:
+            return Response(self.get_serializer(project).data)
+        project.deleted_at = None
+        project.trashed_at = None
+        project.save(update_fields=["deleted_at", "trashed_at"])
+        AuditEvent.objects.create(school=project.school, actor=request.user, action=AuditEvent.Action.PROJECT_RESTORED, changes={"project_id": project.id, "title": project.title})
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["post"])
+    def set_primary(self, request, pk=None):
+        project = self.get_object()
+        if request.user.role != Account.Role.STUDENT:
+            raise PermissionDenied("仅学生可设置主项目。")
+        if not project.members.filter(account=request.user).exists() and project.leader_id != request.user.id:
+            raise PermissionDenied("仅项目成员可将该项目设为主项目。")
+        if project.is_archived or project.deleted_at:
+            raise ValidationError({"status": "归档或回收站项目不能设为主项目。"})
+        request.user.primary_project = project
+        request.user.save(update_fields=["primary_project"])
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=False, methods=["get"])
+    def pool(self, request):
+        if not teacher(request.user): raise PermissionDenied("仅教师可查看项目池。")
+        return Response(self.get_serializer(school_queryset(Project.objects.filter(status=Project.Status.UNCLAIMED), request.user), many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def guided(self, request):
+        if not teacher(request.user): raise PermissionDenied("仅教师可查看指导项目。")
+        return Response(self.get_serializer(Project.objects.filter(school=request.user.school, primary_teacher=request.user), many=True).data)
+
+    @action(detail=True, methods=["post"])
+    def claim(self, request, pk=None):
+        require_authorized_school(request.user)
+        if not teacher(request.user): raise PermissionDenied("仅教师可认领项目。")
+        project = get_object_or_404(school_queryset(Project.objects.all(), request.user), pk=pk)
+        project = claim_project(project, request.user, request.data.get("template"))
+        return Response(self.get_serializer(project).data)
+
+    @action(detail=True, methods=["post"])
+    def add_member(self, request, pk=None):
+        require_authorized_school(request.user)
+        if not teacher(request.user):
+            raise PermissionDenied("仅教师可分配组员。")
+        project = self.get_object()
+        invitee = get_object_or_404(
+            Account.objects.filter(school=request.user.school, role="student"),
+            pk=request.data.get("invitee"),
+        )
+        member = assign_member(project, request.user, invitee)
+        return Response(ProjectMemberSerializer(member).data, status=status.HTTP_201_CREATED)
+
+
+class ProjectTaskViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = ProjectTaskSerializer
+
+    def get_queryset(self):
+        queryset = ProjectTask.objects.filter(project__in=accessible_projects(self.request.user)).select_related("project")
+        project_id = self.request.query_params.get("project")
+        return queryset.filter(project_id=project_id) if project_id else queryset
+
+
+@method_decorator(ensure_csrf_cookie, name="dispatch")
+class MeView(APIView):
+    def get(self, request):
+        user = request.user
+        primary = getattr(user, "primary_project", None)
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "display_name": user.get_full_name() or user.username,
+            "role": user.role,
+            "school": user.school_id,
+            "school_name": user.school.name if user.school_id else None,
+            "must_change_password": user.must_change_password,
+            "authorized": bool(user.school and user.school.is_authorized) if not platform_admin(user) else True,
+            "primary_project": primary.id if primary and not primary.deleted_at and not primary.is_archived else None,
+            "primary_project_title": primary.title if primary and not primary.deleted_at and not primary.is_archived else None,
+        })
+
+
+class StudentDirectoryView(APIView):
+    def get(self, request):
+        if request.user.role != Account.Role.STUDENT:
+            raise PermissionDenied("仅学生可搜索本校项目成员。")
+        query = request.query_params.get("q", "").strip()
+        if len(query) < 2:
+            return Response([])
+        accounts = Account.objects.filter(
+            school=request.user.school,
+            role=Account.Role.STUDENT,
+            is_active=True,
+        ).exclude(pk=request.user.pk).filter(Q(username__icontains=query) | Q(first_name__icontains=query)).order_by("username")[:20]
+        return Response([
+            {"id": account.id, "username": account.username, "display_name": account.get_full_name() or account.username}
+            for account in accounts
+        ])
+
+
+class ServiceStatusView(APIView):
+    """Expose operational readiness without returning secrets or credentials."""
+
+    def get(self, request):
+        if not platform_admin(request.user):
+            raise PermissionDenied("仅平台管理员可查看平台服务状态。")
+        from django.db import connection
+
+        database = "healthy"
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                cursor.fetchone()
+        except Exception:
+            database = "unavailable"
+        return Response({
+            "database": database,
+            "task_queue": _redis_status(),
+            "virus_scan": _clamav_status(),
+            "document_converter": _document_converter_status(),
+            "storage": getattr(settings, "STORAGE_OPTIONS", {}).get("AWS_STORAGE_BUCKET_NAME") and "configured" or "local",
+            "ai": "configured" if getattr(settings, "OPENAI_API_KEY", "") else "demo_mode",
+        })
+
+
+class AIAvailabilityView(APIView):
+    """Safe, role-scoped AI readiness for school users before they enter a prompt."""
+
+    def get(self, request):
+        if request.user.role not in (Account.Role.STUDENT, Account.Role.TEACHER):
+            raise PermissionDenied("仅学生或教师可查看 AI 服务状态。")
+        if not request.user.school_id:
+            raise PermissionDenied("账号尚未绑定学校。")
+        now = timezone.now()
+        used = AIGenerationLog.objects.filter(
+            project__school=request.user.school,
+            created_at__year=now.year,
+            created_at__month=now.month,
+        ).count()
+        if getattr(settings, "OPENAI_API_KEY", ""):
+            service_status = "configured"
+        else:
+            service_status = "demo_mode"
+        if service_status == "configured" and used >= request.user.school.ai_quota:
+            service_status = "quota_exhausted"
+        return Response({"status": service_status, "remaining_quota": max(0, request.user.school.ai_quota - used)})
+
+
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def health(request):
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute("SELECT 1")
+        cursor.fetchone()
+    return Response({"status": "ok"})
+
+
+@ensure_csrf_cookie
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def csrf(request):
+    return Response({"detail": "CSRF cookie ready."})
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([LoginThrottle])
+@csrf_protect
+def session_login(request):
+    user = authenticate(request, username=request.data.get("username", ""), password=request.data.get("password", ""))
+    if not user or not user.is_active:
+        raise ValidationError({"detail": "账号或密码错误。"})
+    login(request, user)
+    primary = getattr(user, "primary_project", None)
+    return Response({
+        "id": user.id, "username": user.username, "display_name": user.get_full_name() or user.username, "role": user.role,
+        "school": user.school_id, "school_name": user.school.name if user.school_id else None, "must_change_password": user.must_change_password,
+        "authorized": True if platform_admin(user) else bool(user.school and user.school.is_authorized),
+        "primary_project": primary.id if primary and not primary.deleted_at and not primary.is_archived else None,
+        "primary_project_title": primary.title if primary and not primary.deleted_at and not primary.is_archived else None,
+    })
+
+
+@api_view(["POST"])
+def session_logout(request):
+    logout(request)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+def change_password(request):
+    """修改当前登录用户的密码，并清除强制改密标记。"""
+    user = request.user
+    if not user.is_authenticated:
+        raise PermissionDenied("请先登录。")
+    old_password = request.data.get("old_password", "")
+    new_password = request.data.get("new_password", "")
+    confirm_password = request.data.get("confirm_password", "")
+    if not user.check_password(old_password):
+        return Response({"detail": "原密码不正确。"}, status=status.HTTP_400_BAD_REQUEST)
+    if not new_password or new_password != confirm_password:
+        return Response({"detail": "两次输入的新密码不一致。"}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(new_password, user)
+    except ValidationError as exc:
+        return Response({"detail": "；".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+    user.set_password(new_password)
+    user.must_change_password = False
+    user.save(update_fields=["password", "must_change_password"])
+    return Response({"detail": "密码已修改。", "must_change_password": False}, status=status.HTTP_200_OK)
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@ensure_csrf_cookie
+def demo_login(request):
+    """Create a development-only student session for local interaction testing."""
+    if not settings.DEBUG:
+        raise PermissionDenied("演示登录仅在开发环境可用。")
+    school, _ = School.objects.get_or_create(name="灵溯演示学校")
+    teacher, _ = Account.objects.get_or_create(
+        username="demo-teacher",
+        defaults={"school": school, "role": Account.Role.TEACHER, "must_change_password": False},
+    )
+    student, _ = Account.objects.get_or_create(
+        username="demo-student",
+        defaults={"school": school, "role": Account.Role.STUDENT, "must_change_password": False},
+    )
+    admin, _ = Account.objects.get_or_create(username="demo-platform", defaults={"role": Account.Role.PLATFORM_ADMIN, "is_staff": True, "must_change_password": False})
+    requested = request.data.get("role")
+    actor = admin if requested == "platform_admin" else teacher if requested == "teacher" else student
+    login(request, actor)
+    return Response({
+        "user": {"id": actor.id, "username": actor.username, "role": actor.role, "school": school.id},
+        "teacher_id": teacher.id,
+        "teacher_name": teacher.get_full_name() or "王老师",
+    })
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([RegisterThrottle])
+@csrf_protect
+def register(request):
+    code = request.data.get("invite_code", "").strip()
+    role = request.data.get("role")
+    username = request.data.get("username", "").strip()
+    password = request.data.get("password", "")
+    display_name = request.data.get("display_name", "").strip()
+    school = School.objects.filter(invite_code=code, is_active=True).first()
+    if not school or not school.is_authorized: raise ValidationError({"invite_code": "邀请码无效或学校未获授权。"})
+    if role not in ("student", "teacher"): raise ValidationError({"role": "请选择学生或教师。"})
+    if not username or not password: raise ValidationError("请填写账号和密码。")
+    if Account.objects.filter(username=username).exists(): raise ValidationError({"username": "该账号已存在。"})
+    try:
+        validate_password(password, user=Account(username=username, first_name=display_name))
+    except Exception as exc:
+        raise ValidationError({"password": list(exc.messages)}) from exc
+    user = Account.objects.create_user(username=username, password=password, first_name=display_name, school=school, role=role, must_change_password=False)
+    login(request, user)
+    return Response({"id": user.id, "username": user.username, "display_name": user.get_full_name() or user.username, "role": user.role, "school": school.id, "school_name": school.name, "authorized": True, "must_change_password": False}, status=status.HTTP_201_CREATED)
+
+
+class SchoolViewSet(viewsets.ModelViewSet):
+    serializer_class = SchoolSerializer
+    queryset = School.objects.all().order_by("name")
+    def get_queryset(self):
+        if not platform_admin(self.request.user): raise PermissionDenied("仅平台管理员可管理学校空间。")
+        return super().get_queryset()
+    def perform_create(self, serializer):
+        if not platform_admin(self.request.user): raise PermissionDenied("仅平台管理员可创建学校空间。")
+        serializer.save()
+
+    def perform_update(self, serializer):
+        school = self.get_object()
+        changed = {
+            field: value
+            for field, value in serializer.validated_data.items()
+            if getattr(school, field) != value
+        }
+        serializer.save()
+        if changed:
+            AuditEvent.objects.create(
+                school=school,
+                actor=self.request.user,
+                action=AuditEvent.Action.SCHOOL_UPDATED,
+                changes=changed,
+            )
+
+    @action(detail=True, methods=["post"])
+    def reset_invite_code(self, request, pk=None):
+        school = self.get_object(); school.invite_code = secrets.token_urlsafe(8); school.save(update_fields=["invite_code"])
+        AuditEvent.objects.create(school=school, actor=request.user, action=AuditEvent.Action.INVITE_CODE_RESET)
+        return Response(self.get_serializer(school).data)
+
+    @action(detail=True, methods=["get"], url_path="audit-events")
+    def audit_events(self, request, pk=None):
+        school = self.get_object()
+        events = school.audit_events.select_related("actor").all()
+        return Response(AuditEventSerializer(events, many=True).data)
+
+
+class MaterialViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = MaterialSerializer
+    def get_queryset(self):
+        queryset = Material.objects.filter(project__in=accessible_projects(self.request.user)).select_related("project", "task")
+        project_id = self.request.query_params.get("project")
+        return queryset.filter(project_id=project_id) if project_id else queryset
+
+    @action(detail=True, methods=["get"])
+    def reference(self, request, pk=None):
+        material = self.get_object()
+        file_field, original_name = material.effective_reference
+        if file_field:
+            reference = {"url": f"/api/materials/{material.pk}/reference/download/", "original_name": original_name}
+        elif material.effective_guidance:
+            safe = (material.title or "参考范本").replace("/", "_")
+            reference = {"url": f"/api/materials/{material.pk}/reference/download/", "original_name": f"{safe}_参考范本.docx"}
+        else:
+            reference = None
+        return Response({"guidance": material.effective_guidance, "reference": reference})
+
+    @action(detail=True, methods=["put"])
+    def set_reference(self, request, pk=None):
+        require_authorized_school(request.user)
+        if platform_admin(request.user):
+            raise PermissionDenied("平台管理员不能修改项目材料模板。")
+        if not teacher(request.user):
+            raise PermissionDenied("仅主指导教师可配置材料模板。")
+        material = self.get_object()
+        if material.project.primary_teacher_id != request.user.id:
+            raise PermissionDenied("只能配置本人指导项目的材料模板。")
+        guidance = request.data.get("guidance")
+        reference_file = request.FILES.get("reference_file")
+        if guidance is not None:
+            material.guidance_override = guidance
+        if reference_file is not None:
+            suffix = Path(reference_file.name).suffix.lower()
+            if suffix not in {".docx", ".md", ".pdf"}:
+                raise ValidationError({"reference_file": f"仅支持 .docx/.md/.pdf 范本，当前为 {suffix}"})
+            if material.reference_file_override:
+                material.reference_file_override.delete(save=False)
+            material.reference_file_override = reference_file
+        material.save()
+        return Response(self.get_serializer(material).data)
+
+    @action(detail=True, methods=["delete"])
+    def reset_reference(self, request, pk=None):
+        require_authorized_school(request.user)
+        if platform_admin(request.user):
+            raise PermissionDenied("平台管理员不能修改项目材料模板。")
+        if not teacher(request.user):
+            raise PermissionDenied("仅主指导教师可配置材料模板。")
+        material = self.get_object()
+        if material.project.primary_teacher_id != request.user.id:
+            raise PermissionDenied("只能配置本人指导项目的材料模板。")
+        if material.reference_file_override:
+            material.reference_file_override.delete(save=False)
+        material.reference_file_override = None
+        material.guidance_override = ""
+        material.save()
+        return Response(self.get_serializer(material).data)
+
+    @action(detail=True, methods=["get"], url_path="reference/download")
+    def reference_download(self, request, pk=None):
+        material = self.get_object()
+        file_field, original_name = material.effective_reference
+        if file_field:
+            try:
+                return FileResponse(file_field.open("rb"), as_attachment=True, filename=original_name)
+            except Exception:
+                raise Http404("参考范本文件读取失败。")
+        guidance = material.effective_guidance
+        if not guidance:
+            raise Http404("该材料暂无可下载的参考范本。")
+        content, filename = build_blank_reference(material.title, guidance)
+        content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document" if filename.endswith(".docx") else "text/markdown; charset=utf-8"
+        return FileResponse(BytesIO(content), as_attachment=True, filename=filename, content_type=content_type)
+class MaterialRevisionViewSet(viewsets.ModelViewSet):
+    serializer_class = MaterialRevisionSerializer
+    def get_queryset(self): return MaterialRevision.objects.filter(material__project__in=accessible_projects(self.request.user)).select_related("material__project", "author").prefetch_related("attachments")
+    def perform_create(self, serializer):
+        require_authorized_school(self.request.user)
+        if self.request.user.role != Account.Role.STUDENT:
+            raise PermissionDenied("仅项目学生可创建材料版本。")
+        create_material_draft(serializer, self.request.user)
+
+    def update(self, request, *args, **kwargs):
+        raise PermissionDenied("材料版本不可覆盖，请创建新版本。")
+
+    def destroy(self, request, *args, **kwargs):
+        raise PermissionDenied("材料版本属于审计记录，不能删除。")
+
+    @action(detail=False, methods=["get"])
+    def pending_reviews(self, request):
+        if not teacher(request.user):
+            raise PermissionDenied("仅教师可查看待审核材料。")
+        revisions = self.get_queryset().filter(status="submitted")
+        return Response(self.get_serializer(revisions.order_by("created_at"), many=True).data)
+
+    @action(detail=True, methods=["post"])
+    def submit(self, request, pk=None):
+        require_authorized_school(request.user)
+        revision = self.get_object()
+        if request.user.role != Account.Role.STUDENT:
+            raise PermissionDenied("仅学生可提交材料。")
+        truth_confirmed = request.data.get("truth_confirmed")
+        if truth_confirmed is False or truth_confirmed is None:
+            blocked = submit_material_revision(revision, request.user, False)
+            return blocked
+        if truth_confirmed is not True:
+            raise ValidationError({"truth_confirmed": "提交前必须明确确认材料真实性。"})
+        blocked = submit_material_revision(revision, request.user, truth_confirmed)
+        if blocked:
+            return blocked
+        return Response(self.get_serializer(revision).data)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def review(self, request, pk=None):
+        require_authorized_school(request.user)
+        revision = self.get_queryset().select_for_update().get(pk=pk)
+        if not teacher(request.user):
+            raise PermissionDenied("仅主指导教师可审核。")
+        outcome = request.data.get("outcome")
+        comment = request.data.get("comment", "").strip()
+        review_material_revision(revision, request.user, outcome, comment)
+        return Response(self.get_serializer(revision).data)
+
+
+class MaterialAttachmentViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = MaterialAttachmentSerializer
+
+    def get_queryset(self):
+        return MaterialAttachment.objects.filter(revision__material__project__in=accessible_projects(self.request.user))
+
+    @action(detail=True, methods=["get"])
+    def download(self, request, pk=None):
+        attachment = self.get_object()
+        if attachment.scan_status in (MaterialAttachment.ScanStatus.PENDING, MaterialAttachment.ScanStatus.PROCESSING):
+            return Response({"detail": "文件正在进行安全检查，请稍后重试。"}, status=423)
+        if attachment.scan_status == MaterialAttachment.ScanStatus.INFECTED:
+            return Response({"detail": "文件未通过安全检查，已禁止下载。"}, status=410)
+        if attachment.scan_status == MaterialAttachment.ScanStatus.FAILED and settings.FILE_SCAN_REQUIRED:
+            return Response({"detail": "文件安全检查失败，暂不可下载。"}, status=423)
+        try:
+            response = FileResponse(attachment.file.open("rb"), as_attachment=True, filename=attachment.original_name)
+            response["X-Content-Type-Options"] = "nosniff"
+            return response
+        except FileNotFoundError as exc:
+            raise Http404 from exc
+
+
+class UploadSessionViewSet(viewsets.ModelViewSet):
+    serializer_class = UploadSessionSerializer
+    http_method_names = ["get", "post", "put", "head", "options"]
+
+    def get_queryset(self):
+        return UploadSession.objects.filter(
+            revision__material__project__in=accessible_projects(self.request.user),
+            revision__author=self.request.user,
+        ).select_related("revision__material__project").prefetch_related("parts")
+
+    def perform_create(self, serializer):
+        require_authorized_school(self.request.user)
+        if self.request.user.role != Account.Role.STUDENT:
+            raise PermissionDenied("仅项目学生可上传材料附件。")
+        revision = serializer.validated_data["revision"]
+        material, project = revision.material, revision.material.project
+        if not project_member(project, self.request.user):
+            raise PermissionDenied("无项目权限。")
+        if project.status != Project.Status.ACTIVE or not project.primary_teacher_id:
+            raise ValidationError("项目尚未由教师认领并启动，不能上传正式材料。")
+        if revision.status != "draft" or material.status == "submitted":
+            raise ValidationError("只能为未提交的材料草稿上传附件。")
+        serializer.save(expires_at=timezone.now() + timedelta(hours=settings.UPLOAD_SESSION_TTL_HOURS))
+
+    def _active_session(self, session):
+        if session.status != UploadSession.Status.ACTIVE:
+            raise ValidationError("该上传会话已结束。")
+        if session.expires_at <= timezone.now():
+            session.status = UploadSession.Status.EXPIRED
+            session.save(update_fields=["status"])
+            self._delete_parts(session)
+            return None
+        return session
+
+    @staticmethod
+    def _delete_parts(session):
+        """Delete temporary part blobs before removing their database rows."""
+        parts = list(session.parts.all())
+        for part in parts:
+            if part.file:
+                part.file.delete(save=False)
+        UploadPart.objects.filter(pk__in=[part.pk for part in parts]).delete()
+
+    def _require_active(self, session):
+        if self._active_session(session) is None:
+            from rest_framework.exceptions import APIException
+            error = APIException("上传会话已过期，请重新选择文件。")
+            error.status_code = status.HTTP_410_GONE
+            raise error
+
+    @action(detail=True, methods=["put"], url_path=r"parts/(?P<part_index>[^/.]+)")
+    @transaction.atomic
+    def upload_part(self, request, pk=None, part_index=None):
+        require_authorized_school(request.user)
+        session = self.get_queryset().select_for_update().get(pk=pk)
+        self._require_active(session)
+        try:
+            index = int(part_index)
+        except (TypeError, ValueError) as exc:
+            raise ValidationError({"part_index": "分块序号必须是整数。"}) from exc
+        if index < 0 or index >= session.part_count:
+            raise ValidationError({"part_index": "分块序号超出范围。"})
+        upload = request.FILES.get("chunk")
+        if not upload:
+            raise ValidationError({"chunk": "请提供分块文件。"})
+        expected_size = session.chunk_size if index < session.part_count - 1 else session.total_size - session.chunk_size * (session.part_count - 1)
+        if upload.size != expected_size:
+            raise ValidationError({"chunk": "分块大小与会话定义不一致。"})
+        digest = hashlib.sha256()
+        for chunk in upload.chunks():
+            digest.update(chunk)
+        actual_sha256 = digest.hexdigest()
+        header_sha256 = request.headers.get("X-Chunk-Sha256", "").lower()
+        if not header_sha256 or header_sha256 != actual_sha256:
+            raise ValidationError({"chunk": "分块哈希校验失败。"})
+        existing = session.parts.filter(index=index).first()
+        if existing:
+            if existing.sha256 == actual_sha256 and existing.size == upload.size:
+                return Response({"index": index, "status": "already_uploaded"})
+            return Response({"detail": "该分块已存在且内容不一致。"}, status=status.HTTP_409_CONFLICT)
+        upload.seek(0)
+        UploadPart.objects.create(session=session, index=index, file=upload, size=upload.size, sha256=actual_sha256)
+        return Response({"index": index, "status": "uploaded"}, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def complete(self, request, pk=None):
+        require_authorized_school(request.user)
+        session = self.get_queryset().select_for_update().prefetch_related("parts").get(pk=pk)
+        if session.status == UploadSession.Status.COMPLETED and session.attachment_id:
+            return Response({"attachment_id": session.attachment_id, "status": "completed"})
+        self._require_active(session)
+        parts = list(session.parts.order_by("index"))
+        expected_indexes = list(range(session.part_count))
+        if [part.index for part in parts] != expected_indexes:
+            return Response({"detail": "分块尚未全部上传，不能完成合并。"}, status=status.HTTP_409_CONFLICT)
+        digest = hashlib.sha256()
+        total = 0
+        import tempfile
+        with tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b") as merged:
+            for part in parts:
+                with part.file.open("rb") as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        digest.update(chunk)
+                        total += len(chunk)
+                        merged.write(chunk)
+            actual_sha256 = digest.hexdigest()
+            if total != session.total_size:
+                return Response({"detail": "合并文件大小校验失败。"}, status=status.HTTP_400_BAD_REQUEST)
+            if session.expected_sha256 and actual_sha256 != session.expected_sha256:
+                return Response({"detail": "整体哈希校验失败。"}, status=status.HTTP_400_BAD_REQUEST)
+            merged.seek(0)
+            attachment = MaterialAttachment(
+                revision=session.revision,
+                original_name=session.original_name,
+                content_type=session.content_type,
+                size=total,
+                sha256=actual_sha256,
+                scan_status=MaterialAttachment.ScanStatus.PENDING,
+            )
+            attachment.file.save(session.original_name, File(merged), save=False)
+            attachment.save()
+        session.status = UploadSession.Status.COMPLETED
+        session.attachment = attachment
+        session.completed_at = timezone.now()
+        session.save(update_fields=["status", "attachment", "completed_at"])
+        self._delete_parts(session)
+        transaction.on_commit(lambda: process_uploaded_material.delay(session.revision_id))
+        return Response({"attachment_id": attachment.id, "status": "completed"})
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def abort(self, request, pk=None):
+        session = self.get_queryset().select_for_update().get(pk=pk)
+        if session.status == UploadSession.Status.ACTIVE:
+            self._delete_parts(session)
+            session.status = UploadSession.Status.ABORTED
+            session.save(update_fields=["status"])
+        return Response(self.get_serializer(session).data)
+
+
+
+class MemberInvitationViewSet(viewsets.ModelViewSet):
+    serializer_class = MemberInvitationSerializer
+    def get_queryset(self):
+        base = MemberInvitation.objects.select_related("project", "invitee", "inviter")
+        if platform_admin(self.request.user):
+            raise PermissionDenied("平台管理员不能访问学校项目成员数据。")
+        if self.request.user.role == "teacher": return base.filter(project__primary_teacher=self.request.user)
+        return base.filter(Q(invitee=self.request.user) | Q(inviter=self.request.user))
+
+    @action(detail=False, methods=["get"])
+    def pending_teacher(self, request):
+        if not teacher(request.user): raise PermissionDenied("仅教师可查看成员确认队列。")
+        queryset = self.get_queryset().filter(status=MemberInvitation.Status.PENDING_TEACHER)
+        return Response(self.get_serializer(queryset, many=True).data)
+
+    @action(detail=False, methods=["get"])
+    def pending_student(self, request):
+        if request.user.role != Account.Role.STUDENT: raise PermissionDenied("仅学生可查看自己的邀请。")
+        queryset = self.get_queryset().filter(invitee=request.user, status=MemberInvitation.Status.PENDING_STUDENT)
+        return Response(self.get_serializer(queryset, many=True).data)
+    def perform_create(self, serializer):
+        require_authorized_school(self.request.user)
+        create_member_invitation(serializer, self.request.user)
+    @action(detail=True, methods=["post"])
+    def accept(self, request, pk=None):
+        require_authorized_school(request.user); invitation = respond_to_invitation(self.get_object(), request.user, accept=True)
+        return Response(self.get_serializer(invitation).data)
+    @action(detail=True, methods=["post"])
+    def reject(self, request, pk=None):
+        require_authorized_school(request.user); invitation = respond_to_invitation(self.get_object(), request.user, accept=False)
+        return Response(self.get_serializer(invitation).data)
+    @action(detail=True, methods=["post"])
+    def decide(self, request, pk=None):
+        require_authorized_school(request.user); invitation = self.get_object()
+        approved = request.data.get("approved")
+        if not isinstance(approved, bool):
+            raise ValidationError({"approved": "请提供 true 或 false 布尔值。"})
+        invitation = decide_member_invitation(invitation, request.user, approved)
+        return Response(self.get_serializer(invitation).data)
+
+
+class TemplateViewSet(viewsets.ModelViewSet):
+    serializer_class = TemplateSerializer
+    def get_queryset(self): return school_queryset(Template.objects.all(), self.request.user)
+    def perform_create(self, serializer):
+        if not teacher(self.request.user): raise PermissionDenied("仅教师或管理员可管理模板。")
+        require_authorized_school(self.request.user)
+        serializer.save(school=self.request.user.school, owner=self.request.user)
+
+    def perform_update(self, serializer):
+        if not teacher(self.request.user): raise PermissionDenied("仅教师可管理模板。")
+        require_authorized_school(self.request.user)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        if not teacher(self.request.user): raise PermissionDenied("仅教师可管理模板。")
+        require_authorized_school(self.request.user)
+        instance.delete()
+
+
+class PublicCaseRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = PublicCaseRequestSerializer
+    http_method_names = ["get", "post", "head", "options"]
+    def get_queryset(self):
+        if platform_admin(self.request.user):
+            return PublicCaseRequest.objects.filter(status__in=[PublicCaseRequest.Status.PUBLISHED, PublicCaseRequest.Status.OFFLINE]).select_related("project__school").prefetch_related("selected_materials__revisions")
+        if self.request.user.role == Account.Role.STUDENT:
+            owned = Q(project__in=accessible_projects(self.request.user))
+            return PublicCaseRequest.objects.filter(owned | Q(status=PublicCaseRequest.Status.PUBLISHED)).distinct().select_related("project__school").prefetch_related("selected_materials__revisions")
+        if self.request.user.role == Account.Role.TEACHER:
+            return PublicCaseRequest.objects.filter(Q(project__primary_teacher=self.request.user) | Q(status=PublicCaseRequest.Status.PUBLISHED)).distinct().select_related("project__school").prefetch_related("selected_materials__revisions")
+        return PublicCaseRequest.objects.none()
+    def perform_create(self, serializer):
+        require_authorized_school(self.request.user)
+        project = serializer.validated_data["project"]
+        validate_public_case_request(project, self.request.user, serializer.validated_data.get("selected_materials", []))
+        item = serializer.save(applicant=self.request.user)
+        AuditEvent.objects.create(
+            school=project.school, actor=self.request.user, action=AuditEvent.Action.CASE_SUBMITTED,
+            changes={"project_id": project.id, "case_id": item.id, "selected_material_count": item.selected_materials.count()},
+        )
+    @action(detail=True, methods=["post"])
+    def resubmit(self, request, pk=None):
+        require_authorized_school(request.user)
+        item = self.get_object()
+        serializer = self.get_serializer(item, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        resubmit_public_case_request(item, request.user, serializer.validated_data)
+        AuditEvent.objects.create(
+            school=item.project.school, actor=request.user, action=AuditEvent.Action.CASE_SUBMITTED,
+            changes={"project_id": item.project_id, "case_id": item.id, "resubmitted": True, "selected_material_count": item.selected_materials.count()},
+        )
+        return Response(self.get_serializer(item).data)
+    @action(detail=True, methods=["post"])
+    def teacher_approve(self, request, pk=None):
+        require_authorized_school(request.user)
+        item = self.get_object()
+        if item.project.primary_teacher_id != request.user.id: raise PermissionDenied("仅指导教师可审核。")
+        if item.status != PublicCaseRequest.Status.PENDING_TEACHER: raise ValidationError("该申请已处理。")
+        item.status, item.teacher_reviewer, item.review_comment = PublicCaseRequest.Status.PUBLISHED, request.user, ""
+        item.save(update_fields=["status", "teacher_reviewer", "review_comment"])
+        AuditEvent.objects.create(
+            school=item.project.school, actor=request.user, action=AuditEvent.Action.CASE_REVIEWED,
+            changes={"project_id": item.project_id, "case_id": item.id, "outcome": "published"},
+        )
+        notify(item.applicant, kind=Notification.Kind.CASE_PUBLISHED,
+               title=f"公开案例申请「{item.project.title}」已通过，案例已发布",
+               actor=request.user, project=item.project,
+               link="/student/public-applications")
+        return Response(self.get_serializer(item).data)
+    @action(detail=True, methods=["post"])
+    def teacher_reject(self, request, pk=None):
+        require_authorized_school(request.user)
+        item = self.get_object()
+        if item.project.primary_teacher_id != request.user.id: raise PermissionDenied("仅指导教师可审核。")
+        if item.status != PublicCaseRequest.Status.PENDING_TEACHER: raise ValidationError("该申请已处理。")
+        comment = request.data.get("comment", "").strip()
+        if not comment: raise ValidationError({"comment": "驳回必须填写可执行的修改意见。"})
+        item.status, item.teacher_reviewer, item.review_comment = PublicCaseRequest.Status.REJECTED, request.user, comment
+        item.save(update_fields=["status", "teacher_reviewer", "review_comment"])
+        AuditEvent.objects.create(
+            school=item.project.school, actor=request.user, action=AuditEvent.Action.CASE_REVIEWED,
+            changes={"project_id": item.project_id, "case_id": item.id, "outcome": "rejected"},
+        )
+        notify(item.applicant, kind=Notification.Kind.CASE_REJECTED,
+               title=f"公开案例申请「{item.project.title}」被驳回",
+               body=comment, actor=request.user, project=item.project,
+               link="/student/public-applications")
+        return Response(self.get_serializer(item).data)
+    @action(detail=True, methods=["post"])
+    def set_visibility(self, request, pk=None):
+        if not platform_admin(request.user): raise PermissionDenied("仅平台管理员可治理公开案例。")
+        visible = request.data.get("visible")
+        if not isinstance(visible, bool):
+            raise ValidationError({"visible": "请提供 true 或 false 布尔值。"})
+        item = self.get_object()
+        item.status = PublicCaseRequest.Status.PUBLISHED if visible else PublicCaseRequest.Status.OFFLINE; item.admin_reviewer = request.user; item.save()
+        AuditEvent.objects.create(
+            school=item.project.school, actor=request.user, action=AuditEvent.Action.CASE_VISIBILITY_CHANGED,
+            changes={"project_id": item.project_id, "case_id": item.id, "visible": visible},
+        )
+        return Response(self.get_serializer(item).data)
+
+
+class AIGenerationLogViewSet(viewsets.ModelViewSet):
+    serializer_class = AIGenerationLogSerializer
+    http_method_names = ["get", "post", "head", "options"]
+    def get_queryset(self):
+        queryset = accessible_ai_logs(self.request.user)
+        project_id = self.request.query_params.get("project")
+        return queryset.filter(project_id=project_id) if project_id else queryset
+    def perform_create(self, serializer):
+        require_authorized_school(self.request.user)
+        project = serializer.validated_data["project"]
+        if not project_member(project, self.request.user): raise PermissionDenied("无项目权限。")
+        record = create_ai_request(serializer, self.request.user, settings.OPENAI_MODEL)
+        transaction.on_commit(lambda: generate_ai_response.delay(record.id))
+
+
+class AgentTemplateViewSet(viewsets.ModelViewSet):
+    serializer_class = AgentTemplateSerializer
+    http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if platform_admin(user):
+            return AgentTemplate.objects.all()  # 管理员看全部（含停用）
+        qs = AgentTemplate.objects.filter(is_active=True)
+        qs = qs.filter(role__in=[user.role, AgentTemplate.Role.BOTH])
+        qs = qs.filter(Q(school=None) | Q(school=user.school))  # 全局 + 本校校本
+        return qs
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if platform_admin(user):
+            serializer.save(school=None)  # 管理员只建全局模板
+        elif teacher(user):
+            if serializer.validated_data.get("role") == AgentTemplate.Role.BOTH:
+                raise PermissionDenied("校本模板不能设为通用(both)，请选择 student 或 teacher。")
+            serializer.save(school=user.school)  # 强制归属本人学校
+        else:
+            raise PermissionDenied("学生不能创建 AI 模板。")
+
+    def perform_update(self, serializer):
+        obj = self.get_object()
+        user = self.request.user
+        if platform_admin(user):
+            serializer.save()
+        elif teacher(user) and obj.school_id == user.school_id:
+            serializer.save(school=user.school)  # 锁定 school，禁止改归属
+        else:
+            raise PermissionDenied("无权限修改该模板。")
+
+    def perform_destroy(self, instance):
+        user = self.request.user
+        if platform_admin(user) or (teacher(user) and instance.school_id == user.school_id):
+            instance.delete()
+        else:
+            raise PermissionDenied("无权限删除该模板。")
+
+
+class ReportExportViewSet(viewsets.ModelViewSet):
+    serializer_class = ReportExportSerializer
+    http_method_names = ["get", "post", "head", "options"]
+
+    def get_queryset(self):
+        queryset = ReportExport.objects.filter(project__in=accessible_projects(self.request.user)).select_related("project", "requested_by")
+        project_id = self.request.query_params.get("project")
+        return queryset.filter(project_id=project_id).order_by("-created_at") if project_id else queryset.order_by("-created_at")
+
+    def perform_create(self, serializer):
+        require_authorized_school(self.request.user)
+        project = serializer.validated_data["project"]
+        if self.request.user.role != Account.Role.STUDENT or project.leader_id != self.request.user.id:
+            raise PermissionDenied("仅项目负责人可生成报告。")
+        if not accessible_projects(self.request.user).filter(pk=project.pk).exists():
+            raise PermissionDenied("无项目权限。")
+        export = serializer.save(requested_by=self.request.user)
+        AuditEvent.objects.create(
+            school=project.school,
+            actor=self.request.user,
+            action=AuditEvent.Action.REPORT_EXPORT_REQUESTED,
+            changes={"project_id": project.id, "export_id": export.id, "format": export.format},
+        )
+        transaction.on_commit(lambda: generate_report_export.delay(export.id))
+
+    @action(detail=True, methods=["get"])
+    def download(self, request, pk=None):
+        export = self.get_object()
+        if export.status != ReportExport.Status.COMPLETED or not export.file:
+            raise Http404
+        try:
+            response = FileResponse(export.file.open("rb"), as_attachment=True, filename=export.file.name.rsplit("/", 1)[-1])
+            response["X-Content-Type-Options"] = "nosniff"
+            return response
+        except FileNotFoundError as exc:
+            raise Http404 from exc
+
+
+class NotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = NotificationSerializer
+
+    def get_queryset(self):
+        return Notification.objects.filter(
+            recipient=self.request.user
+        ).select_related("actor", "project").order_by("-created_at")
+
+    @action(detail=True, methods=["post"])
+    def mark_read(self, request, pk=None):
+        note = self.get_object()
+        note.is_read = True
+        note.save(update_fields=["is_read"])
+        return Response(self.get_serializer(note).data)
+
+    @action(detail=False, methods=["post"])
+    def mark_all_read(self, request):
+        self.get_queryset().update(is_read=True)
+        return Response({"detail": "已全部标记为已读。"})
