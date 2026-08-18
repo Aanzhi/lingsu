@@ -29,6 +29,10 @@ frontend/dist/
 .superpowers/
 .trae/
 
+# ===== 隔离 worktree（不入库，由 git worktree 管理）=====
+.worktrees/
+worktrees/
+
 # ===== 日志 / 运行时 =====
 *.log
 celerybeat-schedule
