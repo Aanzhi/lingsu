@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Download, User } from '@element-plus/icons-vue'
+import { Download, MagicStick, User } from '@element-plus/icons-vue'
 import { createReportExport, errorMessage, getReportExports, type ReportExport } from '../../api'
 import EmptyState from '../../components/EmptyState.vue'
 import FeedbackBanner from '../../components/FeedbackBanner.vue'
@@ -164,6 +164,10 @@ const selectedStageDetail = computed(() => {
 })
 function openTask(task: JourneyTaskRow) { router.push(`/student/projects/${projectId.value}/tasks/${task.id}`) }
 
+// 「本阶段推荐 AI 助手」入口：跳转思考室并预选当前查看的阶段
+const recoStage = computed(() => selectedStage.value ?? currentStage.value)
+const recoStageName = computed(() => stages.value.find(([o]) => o === recoStage.value)?.[1] ?? '当前阶段')
+
 // KPI 修复：四项 = 阶段 / 任务 / 已通过 / 剩余交付物
 const journeyKpis = computed<JourneyKpi[]>(() => {
   const totalTasks = tasks.value.length
@@ -251,6 +255,14 @@ onMounted(load); watch(projectId, load)
     :tasks="selectedStageDetail.rows"
     @open="openTask"
   />
+  <RouterLink class="ai-reco-cta" :to="{ path: '/student/ai', query: { stage: recoStage ?? undefined } }">
+    <el-icon class="ai-reco-icon"><MagicStick /></el-icon>
+    <span class="ai-reco-text">
+      <strong>本阶段推荐 AI 助手</strong>
+      <small>针对「{{ recoStageName }}」，在思考室直接调用对口助手、读取本阶段材料与草稿</small>
+    </span>
+    <span class="ai-reco-go">打开思考室 →</span>
+  </RouterLink>
   <EmptyState v-if="!stages.length" title="等待教师认领" description="教师认领项目后，研究任务链会自动生成。" />
   <JourneyDeliveryBoard v-else :groups="deliveryGroups" class="journey-delivery-block" />
 </template><template v-else-if="surface === 'materials'"><ConsistencyCheckCard :project-id="projectId" class="consistency-block" /><section class="materials-table paper-card"><div class="section-heading"><div><p class="eyebrow">只读档案</p><h2>材料版本与审核结果</h2></div><span>{{ materials.filter((item) => item.status === 'approved').length }} / {{ materials.length }} 项已通过</span></div><p class="archive-intro">这里记录每一项材料的版本，不负责编辑；需要修改时进入对应任务。</p><div v-for="material in materials" :key="material.id" class="material-row"><span class="file-glyph">{{ String(material.report_order).padStart(2, '0') }}</span><div><strong>{{ material.title }}</strong><small>{{ material.report_section }} · {{ material.revisions.length ? `V${material.revisions.length}` : '尚无版本' }}</small></div><StatusTag :status="material.status" /><RouterLink v-if="material.task && ['revision_required', 'available'].includes(material.status)" :to="`/student/projects/${project.id}/tasks/${material.task}`">去任务处理 →</RouterLink><span v-else class="archive-read-only">只读记录</span></div><EmptyState v-if="!materials.length" title="暂无材料" description="教师认领项目后会从项目模板生成材料清单。" /></section></template><template v-else><div class="report-layout"><section class="paper-card report-paper"><div class="report-title"><p>灵溯 · 项目报告预览</p><h1>{{ project.title }}</h1><small>本预览只装配最新已通过材料</small></div><article v-for="({ material, version }, index) in reportSections" :key="material.id"><span>第 {{ index + 1 }} 节</span><h2>{{ material.report_section || material.title }}</h2><h3>{{ material.title }} · V{{ material.revisions.indexOf(version) + 1 }}</h3><p>{{ version.content }}</p></article><EmptyState v-if="!reportSections.length" title="暂无可装配章节" description="材料通过教师审核后，会按模板章节自动进入报告。" /></section><aside class="report-aside"><section><p class="eyebrow">正式完成度</p><div class="report-score"><strong>{{ Math.round((reportSections.length / Math.max(materials.length, 1)) * 100) }}%</strong><span>{{ reportSections.length }} / {{ materials.length }} 项已通过</span></div><small>待审核和需修订材料不会进入正式报告。</small></section><section><p class="eyebrow">正式导出</p><p>后台只装配最新已通过材料，生成结果保留版本与材料清单。</p><button class="primary-button full" :disabled="exportBusy" type="button" @click="queueExport('docx')"><el-icon><Download /></el-icon> {{ exportBusy ? '正在排队…' : '生成 Word' }}</button><button class="secondary-button full" :disabled="exportBusy" type="button" @click="queueExport('pdf')">生成 PDF</button></section><section v-if="exports.length"><p class="eyebrow">生成历史</p><div v-for="item in exports" :key="item.id" class="export-row"><span>{{ item.format.toUpperCase() }}</span><b>{{ exportStatusLabel(item.status) }}</b><a v-if="item.download_url" :href="item.download_url">下载</a><small v-if="item.status === 'failed'">{{ item.error_message }}</small></div></section></aside></div></template></div><EmptyState v-else title="找不到项目" description="项目可能不存在，或不属于当前账号。" /></template>
@@ -260,4 +272,11 @@ onMounted(load); watch(projectId, load)
 .journey-rail-block { margin-top: 22px; }
 .journey-delivery-block { margin-top: 22px; }
 .consistency-block { margin-bottom: 22px; }
+.ai-reco-cta { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: linear-gradient(180deg, rgba(76,114,69,.07), rgba(76,114,69,.02)); text-decoration: none; color: var(--ink); transition: border-color .15s, box-shadow .15s; }
+.ai-reco-cta:hover { border-color: var(--moss); box-shadow: 0 2px 10px rgba(76,114,69,.12); }
+.ai-reco-icon { font-size: 20px; color: var(--moss); flex: none; }
+.ai-reco-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ai-reco-text strong { font-size: 14px; color: var(--moss-dark); }
+.ai-reco-text small { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.ai-reco-go { font-size: 13px; color: var(--moss-dark); white-space: nowrap; }
 </style>

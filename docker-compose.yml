@@ -31,7 +31,7 @@ services:
     volumes:
       - clamav_data:/var/lib/clamav
     healthcheck:
-      test: ["CMD-SHELL", "clamdscan --ping 1 >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "timeout 3 bash -c 'echo > /dev/tcp/127.0.0.1/3310'"]
       interval: 20s
       timeout: 10s
       retries: 30
