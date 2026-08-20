@@ -4,7 +4,7 @@ import type { AIAgent } from '../api'
 import {
   aiStatusLabel, aiUnavailableMessage, canGenerateAI, composeAgentPrompt, normalizeAIAgentSelection, normalizeAISelection,
   shouldPollAI, AI_PROPOSAL_ARTIFACTS, PAPER_TYPES, agentMetadata, aiQuickEntryLocation, paperAgentsForType,
-  agentInputValues, paperGenerationContext, verificationItemsForDisplay, resolveAIEntryProjectId,
+  agentInputValues, paperGenerationContext, verificationItemsForDisplay, resolveAIEntryProjectId, taskQuickEntryAgents,
 } from './aiModel'
 import { aiHistoryMeta } from './aiModel'
 
@@ -65,6 +65,10 @@ it('supports all paper types and keeps six agents available for each type', () =
   ])
 })
 
+it('uses the exact result-interpretation workflow declared by the agent template', () => {
+  expect(paperAgentsForType('empirical').find((agent) => agent.key === 'paper-result-interpret')?.workflow).toBe('paper_result_interpret')
+})
+
 it('adapts paper tools and generation context to the selected paper type', () => {
   const empirical = paperAgentsForType('empirical')[1]
   const review = paperAgentsForType('literature-review')[1]
@@ -89,11 +93,11 @@ it('renders structured verification items without stringifying objects', () => {
   ])
 })
 
-it('submits declared template fields instead of relying on the legacy free-form fallback', () => {
+it('submits each declared template field instead of duplicating the fallback prompt', () => {
   const agent = {
     input_schema: [{ key: 'project_title' }, { key: 'research_question' }, { key: 'paper_type' }],
   } as AIAgent
-  expect(agentInputValues(agent, '请分析现有观察', '校园雨水回收', '文献综述')).toEqual({
+  expect(agentInputValues(agent, { research_question: '请分析现有观察' }, '校园雨水回收', '文献综述')).toEqual({
     project_title: '校园雨水回收', research_question: '请分析现有观察', paper_type: '文献综述',
   })
 })
@@ -103,8 +107,23 @@ it('uses backend agent metadata for workflow, stage and quick actions', () => {
   expect(agentMetadata(agent)).toMatchObject({ workflow: 'paper_writing', stage: 'drafting', quickActions: ['outline'] })
 })
 
-it('builds a task AI quick entry that preserves the project, task, workflow and agent', () => {
-  expect(aiQuickEntryLocation(7, 42, 'proposal_plan', 'proposal-plan')).toBe('/student/ai?projectId=7&taskId=42&workflow=proposal_plan&agent=proposal-plan')
+it('derives at most three quick agents from backend metadata for the current task stage and project type', () => {
+  const agents = [
+    { key: 'proposal-topic', role: 'student', workflow: 'proposal_topic', applicable_stages: ['立项'], quick_tasks: ['选题建议'], project_types: ['research'], order: 2 },
+    { key: 'proposal-background', role: 'student', workflow: 'proposal_background', applicable_stages: ['立项'], quick_tasks: ['生成开题结构'], project_types: ['research'], order: 1 },
+    { key: 'paper-framework', role: 'student', workflow: 'paper_framework', applicable_stages: ['论文写作'], quick_tasks: ['生成论文框架'], project_types: ['research'], order: 3 },
+    { key: 'other-type', role: 'student', workflow: 'other', applicable_stages: ['立项'], quick_tasks: ['不应出现'], project_types: ['engineering'], order: 0 },
+    { key: 'no-action', role: 'student', workflow: 'other', applicable_stages: ['立项'], quick_tasks: [], project_types: ['research'], order: 0 },
+    { key: 'third', role: 'student', workflow: 'third', applicable_stages: ['问题初筛'], quick_tasks: ['第三个'], project_types: ['research'], order: 4 },
+    { key: 'fourth', role: 'student', workflow: 'fourth', applicable_stages: ['立项'], quick_tasks: ['第四个'], project_types: ['research'], order: 5 },
+  ] as unknown as AIAgent[]
+  expect(taskQuickEntryAgents(agents, { stage_name: '立项与开题 · 一 · 选题', title: '问题初筛与查新', description: '' }, 'research').map((agent) => agent.key)).toEqual([
+    'proposal-background', 'proposal-topic', 'third',
+  ])
+})
+
+it('builds a task AI quick entry that preserves project type with project, task, workflow and agent', () => {
+  expect(aiQuickEntryLocation(7, 42, 'proposal_plan', 'proposal-plan', 'research')).toBe('/student/ai?projectId=7&taskId=42&workflow=proposal_plan&agent=proposal-plan&projectType=research')
 })
 
 it('uses only a project from the quick-entry query that is available to the student', () => {

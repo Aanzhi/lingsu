@@ -1,4 +1,4 @@
-import type { AIAgent, AIContextScope, VerificationItem } from '../api'
+import type { AIAgent, AIContextScope, Project, VerificationItem } from '../api'
 
 export type AITrack = 'proposal' | 'paper'
 export type PaperType = 'empirical' | 'case' | 'literature-review' | 'theoretical'
@@ -27,7 +27,7 @@ const PAPER_AGENT_DEFINITIONS: AIWorkflowAgent[] = [
   { key: 'paper-framework', name: '论文框架助手', workflow: 'paper_framework', stage: '框架', quickActions: ['生成论文框架', '调整章节'] },
   { key: 'paper-expand-polish', name: '扩写与润色助手', workflow: 'paper_expand_polish', stage: '扩写与润色', quickActions: ['扩写段落', '润色论文'] },
   { key: 'paper-reference-format', name: '参考文献格式助手', workflow: 'paper_reference_format', stage: '参考文献', quickActions: ['整理参考文献', '检查格式'] },
-  { key: 'paper-result-interpret', name: '结果解读助手', workflow: 'paper_results_interpretation', stage: '结果解读', quickActions: ['解读结果', '梳理讨论'] },
+  { key: 'paper-result-interpret', name: '结果解读助手', workflow: 'paper_result_interpret', stage: '结果解读', quickActions: ['解读结果', '梳理讨论'] },
   { key: 'paper-reviewer-response', name: '审稿意见回复助手', workflow: 'paper_reviewer_response', stage: '审稿回复', quickActions: ['拆解意见', '起草回复'] },
 ]
 
@@ -47,11 +47,11 @@ export function paperGenerationContext(type: PaperType) {
   return { paper_type: type, paper_type_label: experience.label, promptPrefix: experience.promptPrefix }
 }
 
-export function agentInputValues(agent: AIAgent | null, prompt: string, projectTitle: string, paperTypeLabel?: string): Record<string, string> | undefined {
+export function agentInputValues(agent: AIAgent | null, values: Record<string, string>, projectTitle: string, paperTypeLabel?: string): Record<string, string> | undefined {
   if (!agent?.input_schema?.length) return undefined
   return Object.fromEntries(agent.input_schema.map((field) => [
     field.key,
-    field.key === 'paper_type' ? (paperTypeLabel || '') : field.key === 'project_title' ? projectTitle : prompt,
+    field.key === 'paper_type' ? (paperTypeLabel || '') : field.key === 'project_title' ? projectTitle : values[field.key] || '',
   ]))
 }
 
@@ -72,8 +72,22 @@ export function agentMetadata(agent: AIAgent): AIWorkflowAgent {
   }
 }
 
-export function aiQuickEntryLocation(projectId: number, taskId: number, workflow: string, agent: string) {
-  return `/student/ai?projectId=${projectId}&taskId=${taskId}&workflow=${encodeURIComponent(workflow)}&agent=${encodeURIComponent(agent)}`
+export function taskQuickEntryAgents(agents: AIAgent[], task: Pick<{ stage_name: string; title: string; description: string }, 'stage_name' | 'title' | 'description'>, projectType: Project['project_type']): AIAgent[] {
+  const taskText = `${task.stage_name} ${task.title} ${task.description}`.replace(/\s+/g, '')
+  return agents
+    .filter((agent) => agent.role === 'student' || agent.role === 'both')
+    .filter((agent) => Boolean(agent.workflow) && Boolean(agent.quick_tasks?.length))
+    .filter((agent) => !agent.project_types?.length || agent.project_types.includes(projectType))
+    .filter((agent) => !agent.applicable_stages?.length || agent.applicable_stages.some((stage) => {
+      const normalizedStage = stage.replace(/\s+/g, '')
+      return taskText.includes(normalizedStage) || normalizedStage.includes(taskText)
+    }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, 3)
+}
+
+export function aiQuickEntryLocation(projectId: number, taskId: number, workflow: string, agent: string, projectType: Project['project_type']) {
+  return `/student/ai?projectId=${projectId}&taskId=${taskId}&workflow=${encodeURIComponent(workflow)}&agent=${encodeURIComponent(agent)}&projectType=${encodeURIComponent(projectType)}`
 }
 
 export function resolveAIEntryProjectId(queryProjectId: unknown, projects: Array<{ id: number }>): number | null {

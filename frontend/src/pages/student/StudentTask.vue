@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ArrowRight, CircleCheck, Clock, Download, Lock, MagicStick, Paperclip, UploadFilled, Warning } from '@element-plus/icons-vue'
-import { errorMessage } from '../../api'
+import { errorMessage, getAIAgents, type AIAgent } from '../../api'
 import EmptyState from '../../components/EmptyState.vue'
 import FeedbackBanner from '../../components/FeedbackBanner.vue'
 import PageHeader from '../../components/PageHeader.vue'
@@ -13,13 +13,14 @@ import { makeFeedback, type FeedbackState } from '../../stores/feedbackModel'
 import { auth } from '../../stores/auth'
 import { taskPermission } from '../../stores/projectPermissions'
 import { selectPriorityTask, taskActionLabel, taskCompletion, validateTaskSubmission } from '../../stores/studentApiModel'
-import { aiQuickEntryLocation } from '../../stores/aiModel'
+import { aiQuickEntryLocation, taskQuickEntryAgents } from '../../stores/aiModel'
 
-const route = useRoute(); const loading = ref(false); const body = ref(''); const truth = ref(false); const files = ref<File[]>([]); const feedback = ref<FeedbackState | null>(null)
+const route = useRoute(); const loading = ref(false); const body = ref(''); const truth = ref(false); const files = ref<File[]>([]); const feedback = ref<FeedbackState | null>(null); const aiAgents = ref<AIAgent[]>([])
 const projectId = computed(() => Number(route.params.id)); const taskId = computed(() => Number(route.params.taskId))
 const project = computed(() => student.project(projectId.value)); const task = computed(() => student.task(taskId.value)); const material = computed(() => student.materialForTask(taskId.value))
 const projectTasks = computed(() => student.state.tasks.filter((item) => item.project === projectId.value).sort((a, b) => a.order - b.order))
 const projectMaterials = computed(() => student.state.materials.filter((item) => item.project === projectId.value).sort((a, b) => (a.report_order ?? 0) - (b.report_order ?? 0)))
+const quickAgents = computed(() => task.value && project.value ? taskQuickEntryAgents(aiAgents.value, task.value, project.value.project_type) : [])
 const progress = computed(() => taskCompletion(projectTasks.value))
 const nextTask = computed(() => selectPriorityTask(projectTasks.value.filter((item) => item.id !== taskId.value)))
 const permission = computed(() => task.value && material.value && project.value
@@ -40,7 +41,10 @@ const statusMessage = computed(() => {
   if (task.value.status === 'locked') return '先完成上一项任务并通过审核，才能解锁这项任务。'
   return '完成证据清单后确认真实性，再提交给主指导教师。'
 })
-onMounted(() => student.refreshProject(projectId.value).catch((reason) => { feedback.value = makeFeedback('error', errorMessage(reason), '请刷新页面重试。', '重试') }))
+onMounted(() => {
+  student.refreshProject(projectId.value).catch((reason) => { feedback.value = makeFeedback('error', errorMessage(reason), '请刷新页面重试。', '重试') })
+  getAIAgents().then((response) => { aiAgents.value = response.data }).catch(() => { aiAgents.value = [] })
+})
 watch(material, (value) => { body.value = value?.revisions.at(-1)?.content ?? ''; truth.value = false; files.value = [] }, { immediate: true })
 function addFiles(event: Event) { files.value = Array.from((event.target as HTMLInputElement).files ?? []) }
 function retry() { feedback.value = null; student.refreshProject(projectId.value).catch((reason) => { feedback.value = makeFeedback('error', errorMessage(reason), '请稍后重试。', '重试') }) }
@@ -112,9 +116,8 @@ async function submitTeamDraft() {
         <div class="reward-seal"><small>完成奖励</small><strong>+{{ task.xp_reward }} XP</strong></div>
         <section class="task-ai-quick" aria-label="任务 AI 快捷入口">
           <p class="eyebrow">AI 共创</p>
-          <RouterLink :to="aiQuickEntryLocation(projectId, taskId, 'proposal_plan', 'proposal-plan')">申报方案</RouterLink>
-          <RouterLink :to="aiQuickEntryLocation(projectId, taskId, 'paper_title_abstract', 'paper-title-abstract')">标题与摘要</RouterLink>
-          <RouterLink :to="aiQuickEntryLocation(projectId, taskId, 'paper_framework', 'paper-framework')">论文框架</RouterLink>
+          <RouterLink v-for="agent in quickAgents" :key="agent.id" :to="aiQuickEntryLocation(projectId, taskId, agent.workflow || '', agent.key, project.project_type)">{{ agent.quick_tasks?.[0] || agent.name }}</RouterLink>
+          <small v-if="!quickAgents.length">当前阶段暂无可用快捷工具，可前往共创中心选择。</small>
         </section>
       </aside>
       <section class="task-paper paper-card" :class="{ 'task-paper--read-only': !canEdit }">
