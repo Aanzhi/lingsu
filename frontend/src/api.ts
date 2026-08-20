@@ -170,7 +170,7 @@ export const rejectPublicCase = (id: number, comment: string) => api.post<Public
 export const getAIGenerations = (project?: number) => api.get<AIGeneration[]>('ai-logs/', { params: project ? { project } : undefined })
 export const getProjectTasks = (project?: number) => api.get<ApiTask[]>('project-tasks/', { params: project ? { project } : undefined })
 export const createAIGeneration = (payload: { project: number; purpose?: string; prompt: string; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' }) => api.post<AIGeneration>('ai-logs/', payload)
-export const saveAIGenerationAsMaterial = (id: number, material: number) => api.post<MaterialRevision>(`ai-logs/${id}/save_as_material/`, { material })
+export const saveAIGenerationAsMaterial = (id: number, payload: { material: number; content: string; revision_note: string }) => api.post<MaterialRevision>(`ai-logs/${id}/save_as_material/`, payload)
 // ── AI Agent 模板（平台/校本管理 + 学生/教师按角色拉取）──────────────
 export const getAIAgents = () => api.get<AIAgent[]>('ai-agents/')
 export const createAIAgent = (payload: Partial<AIAgent>) => api.post<AIAgent>('ai-agents/', payload)
