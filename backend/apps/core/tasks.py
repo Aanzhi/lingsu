@@ -452,7 +452,11 @@ def generate_ai_response(self, record_id):
             if conversation_message:
                 _finish_conversation_message(conversation_message, record.output, artifact)
             return {"record_id": record.id, "status": record.status, "mode": "demo"}
-        client = OpenAI(api_key=api_key)
+        client_kwargs = {"api_key": api_key}
+        base_url = getattr(settings, "OPENAI_BASE_URL", "")
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        client = OpenAI(**client_kwargs)
         response = client.responses.create(
             model=settings.OPENAI_MODEL,
             instructions=system,

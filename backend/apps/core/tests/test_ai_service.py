@@ -80,6 +80,19 @@ class AIServiceTests(TestCase):
         self.assertTrue(record.verification_items)
         self.assertEqual(self.project.status, original_status)
 
+    @override_settings(OPENAI_API_KEY="configured", OPENAI_BASE_URL="https://example.test/v1")
+    @patch("apps.core.tasks.OpenAI")
+    def test_worker_passes_optional_base_url_to_openai_client(self, client_class):
+        client_class.return_value.responses.create.return_value.output_text = "测试回复"
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, purpose="问题梳理", prompt="帮我明确变量",
+            context_scope={"project_basics": True}, status=AIGenerationLog.Status.QUEUED,
+        )
+
+        generate_ai_response(record.id)
+
+        client_class.assert_called_once_with(api_key="configured", base_url="https://example.test/v1")
+
     @override_settings(OPENAI_API_KEY="")
     def test_demo_worker_populates_auditable_artifact_fields_without_replacing_raw_output(self):
         record = AIGenerationLog.objects.create(
