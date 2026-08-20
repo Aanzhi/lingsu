@@ -15,7 +15,7 @@ export function createViteConfig(apiTarget = process.env.VITE_API_PROXY_TARGET |
         },
       },
     },
-    test: { environment: 'node' },
+    test: { environment: 'node', exclude: ['e2e/**', '**/node_modules/**'] },
   }
 }
 export default defineConfig(createViteConfig())

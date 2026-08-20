@@ -36,3 +36,5 @@ worktrees/
 # ===== 日志 / 运行时 =====
 *.log
 celerybeat-schedule
+.playwright/
+test-results/
