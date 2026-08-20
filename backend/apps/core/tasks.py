@@ -14,6 +14,7 @@ from django.utils import timezone
 from docx import Document
 
 from .models import AgentTemplate
+from .ai_agents import render_agent_prompt
 
 DEFAULT_AI_INSTRUCTION = (
     "你是青少年科创项目教练。只提供可编辑建议，不虚构数据、引用或实验结果，"
@@ -51,7 +52,7 @@ def _artifact_fields(record, output):
     }
 
 
-def _demo_ai_response(record, context_parts, referenced=None):
+def _demo_ai_response(record, context_parts, referenced=None, agent_prompt=""):
     """Honest, clearly-labeled illustrative reply used when no OpenAI key is set.
 
     It references the real project context so the demo proves the wiring works,
@@ -112,6 +113,8 @@ def _demo_ai_response(record, context_parts, referenced=None):
         "",
         f"项目：{project.title}",
     ]
+    if agent_prompt:
+        lines.extend(["", "本次 Agent 输入（演示回显）：", agent_prompt])
     if record.task_id:
         try:
             t = record.task
@@ -374,9 +377,10 @@ def generate_ai_response(self, record_id):
 
         tmpl = AgentTemplate.resolve(record.agent_key, record.project.school, record.actor.role) if record.agent_key else None
         system = tmpl.system_instruction if tmpl else DEFAULT_AI_INSTRUCTION
+        rendered_prompt = render_agent_prompt(tmpl, record) if tmpl else record.prompt
         api_key = getattr(settings, "OPENAI_API_KEY", "")
         if not api_key:
-            record.output = _demo_ai_response(record, context_parts, referenced)
+            record.output = _demo_ai_response(record, context_parts, referenced, rendered_prompt)
             artifact = _artifact_fields(record, record.output)
             record.artifact_payload = artifact["artifact_payload"]
             record.verification_items = artifact["verification_items"]
@@ -390,7 +394,7 @@ def generate_ai_response(self, record_id):
         response = client.responses.create(
             model=settings.OPENAI_MODEL,
             instructions=system,
-            input=f"用途：{record.purpose}\n" + "\n".join(context_parts) + f"\n用户请求：{record.prompt}",
+            input=f"用途：{record.purpose}\n" + "\n".join(context_parts) + f"\nAgent 指令：{rendered_prompt}\n用户补充：{record.prompt}",
         )
         record.output = response.output_text
         artifact = _artifact_fields(record, record.output)

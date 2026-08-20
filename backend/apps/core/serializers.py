@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import serializers
+from .ai_agents import validate_agent_inputs
 from .models import AIGenerationLog, Account, AgentTemplate, Announcement, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, TemplateMaterial, UploadSession
 from .tasks import process_uploaded_material
 
@@ -270,10 +271,11 @@ class PublicCaseRequestSerializer(serializers.ModelSerializer):
 
 class AIGenerationLogSerializer(serializers.ModelSerializer):
     actor_name = serializers.CharField(source="actor.username", read_only=True)
+    input_values = serializers.DictField(write_only=True, required=False)
 
     class Meta:
         model = AIGenerationLog
-        fields = ["id", "project", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "context_scope", "referenced_sources", "output", "artifact_payload", "verification_items", "paper_type", "saved_material_revision", "model_name", "status", "error_message", "created_at", "completed_at"]
+        fields = ["id", "project", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "input_values", "context_scope", "referenced_sources", "output", "artifact_payload", "verification_items", "paper_type", "saved_material_revision", "model_name", "status", "error_message", "created_at", "completed_at"]
         read_only_fields = ["actor", "output", "artifact_payload", "verification_items", "saved_material_revision", "model_name", "status", "error_message", "completed_at"]
 
     def validate(self, attrs):
@@ -290,14 +292,27 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
         agent_key = attrs.get("agent_key")
         if agent_key:
             user = self.context["request"].user
-            tmpl = (
-                AgentTemplate.objects.filter(key=agent_key, is_active=True)
-                .filter(Q(school=None) | Q(school=user.school))
-                .filter(role__in=[user.role, AgentTemplate.Role.BOTH])
-                .first()
-            )
+            tmpl = AgentTemplate.resolve(agent_key, user.school, user.role)
             if not tmpl:
                 raise serializers.ValidationError({"agent_key": "指定的 AI 模板不存在或无权限使用。"})
+            submitted_inputs = attrs.pop("input_values", None)
+            if submitted_inputs is None:
+                # Older clients submit one free-form prompt. Keep that request
+                # shape working while giving every required field a non-empty
+                # value until the client renders the template input form.
+                submitted_inputs = {
+                    field.get("key"): attrs.get("prompt", "")
+                    for field in (tmpl.input_schema or [])
+                    if isinstance(field, dict) and field.get("key") and field.get("required")
+                }
+            try:
+                validated_inputs = validate_agent_inputs(tmpl, submitted_inputs)
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({"input_values": exc.detail})
+            context_scope = dict(tmpl.context_scope_default or {})
+            context_scope.update(attrs.get("context_scope") or {})
+            context_scope["agent_inputs"] = validated_inputs
+            attrs["context_scope"] = context_scope
             if not attrs.get("purpose"):
                 attrs["purpose"] = tmpl.name
         return attrs

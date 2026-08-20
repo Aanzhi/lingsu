@@ -161,6 +161,69 @@ class AIGenerationAgentInstructionTests(TestCase):
         self.assertEqual(kwargs["instructions"], "【专属开题教练】只给建议。")
 
     @override_settings(OPENAI_API_KEY="configured")
+    def test_agent_prompt_is_rendered_from_validated_inputs_and_paper_type(self):
+        self.agent.prompt_template = "题目：{topic}\n论文类型：{paper_type}\n观察：{observations}"
+        self.agent.input_schema = [
+            {"key": "topic", "required": True, "type": "text"},
+            {"key": "observations", "required": False, "type": "textarea"},
+        ]
+        self.agent.save(update_fields=["prompt_template", "input_schema"])
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, agent_key="opening-report",
+            prompt="兼容的自由文本", paper_type="empirical",
+            context_scope={"agent_inputs": {"topic": "校园雨水"}},
+            status=AIGenerationLog.Status.QUEUED,
+        )
+        with patch("apps.core.tasks.OpenAI") as client_class:
+            client_class.return_value.responses.create.return_value.output_text = "ok"
+            generate_ai_response(record.id)
+            request_input = client_class.return_value.responses.create.call_args.kwargs["input"]
+        self.assertIn("题目：校园雨水", request_input)
+        self.assertIn("论文类型：empirical", request_input)
+        self.assertIn("观察：", request_input)
+        self.assertNotIn("{topic}", request_input)
+
+    @override_settings(OPENAI_API_KEY="configured")
+    @patch("apps.core.views.generate_ai_response.delay")
+    def test_agent_request_rejects_missing_required_input(self, delay):
+        self.agent.input_schema = [{"key": "topic", "label": "项目主题", "required": True, "type": "text"}]
+        self.agent.save(update_fields=["input_schema"])
+        response = self.client_for(self.student).post("/api/ai-logs/", {
+            "project": self.project.id, "agent_key": "opening-report", "prompt": "校园雨水",
+            "input_values": {},
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("input_values", response.data)
+        delay.assert_not_called()
+
+    @override_settings(OPENAI_API_KEY="configured")
+    @patch("apps.core.views.generate_ai_response.delay")
+    def test_legacy_agent_request_uses_prompt_as_required_input_fallback(self, delay):
+        self.agent.input_schema = [{"key": "topic", "label": "项目主题", "required": True, "type": "text"}]
+        self.agent.prompt_template = "主题：{topic}"
+        self.agent.save(update_fields=["input_schema", "prompt_template"])
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client_for(self.student).post("/api/ai-logs/", {
+                "project": self.project.id, "agent_key": "opening-report", "prompt": "校园雨水",
+            }, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(AIGenerationLog.objects.get(pk=response.data["id"]).context_scope["agent_inputs"], {"topic": "校园雨水"})
+        delay.assert_called_once()
+
+    @override_settings(OPENAI_API_KEY="")
+    def test_demo_generation_keeps_rendered_agent_context_auditable(self):
+        self.agent.prompt_template = "主题：{topic}\n论文类型：{paper_type}"
+        self.agent.input_schema = [{"key": "topic", "required": True, "type": "text"}]
+        self.agent.save(update_fields=["prompt_template", "input_schema"])
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, agent_key="opening-report", prompt="校园雨水",
+            paper_type="case", context_scope={"agent_inputs": {"topic": "校园雨水"}},
+        )
+        generate_ai_response(record.id)
+        record.refresh_from_db()
+        self.assertIn("论文类型：case", record.output)
+
+    @override_settings(OPENAI_API_KEY="configured")
     def test_fallback_to_default_instruction_without_agent_key(self):
         record = AIGenerationLog.objects.create(
             project=self.project, actor=self.student, purpose="问题梳理",
