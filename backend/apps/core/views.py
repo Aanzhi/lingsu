@@ -476,6 +476,7 @@ class AIAvailabilityView(APIView):
         if getattr(settings, "OPENAI_API_KEY", ""):
             service_status = "configured"
         else:
+            require_authorized_school(request.user)
             service_status = "demo_mode"
         if service_status == "configured" and used >= request.user.school.ai_quota:
             service_status = "quota_exhausted"
@@ -1128,7 +1129,7 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         project = conversation.project
         if project is None:
             # General consultation is intentionally project-free and never creates a material-bearing AI log.
-            assistant.content = "这是通用咨询对话。选择一个科创项目后，我可以结合项目材料继续协助你。"
+            assistant.content = f"这是通用咨询：你问的是“{content}”。我可以先帮你梳理概念、拆解问题和制定下一步；如果需要结合项目材料，请新建一个绑定项目的对话。"
             assistant.status = AIConversationMessage.Status.COMPLETED
             assistant.save(update_fields=["content", "status", "updated_at"])
             publish_conversation_event(assistant.id, "message.started", {})
@@ -1163,10 +1164,12 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             log_serializer = AIGenerationLogSerializer(data=payload, context={"request": request})
             log_serializer.is_valid(raise_exception=True)
             values = log_serializer.validated_data
-            log = AIGenerationLog.objects.create(
-                **values, actor=request.user, conversation=conversation, message=assistant,
-                status=AIGenerationLog.Status.QUEUED,
-            )
+            values.pop("input_values", None)
+            log = create_ai_request(log_serializer, request.user, settings.OPENAI_MODEL)
+            log.conversation = conversation
+            log.message = assistant
+            log.status = AIGenerationLog.Status.QUEUED
+            log.save(update_fields=["conversation", "message", "status"])
             conversation.current_agent = values.get("agent_key") or ""
             conversation.paper_type = values.get("paper_type") or ""
             assistant.generation_log = log

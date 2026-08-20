@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { archiveAIConversation, createAIConversation, createAIConversationMessage, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getProjects, streamAIConversationMessage, updateAIConversation, type AIAgent, type AIConversation, type AIConversationMessage, type Project } from '../../api'
+import { archiveAIConversation, createAIConversation, createAIConversationMessage, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, saveAIGenerationAsMaterial, streamAIConversationMessage, updateAIConversation, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
 
 const route = useRoute()
 const conversations = ref<AIConversation[]>([])
@@ -11,6 +11,7 @@ const agents = ref<AIAgent[]>([])
 const selectedId = ref<number | null>(null)
 const projectFilter = ref<number | null>(Number(route.query.projectId) || null)
 const selectedAgent = ref<string | undefined>(typeof route.query.agent === 'string' ? route.query.agent : undefined)
+const taskId = ref<number | undefined>(Number(route.query.taskId) || undefined)
 const draft = ref('')
 const loading = ref(true)
 const sending = ref(false)
@@ -20,6 +21,9 @@ const showArchived = ref(false)
 const error = ref('')
 const paperType = ref('')
 const agentInputs = ref<Record<string, string>>({})
+const materials = ref<Material[]>([])
+const artifactDrafts = ref<Record<number, string>>({})
+const savingMessage = ref<number | null>(null)
 const paperTypes = [{ value: 'empirical', label: '实证研究' }, { value: 'case', label: '案例研究' }, { value: 'literature-review', label: '文献综述' }, { value: 'theoretical', label: '理论研究' }]
 
 const current = computed(() => conversations.value.find((item) => item.id === selectedId.value) || null)
@@ -39,6 +43,7 @@ async function selectConversation(item: AIConversation) {
   paperType.value = item.paper_type || ''
   agentInputs.value = {}
   messages.value = (await getAIConversationMessages(item.id)).data
+  materials.value = item.project ? (await getMaterials(item.project)).data : []
 }
 async function newConversation() {
   const item = (await createAIConversation({ project: projectFilter.value, current_agent: selectedAgent.value || null })).data
@@ -55,7 +60,7 @@ async function sendMessage() {
   if (!content || !selectedId.value || sending.value || current.value?.is_archived) return
   sending.value = true; error.value = ''; draft.value = ''
   try {
-    const response = await createAIConversationMessage(selectedId.value, { content, agent_key: selectedAgent.value, paper_type: paperType.value || undefined, project: current.value?.project, input_values: agentInputs.value })
+    const response = await createAIConversationMessage(selectedId.value, { content, agent_key: selectedAgent.value, paper_type: paperType.value || undefined, project: current.value?.project, task: taskId.value, input_values: agentInputs.value })
     messages.value.push({ role: 'user', content, status: 'completed', created_at: new Date().toISOString(), id: Date.now() })
     messages.value.push(response.data)
     if (response.data.status === 'queued' && response.data.id) {
@@ -72,6 +77,7 @@ async function sendMessage() {
 }
 function chooseAgent(agent: AIAgent) { selectedAgent.value = agent.key; agentInputs.value = {}; agentOpen.value = false }
 async function changePaperType() { if (current.value) await updateAIConversation(current.value.id, { paper_type: paperType.value || null }) }
+async function saveArtifact(message: AIConversationMessage) { const material = materials.value[0]; const logId = Number(message.generation_log); const content = artifactDrafts.value[message.id] || message.artifact_payload?.draft || message.content; if (!material || !logId || !content) return; savingMessage.value = message.id; try { await saveAIGenerationAsMaterial(logId, { material: material.id, content, revision_note: '由全局 AI 对话保存为材料草稿' }) } catch (reason) { error.value = errorMessage(reason, '保存材料草稿失败。') } finally { savingMessage.value = null } }
 function onKeydown(event: KeyboardEvent) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }
 watch(showArchived, () => { void loadConversations() })
 onMounted(async () => { try { const [projectResponse, agentResponse] = await Promise.all([getProjects(), getAIAgents()]); projects.value = projectResponse.data; agents.value = agentResponse.data; await loadConversations(); if (!selectedId.value) await newConversation() } catch (reason) { error.value = errorMessage(reason, 'AI 工作台加载失败。') } finally { loading.value = false } })
@@ -91,7 +97,7 @@ onMounted(async () => { try { const [projectResponse, agentResponse] = await Pro
       <header class="chat-header"><div><span class="eyebrow">全局 AI 工作台</span><h1>{{ current?.title || '新建科创对话' }}</h1><small>{{ currentProject?.title || '未绑定项目 · 通用咨询' }}</small></div><div class="chat-actions"><button type="button" @click="agentOpen = !agentOpen">Agent{{ currentAgent ? ` · ${currentAgent.name}` : '' }}⌄</button><button type="button" @click="contextOpen = !contextOpen">上下文{{ contextOpen ? '收起' : '展开' }}</button><button v-if="current && !current.is_archived" type="button" @click="archiveCurrent">归档</button></div></header>
       <div v-if="agentOpen" class="agent-menu"><button v-for="agent in agents" :key="agent.key" type="button" @click="chooseAgent(agent)"><strong>{{ agent.name }}</strong><small>{{ agent.description }}</small></button></div>
       <div v-if="error" class="error-banner">{{ error }}</div>
-      <section class="chat-stream" aria-live="polite"><div v-if="loading" class="empty-state">正在加载对话…</div><div v-else-if="!messages.length" class="empty-state"><strong>开始一段科创对话</strong><p>可以直接提问，也可以先选择 Agent。项目材料只会在绑定项目后按契约读取。</p></div><article v-for="message in messages" :key="message.id" class="message" :class="message.role"><div class="message-label">{{ message.role === 'user' ? '你' : '灵思 AI' }}</div><div class="message-body">{{ message.content || (message.status === 'queued' ? '正在准备生成…' : '') }}<div v-if="message.status === 'failed'" class="message-error">{{ message.error_message || '生成失败' }}</div><div v-if="message.artifact_payload?.draft" class="artifact-card"><b>{{ message.artifact_payload.title || '可编辑草稿' }}</b><p>{{ message.artifact_payload.draft }}</p><small>核验项：{{ message.verification_items?.length || 0 }} 项 · {{ message.artifact_payload.next_action || '请核对事实与引用' }}</small></div></div></article></section>
+      <section class="chat-stream" aria-live="polite"><div v-if="loading" class="empty-state">正在加载对话…</div><div v-else-if="!messages.length" class="empty-state"><strong>开始一段科创对话</strong><p>可以直接提问，也可以先选择 Agent。项目材料只会在绑定项目后按契约读取。</p></div><article v-for="message in messages" :key="message.id" class="message" :class="message.role"><div class="message-label">{{ message.role === 'user' ? '你' : '灵思 AI' }}</div><div class="message-body">{{ message.content || (message.status === 'queued' ? '正在准备生成…' : '') }}<div v-if="message.status === 'failed'" class="message-error">{{ message.error_message || '生成失败' }}</div><div v-if="message.artifact_payload?.draft" class="artifact-card"><b>{{ message.artifact_payload.title || '可编辑草稿' }}</b><textarea v-model="artifactDrafts[message.id]" :placeholder="message.artifact_payload.draft" rows="5" /><small>核验项：{{ message.verification_items?.length || 0 }} 项 · {{ message.artifact_payload.next_action || '请核对事实与引用' }}</small><button v-if="materials.length && message.status === 'completed'" type="button" class="save-draft" :disabled="savingMessage === message.id" @click="saveArtifact(message)">{{ savingMessage === message.id ? '保存中…' : `保存到：${materials[0].title}` }}</button></div></div></article></section>
       <footer class="composer"><details v-if="currentAgent?.input_schema?.length" class="input-details"><summary>补充信息（按 Agent 契约填写）</summary><label v-for="field in currentAgent.input_schema" :key="field.key">{{ field.label }}<textarea v-if="field.type === 'textarea'" v-model="agentInputs[field.key]" :placeholder="field.placeholder" rows="2" /><input v-else v-model="agentInputs[field.key]" :placeholder="field.placeholder" /></label></details><div class="composer-meta"><span>{{ currentAgent ? `使用 ${currentAgent.name}` : '自由咨询' }}</span><span>{{ currentProject ? `项目：${currentProject.title}` : '未绑定项目' }}</span></div><textarea v-model="draft" :disabled="sending || current?.is_archived" placeholder="输入问题，或输入 / 选择一个 Agent…" rows="3" @keydown="onKeydown" /><div class="composer-footer"><small>Enter 发送 · Shift+Enter 换行</small><button class="send-button" type="button" :disabled="sending || !draft.trim() || !selectedId" @click="sendMessage">{{ sending ? '生成中…' : '发送' }}</button></div></footer>
     </main>
 

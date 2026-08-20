@@ -327,6 +327,9 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
             attrs["context_scope"] = context_scope
             if not attrs.get("purpose"):
                 attrs["purpose"] = tmpl.name
+        else:
+            # input_values is transport-only for free-form conversations.
+            attrs.pop("input_values", None)
         return attrs
 
     @staticmethod
