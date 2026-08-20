@@ -6,7 +6,6 @@ import { errorMessage, getAIAgents, type AIAgent } from '../../api'
 import EmptyState from '../../components/EmptyState.vue'
 import FeedbackBanner from '../../components/FeedbackBanner.vue'
 import PageHeader from '../../components/PageHeader.vue'
-import MaterialAIAssistant from '../../components/MaterialAIAssistant.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import { student } from '../../stores/student'
 import { makeFeedback, type FeedbackState } from '../../stores/feedbackModel'
@@ -19,8 +18,17 @@ const route = useRoute(); const loading = ref(false); const body = ref(''); cons
 const projectId = computed(() => Number(route.params.id)); const taskId = computed(() => Number(route.params.taskId))
 const project = computed(() => student.project(projectId.value)); const task = computed(() => student.task(taskId.value)); const material = computed(() => student.materialForTask(taskId.value))
 const projectTasks = computed(() => student.state.tasks.filter((item) => item.project === projectId.value).sort((a, b) => a.order - b.order))
-const projectMaterials = computed(() => student.state.materials.filter((item) => item.project === projectId.value).sort((a, b) => (a.report_order ?? 0) - (b.report_order ?? 0)))
 const quickAgents = computed(() => task.value && project.value ? taskQuickEntryAgents(aiAgents.value, task.value, project.value.project_type) : [])
+const aiCenterEntry = computed(() => {
+  const agent = quickAgents.value[0]
+  return aiQuickEntryLocation(
+    projectId.value,
+    taskId.value,
+    agent?.workflow || 'proposal_topic',
+    agent?.key || 'proposal-topic',
+    project.value?.project_type || 'research',
+  )
+})
 const progress = computed(() => taskCompletion(projectTasks.value))
 const nextTask = computed(() => selectPriorityTask(projectTasks.value.filter((item) => item.id !== taskId.value)))
 const permission = computed(() => task.value && material.value && project.value
@@ -140,17 +148,10 @@ async function submitTeamDraft() {
         <footer class="task-submit-row"><span>{{ teamDraft ? '成员草稿会原样进入审核，确认前请完成事实核对。' : isLeader ? '提交后教师可以查看完整版本历史。' : '你的草稿会保留在项目中，等待负责人确认。' }}</span><button v-if="teamDraft" class="primary-button" type="button" :disabled="loading" @click="submitTeamDraft">{{ loading ? '正在提交…' : '确认并提交成员草稿' }}</button><button v-else-if="isLeader" class="primary-button" type="button" :disabled="loading" @click="submit">{{ loading ? '正在上传并提交…' : task.status === 'revision_required' ? '重新提交任务' : '提交任务材料' }}</button><button v-else class="secondary-button" type="button" :disabled="loading" @click="saveDraft">{{ loading ? '正在保存…' : '保存我的草稿' }}</button></footer></template>
       </section>
       <aside class="ai-companion">
-        <MaterialAIAssistant
-          :project-id="projectId"
-          :task-id="taskId"
-          :material-id="material?.id ?? undefined"
-          :material-title="material?.title"
-          :task-title="task?.title"
-          :task-description="task?.description"
-          :material-content="material?.revisions.at(-1)?.content"
-          :available-tasks="projectTasks"
-          :available-materials="projectMaterials"
-        />
+        <p class="eyebrow">AI 共创中心</p>
+        <h2>围绕当前任务共创</h2>
+        <p>使用结构化草稿、核对项与下一步行动，生成后可保存为材料草稿。</p>
+        <RouterLink class="primary-button" :to="aiCenterEntry">打开任务工具 →</RouterLink>
       </aside>
     </div>
   </div>
