@@ -275,8 +275,8 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AIGenerationLog
-        fields = ["id", "project", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "input_values", "context_scope", "referenced_sources", "output", "artifact_payload", "verification_items", "paper_type", "saved_material_revision", "model_name", "status", "error_message", "created_at", "completed_at"]
-        read_only_fields = ["actor", "output", "artifact_payload", "verification_items", "saved_material_revision", "model_name", "status", "error_message", "completed_at"]
+        fields = ["id", "project", "conversation", "message", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "input_values", "context_scope", "referenced_sources", "output", "artifact_payload", "verification_items", "paper_type", "saved_material_revision", "model_name", "status", "error_message", "created_at", "completed_at"]
+        read_only_fields = ["actor", "conversation", "message", "output", "artifact_payload", "verification_items", "saved_material_revision", "model_name", "status", "error_message", "completed_at"]
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

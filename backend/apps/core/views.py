@@ -1141,6 +1141,7 @@ class AIConversationViewSet(viewsets.ModelViewSet):
                 project=project, actor=request.user, purpose=conversation.current_agent or "对话咨询",
                 agent_key=conversation.current_agent or None, prompt=content,
                 paper_type=conversation.paper_type, context_scope={"project_basics": True, "approved_materials": True},
+                conversation=conversation, message=assistant,
                 status=AIGenerationLog.Status.QUEUED,
             )
             assistant.generation_log = log

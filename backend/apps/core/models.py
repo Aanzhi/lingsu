@@ -433,6 +433,8 @@ class AIGenerationLog(models.Model):
         COMPLETED = "completed", "已完成"
         FAILED = "failed", "失败"
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="ai_logs")
+    conversation = models.ForeignKey("AIConversation", null=True, blank=True, on_delete=models.SET_NULL, related_name="generation_logs")
+    message = models.OneToOneField("AIConversationMessage", null=True, blank=True, on_delete=models.SET_NULL, related_name="generation_record")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
     purpose = models.CharField(max_length=80, default="", blank=True)  # 可由 agent 模板名注入；自由用途也可留空
     agent_key = models.CharField(max_length=80, null=True, blank=True)  # 关联 AgentTemplate.key；历史/自由用途记录为 NULL

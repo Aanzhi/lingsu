@@ -47,6 +47,8 @@ class AIConversationAPITests(TestCase):
         self.assertEqual(assistant.status, "queued")
         log = AIGenerationLog.objects.get(pk=assistant.generation_log_id)
         self.assertEqual(log.conversation_message.id, assistant.id)
+        self.assertEqual(log.conversation_id, conversation.id)
+        self.assertEqual(log.message_id, assistant.id)
         delay.assert_called_once_with(log.id)
         self.assertEqual(conversation.messages.count(), 2)
 
