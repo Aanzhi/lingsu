@@ -546,7 +546,9 @@ def _agent(key, name, workflow, category, description, direction, prompt, inputs
         ),
         "prompt_template": prompt,
         "input_schema": inputs,
-        "context_scope_default": {"project_basics": True, "approved_materials": True, "current_task": True, "current_material_draft": True, "current_guidance": True},
+        # Context is assigned deliberately below by workflow; broad approved-material
+        # injection is never the default for a single-purpose Agent.
+        "context_scope_default": {},
         "applicable_stages": stages,
         "quick_tasks": quick_tasks,
         "project_types": ["research", "invention", "engineering"],
@@ -569,6 +571,28 @@ AGENTS = [
     _agent("paper-result-interpret", "结果解读助手", "paper_result_interpret", "论文写作", "把真实结果整理为谨慎的讨论。", "解读真实数据或观察并写作结果与讨论", "真实结果/观察：{results}\n预期讨论角度：{discussion_focus}\n请区分事实、解释与推测，输出结果描述、讨论框架、局限和待核验项。", [{"key": "results", "label": "真实结果或观察", "placeholder": "粘贴已核对的数据或观察", "required": True, "type": "textarea"}, {"key": "discussion_focus", "label": "讨论角度", "placeholder": "想解释什么", "required": False, "type": "textarea"}], ["结果分析", "讨论"], ["解读结果", "起草讨论"], {"format": "sections", "sections": ["结果", "解释", "局限", "待核验"]}),
     _agent("paper-reviewer-response", "审稿意见回复助手", "paper_reviewer_response", "论文写作", "整理审稿意见并形成逐条、诚实的回复策略。", "回复审稿意见，不承诺不存在的证据或修改", "审稿意见：{review_comments}\n当前修改：{revision_summary}\n请输出逐条回复草案、修改清单与待核验项。", [{"key": "review_comments", "label": "审稿意见", "placeholder": "粘贴审稿意见", "required": True, "type": "textarea"}, {"key": "revision_summary", "label": "当前修改", "placeholder": "已完成的修改", "required": False, "type": "textarea"}], ["修改", "投稿回复"], ["拆解审稿意见", "起草回复"], {"format": "table", "sections": ["审稿意见", "回复草案", "修改动作", "待核验"]}),
 ]
+
+
+# Shared context is bounded to the current project in the generation task.  The
+# consistency Agent is the sole template permitted to read all project materials;
+# other Agents only receive the task/material explicitly associated with a run.
+_SHARED_CONTEXT = {"project_basics": True, "approved_materials": False, "ai_history": True, "teacher_feedback": True}
+_TASK_MATERIAL_CONTEXT = {**_SHARED_CONTEXT, "current_task": True, "current_material_draft": True, "current_guidance": True}
+_CONTEXT_BY_KEY = {
+    "proposal-topic": _SHARED_CONTEXT,
+    "proposal-background": _TASK_MATERIAL_CONTEXT,
+    "proposal-objectives": _TASK_MATERIAL_CONTEXT,
+    "proposal-plan": _TASK_MATERIAL_CONTEXT,
+    "proposal-consistency": {**_SHARED_CONTEXT, "consistency": True},
+    "paper-title-abstract": _SHARED_CONTEXT,
+    "paper-framework": _TASK_MATERIAL_CONTEXT,
+    "paper-expand-polish": _TASK_MATERIAL_CONTEXT,
+    "paper-reference-format": _TASK_MATERIAL_CONTEXT,
+    "paper-result-interpret": _TASK_MATERIAL_CONTEXT,
+    "paper-reviewer-response": _TASK_MATERIAL_CONTEXT,
+}
+for _spec in AGENTS:
+    _spec["context_scope_default"] = _CONTEXT_BY_KEY[_spec["key"]]
 
 
 class Command(BaseCommand):

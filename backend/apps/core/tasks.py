@@ -29,6 +29,10 @@ def _ref_label(source: dict) -> str:
         return f"步骤《{title}》"
     if kind == "attachment":
         return f"文件《{title}》"
+    if kind == "ai_history":
+        return f"既有 AI 草稿《{title}》"
+    if kind == "teacher_feedback":
+        return f"教师反馈《{title}》"
     return f"材料《{title}》"
 
 
@@ -272,7 +276,7 @@ def generate_report_export(self, export_id):
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=2)
 def generate_ai_response(self, record_id):
-    from .models import AIGenerationLog, ProjectTask, Material, MaterialAttachment
+    from .models import AIGenerationLog, ProjectTask, Material, MaterialAttachment, MaterialRevision
 
     record = AIGenerationLog.objects.select_related("project", "actor", "task", "material").get(pk=record_id)
     record.status = AIGenerationLog.Status.PROCESSING
@@ -374,6 +378,37 @@ def generate_ai_response(self, record_id):
                     stage = m.task.stage_name if m.task else ""
                     context_parts.append(f"材料《{m.title}》（{stage}）最新内容：{rev.content[:4000]}")
                     referenced.append({"kind": "material", "id": m.id, "title": m.title, "project_id": project.id})
+
+        # 仅在 Agent 契约明确要求时，带入同一项目中已完成的近期 AI 草稿。
+        # 保持小而可审计的窗口，既方便迭代，又不会把其他项目或无限历史送入模型。
+        if scope.get("ai_history"):
+            history = (
+                AIGenerationLog.objects.filter(project=project, status=AIGenerationLog.Status.COMPLETED)
+                .exclude(pk=record.pk)
+                .exclude(output="")
+                .order_by("-completed_at", "-created_at", "-id")[:3]
+            )
+            for prior in history:
+                title = prior.purpose or prior.agent_key or f"记录 #{prior.id}"
+                context_parts.append(f"既有 AI 草稿《{title}》：{prior.output[:2000]}")
+                referenced.append({"kind": "ai_history", "id": prior.id, "title": title, "project_id": project.id})
+
+        # 教师审核意见是材料版本的一部分；只传当前项目、真实存在且有审核人的近期反馈。
+        if scope.get("teacher_feedback"):
+            feedback_revisions = (
+                MaterialRevision.objects.filter(material__project=project, reviewer__isnull=False)
+                .exclude(review_comment="")
+                .select_related("material")
+                .order_by("-created_at", "-id")[:8]
+            )
+            for revision in feedback_revisions:
+                context_parts.append(
+                    f"教师对材料《{revision.material.title}》的反馈：{revision.review_comment[:1500]}"
+                )
+                referenced.append({
+                    "kind": "teacher_feedback", "id": revision.id, "title": revision.material.title,
+                    "material_id": revision.material_id, "project_id": project.id,
+                })
 
         tmpl = AgentTemplate.resolve(record.agent_key, record.project.school, record.actor.role) if record.agent_key else None
         system = tmpl.system_instruction if tmpl else DEFAULT_AI_INSTRUCTION

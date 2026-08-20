@@ -296,6 +296,14 @@ class SeedAIAgentsCommandTests(TestCase):
                 "paper-result-interpret", "paper-reviewer-response",
             },
         )
+        consistency = agents.get(key="proposal-consistency")
+        self.assertTrue(consistency.context_scope_default["consistency"])
+        self.assertTrue(consistency.context_scope_default["teacher_feedback"])
+        self.assertFalse(
+            agents.exclude(key="proposal-consistency").filter(
+                context_scope_default__approved_materials=True
+            ).exists()
+        )
 
     def test_seed_disables_legacy_global_student_templates_but_preserves_teacher_and_school_templates(self):
         school = School.objects.create(name="校本模板学校")
@@ -449,3 +457,35 @@ class AIGenerationContextAssemblyTests(TestCase):
         inp = self._run(record)
         self.assertIn("装置设计说明", inp)                                  # 材料标题
         self.assertIn("我的装置由管道和滤网组成", inp)                       # 材料内容
+
+    @override_settings(OPENAI_API_KEY="configured")
+    def test_history_and_teacher_feedback_are_limited_to_the_current_project(self):
+        teacher = Account.objects.create_user(username="context-teacher", school=self.school, role="teacher")
+        MaterialRevision.objects.create(
+            material=self.material, author=self.student, content="待修改",
+            status=MaterialRevision.Status.REVISION_REQUIRED,
+            reviewer=teacher,
+            review_comment="请补充滤网孔径的实测数据。",
+        )
+        AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, agent_key="research-report",
+            purpose="先前大纲", output="同项目的既有 AI 草稿", status=AIGenerationLog.Status.COMPLETED,
+        )
+        other_student = Account.objects.create_user(username="other-context", school=self.school, role="student")
+        other_project = Project.objects.create(
+            title="不相关项目", problem="不相关问题", plan="不相关方案", school=self.school,
+            leader=other_student, status=Project.Status.ACTIVE,
+        )
+        AIGenerationLog.objects.create(
+            project=other_project, actor=other_student, agent_key="research-report",
+            output="绝不能泄露的其他项目 AI 草稿", status=AIGenerationLog.Status.COMPLETED,
+        )
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, agent_key="research-report", prompt="继续写",
+            context_scope={"ai_history": True, "teacher_feedback": True},
+            status=AIGenerationLog.Status.QUEUED,
+        )
+        inp = self._run(record)
+        self.assertIn("同项目的既有 AI 草稿", inp)
+        self.assertIn("请补充滤网孔径的实测数据", inp)
+        self.assertNotIn("绝不能泄露", inp)
