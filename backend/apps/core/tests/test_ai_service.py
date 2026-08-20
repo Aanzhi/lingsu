@@ -27,16 +27,21 @@ class AIServiceTests(TestCase):
         response = self.client_for(self.student).get("/api/ai-availability/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data, {"status": "not_configured", "remaining_quota": 1})
+        self.assertEqual(response.data, {"status": "demo_mode", "remaining_quota": 1})
 
-    @override_settings(OPENAI_API_KEY="")
-    def test_ai_request_fails_honestly_when_service_is_not_configured(self):
-        response = self.client_for(self.student).post("/api/ai-logs/", {
-            "project": self.project.id, "purpose": "问题梳理", "prompt": "帮我明确变量",
-            "context_scope": {"project_basics": True},
-        }, format="json")
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(AIGenerationLog.objects.count(), 0)
+    @override_settings(OPENAI_API_KEY="", CELERY_TASK_ALWAYS_EAGER=False)
+    @patch("apps.core.views.generate_ai_response.delay")
+    def test_ai_request_queues_demo_generation_when_service_key_is_not_configured(self, delay):
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client_for(self.student).post("/api/ai-logs/", {
+                "project": self.project.id, "purpose": "问题梳理", "prompt": "帮我明确变量",
+                "context_scope": {"project_basics": True},
+            }, format="json")
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["status"], "queued")
+        self.assertEqual(AIGenerationLog.objects.count(), 1)
+        delay.assert_called_once_with(response.data["id"])
 
     @override_settings(OPENAI_API_KEY="configured", CELERY_TASK_ALWAYS_EAGER=False)
     @patch("apps.core.views.generate_ai_response.delay")

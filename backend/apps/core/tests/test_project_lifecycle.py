@@ -139,11 +139,8 @@ class ProjectLifecycleTests(TestCase):
         self.assertEqual(self.project.problem, "新问题")
         self.assertEqual(self.project.plan, "新方案")
         self.assertEqual(self.project.summary, "新总结")
-        self.assertTrue(
-            AuditEvent.objects.filter(
-                action=AuditEvent.Action.PROJECT_UPDATED, changes__fields__contains=["title"]
-            ).exists()
-        )
+        event = AuditEvent.objects.get(action=AuditEvent.Action.PROJECT_UPDATED)
+        self.assertIn("title", event.changes["fields"])
 
     def test_non_leader_cannot_update_basics(self):
         client = self._client(self.other_student)

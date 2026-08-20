@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
@@ -24,6 +24,7 @@ class PlatformConfigurationTests(TestCase):
         self.assertNotIn("OPENAI_API_KEY", str(response.data))
         self.assertNotIn("password", str(response.data).lower())
 
+    @override_settings(CLAMAV_HOST="clamav")
     @patch("apps.core.views.requests.get")
     @patch("apps.core.views.redis.Redis.from_url")
     @patch("apps.core.views.clamd.ClamdNetworkSocket")
