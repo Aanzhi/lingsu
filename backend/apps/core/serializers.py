@@ -6,8 +6,8 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import serializers
-from .ai_agents import validate_agent_inputs
 from .models import AIGenerationLog, Account, AgentTemplate, Announcement, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, TemplateMaterial, UploadSession
+from .ai_agents import PAPER_AGENT_KEYS, PAPER_TYPES, validate_agent_inputs
 from .tasks import process_uploaded_material
 
 
@@ -290,11 +290,20 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
         if material and task and material.task_id and material.task_id != task.id:
             raise serializers.ValidationError({"material": "所选材料不属于该步骤。"})
         agent_key = attrs.get("agent_key")
+        paper_type = attrs.get("paper_type") or getattr(self.instance, "paper_type", "")
+        if paper_type and paper_type not in PAPER_TYPES:
+            raise serializers.ValidationError({
+                "paper_type": "论文类型仅支持 empirical、case、literature-review 或 theoretical。"
+            })
         if agent_key:
             user = self.context["request"].user
             tmpl = AgentTemplate.resolve(agent_key, user.school, user.role)
             if not tmpl:
                 raise serializers.ValidationError({"agent_key": "指定的 AI 模板不存在或无权限使用。"})
+            if agent_key in PAPER_AGENT_KEYS and not paper_type:
+                raise serializers.ValidationError({
+                    "paper_type": "论文写作工具必须选择论文类型：empirical、case、literature-review 或 theoretical。"
+                })
             submitted_inputs = attrs.pop("input_values", None)
             if submitted_inputs is None:
                 # Older clients submit one free-form prompt. Keep that request

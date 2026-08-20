@@ -375,6 +375,12 @@ class SeedAIAgentsCommandTests(TestCase):
                 context_scope_default__approved_materials=True
             ).exists()
         )
+        reference_agent = agents.get(key="paper-reference-format")
+        self.assertEqual(
+            reference_agent.output_contract["sections"],
+            ["检索式", "筛选标准", "待核验候选来源"],
+        )
+        self.assertIn("不生成任何可直接引用的文献条目", reference_agent.system_instruction)
 
     def test_seed_disables_legacy_global_student_templates_but_preserves_teacher_and_school_templates(self):
         school = School.objects.create(name="校本模板学校")
@@ -387,6 +393,79 @@ class SeedAIAgentsCommandTests(TestCase):
         self.assertTrue(teacher.is_active)
         self.assertTrue(local.is_active)
 
+
+class PaperTypeAgentContractTests(TestCase):
+    def setUp(self):
+        call_command("seed_ai_agents")
+        self.school = School.objects.create(name="论文类型学校", ai_quota=30)
+        self.student = Account.objects.create_user(username="paper-type-student", school=self.school, role="student")
+        self.teacher = Account.objects.create_user(username="paper-type-teacher", school=self.school, role="teacher")
+        self.project = Project.objects.create(
+            school=self.school, title="校园雨水", problem="研究问题", plan="研究方案",
+            leader=self.student, primary_teacher=self.teacher, status=Project.Status.ACTIVE,
+        )
+        self.project.members.create(account=self.student, role="leader")
+
+    def client_for(self, user):
+        client = APIClient(); client.force_authenticate(user); return client
+
+    @override_settings(OPENAI_API_KEY="configured")
+    @patch("apps.core.views.generate_ai_response.delay")
+    def test_paper_agents_require_one_of_the_four_paper_types(self, delay):
+        response = self.client_for(self.student).post("/api/ai-logs/", {
+            "project": self.project.id,
+            "agent_key": "paper-title-abstract",
+            "prompt": "校园雨水",
+            "paper_type": "unsupported",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("paper_type", response.data)
+
+        response = self.client_for(self.student).post("/api/ai-logs/", {
+            "project": self.project.id,
+            "agent_key": "paper-title-abstract",
+            "prompt": "校园雨水",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("paper_type", response.data)
+        delay.assert_not_called()
+
+    @override_settings(OPENAI_API_KEY="configured")
+    @patch("apps.core.views.generate_ai_response.delay")
+    def test_paper_agents_accept_each_supported_paper_type(self, delay):
+        for paper_type in ("empirical", "case", "literature-review", "theoretical"):
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client_for(self.student).post("/api/ai-logs/", {
+                    "project": self.project.id,
+                    "agent_key": "paper-title-abstract",
+                    "prompt": "校园雨水",
+                    "paper_type": paper_type,
+                }, format="json")
+            self.assertEqual(response.status_code, 201, paper_type)
+            self.assertEqual(response.data["paper_type"], paper_type)
+        self.assertEqual(delay.call_count, 4)
+
+    @override_settings(OPENAI_API_KEY="configured")
+    def test_every_paper_agent_receives_selected_type_even_without_template_placeholder(self):
+        paper_agents = AgentTemplate.objects.filter(school=None, key__startswith="paper-").order_by("key")
+        self.assertEqual(paper_agents.count(), 6)
+        with patch("apps.core.tasks.OpenAI") as client_class:
+            client_class.return_value.responses.create.return_value.output_text = "ok"
+            for agent in paper_agents:
+                agent.prompt_template = "固定模板，不含论文类型占位符。"
+                agent.save(update_fields=["prompt_template"])
+                inputs = {
+                    field["key"]: "真实项目输入"
+                    for field in agent.input_schema if field.get("required")
+                }
+                record = AIGenerationLog.objects.create(
+                    project=self.project, actor=self.student, agent_key=agent.key,
+                    prompt="论文写作", paper_type="theoretical",
+                    context_scope={"agent_inputs": inputs}, status=AIGenerationLog.Status.QUEUED,
+                )
+                generate_ai_response(record.id)
+                request_input = client_class.return_value.responses.create.call_args.kwargs["input"]
+                self.assertIn("论文类型：theoretical", request_input, agent.key)
 
 class SaveAIOutputAsMaterialTests(TestCase):
     def setUp(self):

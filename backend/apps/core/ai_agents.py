@@ -10,6 +10,19 @@ RESERVED_TEMPLATE_VARIABLES = {
     "project_title", "project_problem", "project_plan", "project_type", "paper_type", "user_prompt",
 }
 
+# These identifiers are part of the student-facing paper workflow contract.
+# Keep the persisted value concise and stable so prompts, audits and the UI can
+# share it without translating free-form labels.
+PAPER_TYPES = {"empirical", "case", "literature-review", "theoretical"}
+PAPER_AGENT_KEYS = {
+    "paper-title-abstract",
+    "paper-framework",
+    "paper-expand-polish",
+    "paper-reference-format",
+    "paper-result-interpret",
+    "paper-reviewer-response",
+}
+
 
 def template_variable_names(template):
     """Return simple replacement-field names used by an agent template."""

@@ -14,7 +14,7 @@ from django.utils import timezone
 from docx import Document
 
 from .models import AgentTemplate
-from .ai_agents import render_agent_prompt
+from .ai_agents import PAPER_AGENT_KEYS, render_agent_prompt
 
 DEFAULT_AI_INSTRUCTION = (
     "你是青少年科创项目教练。只提供可编辑建议，不虚构数据、引用或实验结果，"
@@ -413,6 +413,14 @@ def generate_ai_response(self, record_id):
         tmpl = AgentTemplate.resolve(record.agent_key, record.project.school, record.actor.role) if record.agent_key else None
         system = tmpl.system_instruction if tmpl else DEFAULT_AI_INSTRUCTION
         rendered_prompt = render_agent_prompt(tmpl, record) if tmpl else record.prompt
+        # Paper type is an execution-level contract, not a convenience token in
+        # an editable template.  Always provide the validated value for each of
+        # the six paper Agents even if an administrator later removes {paper_type}
+        # from a template prompt.
+        paper_type_context = (
+            f"\n论文类型：{record.paper_type}\n"
+            if record.agent_key in PAPER_AGENT_KEYS else ""
+        )
         api_key = getattr(settings, "OPENAI_API_KEY", "")
         if not api_key:
             record.output = _demo_ai_response(record, context_parts, referenced, rendered_prompt)
@@ -429,7 +437,11 @@ def generate_ai_response(self, record_id):
         response = client.responses.create(
             model=settings.OPENAI_MODEL,
             instructions=system,
-            input=f"用途：{record.purpose}\n" + "\n".join(context_parts) + f"\nAgent 指令：{rendered_prompt}\n用户补充：{record.prompt}",
+            input=(
+                f"用途：{record.purpose}\n" + "\n".join(context_parts)
+                + paper_type_context
+                + f"\nAgent 指令：{rendered_prompt}\n用户补充：{record.prompt}"
+            ),
         )
         record.output = response.output_text
         artifact = _artifact_fields(record, record.output)
