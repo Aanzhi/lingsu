@@ -1137,18 +1137,43 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         else:
             if not project_member(project, request.user):
                 raise PermissionDenied("无项目权限。")
+            agent_key = request.data.get("agent_key") or conversation.current_agent or None
+            # Conversations created before the global seed may carry a retired
+            # agent key; keep those legacy messages usable while explicit new
+            # selections still go through strict serializer validation.
+            if not request.data.get("agent_key") and agent_key and not AgentTemplate.resolve(agent_key, request.user.school, request.user.role):
+                agent_key = None
+            paper_type = request.data.get("paper_type") or conversation.paper_type or ""
+            task = request.data.get("task")
+            material = request.data.get("material")
+            input_values = request.data.get("input_values")
+            context_scope = request.data.get("context_scope")
+            payload = {
+                "project": project.id,
+                "purpose": agent_key or "对话咨询",
+                "agent_key": agent_key,
+                "task": task,
+                "material": material,
+                "prompt": content,
+                "paper_type": paper_type,
+                "input_values": input_values,
+                "context_scope": context_scope or {},
+            }
+            payload = {key: value for key, value in payload.items() if value is not None}
+            log_serializer = AIGenerationLogSerializer(data=payload, context={"request": request})
+            log_serializer.is_valid(raise_exception=True)
+            values = log_serializer.validated_data
             log = AIGenerationLog.objects.create(
-                project=project, actor=request.user, purpose=conversation.current_agent or "对话咨询",
-                agent_key=conversation.current_agent or None, prompt=content,
-                paper_type=conversation.paper_type, context_scope={"project_basics": True, "approved_materials": True},
-                conversation=conversation, message=assistant,
+                **values, actor=request.user, conversation=conversation, message=assistant,
                 status=AIGenerationLog.Status.QUEUED,
             )
+            conversation.current_agent = values.get("agent_key") or ""
+            conversation.paper_type = values.get("paper_type") or ""
             assistant.generation_log = log
             assistant.save(update_fields=["generation_log", "updated_at"])
             transaction.on_commit(lambda: generate_ai_response.delay(log.id))
         conversation.updated_at = timezone.now()
-        conversation.save(update_fields=["updated_at"])
+        conversation.save(update_fields=["updated_at", "current_agent", "paper_type"])
         return Response(AIConversationMessageSerializer(assistant).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["get"], url_path=r"messages/(?P<message_id>[^/.]+)/stream")

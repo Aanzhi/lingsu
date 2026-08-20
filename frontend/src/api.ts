@@ -173,6 +173,32 @@ export const rejectPublicCase = (id: number, comment: string) => api.post<Public
 export const getAIGenerations = (project?: number) => api.get<AIGeneration[]>('ai-logs/', { params: project ? { project } : undefined })
 export const getProjectTasks = (project?: number) => api.get<ApiTask[]>('project-tasks/', { params: project ? { project } : undefined })
 export const createAIGeneration = (payload: { project: number; purpose?: string; prompt: string; input_values?: Record<string, string>; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' }) => api.post<AIGeneration>('ai-logs/', payload)
+export interface AIConversation { id: number; title: string; project: number | null; project_title: string | null; paper_type: string | null; current_agent: string | null; is_archived: boolean; updated_at: string; created_at: string }
+export interface AIConversationMessage { id: number; role: 'user' | 'assistant' | 'system'; content: string; status: 'queued' | 'streaming' | 'completed' | 'failed'; generation_log?: number | null; artifact_payload?: AIArtifactOutput | null; verification_items?: Array<VerificationItem | string>; error_message?: string; created_at: string }
+export interface AIConversationMessageInput { content: string; agent_key?: string; project?: number | null; task?: number; paper_type?: string; input_values?: Record<string, string>; context_scope?: AIContextScope }
+export const getAIConversations = (params?: { project?: number; include_archived?: boolean }) => api.get<AIConversation[]>('ai-conversations/', { params })
+export const createAIConversation = (payload: { title?: string; project?: number | null; paper_type?: string | null; current_agent?: string | null }) => api.post<AIConversation>('ai-conversations/', payload)
+export const updateAIConversation = (id: number, payload: Partial<Pick<AIConversation, 'title' | 'paper_type' | 'current_agent'>>) => api.patch<AIConversation>(`ai-conversations/${id}/`, payload)
+export const archiveAIConversation = (id: number) => api.post<AIConversation>(`ai-conversations/${id}/archive/`)
+export const getAIConversationMessages = (id: number) => api.get<AIConversationMessage[]>(`ai-conversations/${id}/messages/`)
+export const createAIConversationMessage = (id: number, payload: AIConversationMessageInput) => api.post<AIConversationMessage>(`ai-conversations/${id}/messages/`, payload)
+
+function csrfToken() { return document.cookie.split('; ').find((item) => item.startsWith('csrftoken='))?.split('=').slice(1).join('=') || '' }
+export async function streamAIConversationMessage(id: number, messageId: number, onEvent: (event: { id?: string; event: string; data: Record<string, unknown> }) => void, signal?: AbortSignal, lastEventId?: string) {
+  const response = await fetch(`/api/ai-conversations/${id}/messages/${messageId}/stream/${lastEventId ? `?last_event_id=${encodeURIComponent(lastEventId)}` : ''}`, { credentials: 'include', headers: { Accept: 'text/event-stream', 'X-CSRFToken': csrfToken(), ...(lastEventId ? { 'Last-Event-ID': lastEventId } : {}) }, signal })
+  if (!response.ok || !response.body) throw new Error(`AI stream failed (${response.status})`)
+  const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''
+  while (true) {
+    const { value, done } = await reader.read(); if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const blocks = buffer.split(/\r?\n\r?\n/); buffer = blocks.pop() || ''
+    blocks.forEach((block) => {
+      let event = 'message'; let idValue: string | undefined; const data: string[] = []
+      block.split(/\r?\n/).forEach((line) => { if (line.startsWith('id:')) idValue = line.slice(3).trim(); else if (line.startsWith('event:')) event = line.slice(6).trim(); else if (line.startsWith('data:')) data.push(line.slice(5).trim()) })
+      if (data.length) { try { onEvent({ id: idValue, event, data: JSON.parse(data.join('\n')) }) } catch { onEvent({ id: idValue, event, data: { text: data.join('\n') } }) } }
+    })
+  }
+}
 export const saveAIGenerationAsMaterial = (id: number, payload: { material: number; content: string; revision_note: string }) => api.post<MaterialRevision>(`ai-logs/${id}/save_as_material/`, payload)
 // ── AI Agent 模板（平台/校本管理 + 学生/教师按角色拉取）──────────────
 export const getAIAgents = () => api.get<AIAgent[]>('ai-agents/')
