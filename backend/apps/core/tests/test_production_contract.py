@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from pathlib import Path
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
@@ -48,6 +49,15 @@ class ProductionContractTests(TestCase):
         client = APIClient()
         client.force_authenticate(user)
         return client
+
+    def test_compose_backend_startup_resets_global_ai_agent_templates_after_migrations(self):
+        compose = (
+            Path(__file__).resolve().parents[4] / "docker-compose.yml"
+        ).read_text(encoding="utf-8")
+
+        migrate_index = compose.index("python manage.py migrate --noinput")
+        seed_index = compose.index("python manage.py seed_ai_agents --reset")
+        self.assertLess(migrate_index, seed_index)
 
     def test_real_session_login_and_logout(self):
         client = APIClient()
