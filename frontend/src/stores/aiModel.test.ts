@@ -60,7 +60,7 @@ it('supports all paper types and keeps six agents available for each type', () =
   expect(PAPER_TYPES.map((item) => item.key)).toEqual(['empirical', 'case', 'literature-review', 'theoretical'])
   expect(paperAgentsForType('case')).toHaveLength(6)
   expect(paperAgentsForType('case').map((agent) => agent.key)).toEqual([
-    'paper-title-abstract', 'paper-framework', 'paper-expand-polish', 'reference-format', 'results-interpretation', 'reviewer-response',
+    'paper-title-abstract', 'paper-framework', 'paper-expand-polish', 'paper-reference-format', 'paper-result-interpret', 'paper-reviewer-response',
   ])
 })
 

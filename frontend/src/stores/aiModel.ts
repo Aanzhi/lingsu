@@ -26,9 +26,9 @@ const PAPER_AGENT_DEFINITIONS: AIWorkflowAgent[] = [
   { key: 'paper-title-abstract', name: '标题与摘要助手', workflow: 'paper_title_abstract', stage: '标题与摘要', quickActions: ['生成标题', '起草摘要'] },
   { key: 'paper-framework', name: '论文框架助手', workflow: 'paper_framework', stage: '框架', quickActions: ['生成论文框架', '调整章节'] },
   { key: 'paper-expand-polish', name: '扩写与润色助手', workflow: 'paper_expand_polish', stage: '扩写与润色', quickActions: ['扩写段落', '润色论文'] },
-  { key: 'reference-format', name: '参考文献格式助手', workflow: 'paper_reference_format', stage: '参考文献', quickActions: ['整理参考文献', '检查格式'] },
-  { key: 'results-interpretation', name: '结果解读助手', workflow: 'paper_results_interpretation', stage: '结果解读', quickActions: ['解读结果', '梳理讨论'] },
-  { key: 'reviewer-response', name: '审稿意见回复助手', workflow: 'paper_reviewer_response', stage: '审稿回复', quickActions: ['拆解意见', '起草回复'] },
+  { key: 'paper-reference-format', name: '参考文献格式助手', workflow: 'paper_reference_format', stage: '参考文献', quickActions: ['整理参考文献', '检查格式'] },
+  { key: 'paper-result-interpret', name: '结果解读助手', workflow: 'paper_results_interpretation', stage: '结果解读', quickActions: ['解读结果', '梳理讨论'] },
+  { key: 'paper-reviewer-response', name: '审稿意见回复助手', workflow: 'paper_reviewer_response', stage: '审稿回复', quickActions: ['拆解意见', '起草回复'] },
 ]
 
 export function paperAgentsForType(_type: PaperType): AIWorkflowAgent[] {
