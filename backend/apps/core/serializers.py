@@ -359,10 +359,15 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
 
 
 class AIConversationMessageSerializer(serializers.ModelSerializer):
+    verification_items = serializers.SerializerMethodField()
+
     class Meta:
         model = AIConversationMessage
-        fields = ["id", "role", "content", "status", "generation_log", "artifact_payload", "error_message", "created_at", "updated_at"]
+        fields = ["id", "role", "content", "status", "generation_log", "artifact_payload", "verification_items", "error_message", "created_at", "updated_at"]
         read_only_fields = ["id", "role", "status", "generation_log", "artifact_payload", "error_message", "created_at", "updated_at"]
+
+    def get_verification_items(self, obj):
+        return obj.generation_log.verification_items if obj.generation_log_id else []
 
 
 class AIConversationSerializer(serializers.ModelSerializer):
