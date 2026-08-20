@@ -10,6 +10,22 @@ describe('API error presentation', () => {
 
     expect(errorMessage(error)).toBe('操作失败，请稍后重试')
   })
+
+  it.each([
+    [401, '登录状态已失效，请重新登录。'],
+    [429, 'AI 请求过于频繁或学校配额已用尽，请稍后重试。'],
+    [502, 'AI 服务暂时不可用，请稍后重试。'],
+    [503, 'AI 服务暂时不可用，请稍后重试。'],
+  ])('maps provider status %s to a user-facing message', (status, message) => {
+    const error = new AxiosError('provider error')
+    error.response = { status, statusText: 'error', headers: {}, config: {}, data: {} } as never
+    expect(errorMessage(error)).toBe(message)
+  })
+
+  it('maps request timeouts to a retryable user-facing message', () => {
+    const error = new AxiosError('timeout', 'ECONNABORTED')
+    expect(errorMessage(error)).toBe('AI 请求超时，请稍后重试。')
+  })
 })
 
 it('saves the edited AI draft as the material revision content', async () => {

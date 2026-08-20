@@ -87,6 +87,11 @@ export interface AuditEvent { id: number; school: number; actor: number; actor_n
 
 export function errorMessage(error: unknown, fallback = '操作失败，请稍后重试') {
   if (!(error instanceof AxiosError)) return error instanceof Error ? error.message : fallback
+  const status = error.response?.status
+  if (status === 401) return '登录状态已失效，请重新登录。'
+  if (status === 408 || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') return 'AI 请求超时，请稍后重试。'
+  if (status === 429) return 'AI 请求过于频繁或学校配额已用尽，请稍后重试。'
+  if (status === 502 || status === 503) return 'AI 服务暂时不可用，请稍后重试。'
   const data = error.response?.data as { detail?: string | string[]; [key: string]: unknown } | undefined
   if (typeof data === 'string') return fallback
   if (typeof data?.detail === 'string') return data.detail
