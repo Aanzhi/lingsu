@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
-import { Briefcase, ChatLineSquare, Collection, DocumentChecked, FolderOpened, House, Medal, Reading } from '@element-plus/icons-vue'
+import { Briefcase, Collection, DocumentChecked, FolderOpened, House, Medal, Reading } from '@element-plus/icons-vue'
 import { RouterLink, RouterView } from 'vue-router'
 import AppTopbar from '../components/AppTopbar.vue'
 const nav: [string, string, Component][] = [
   ['/teacher/home', '工作台', House], ['/teacher/pool', '项目池', Collection], ['/teacher/projects', '指导项目', FolderOpened],
-  ['/teacher/reviews', '材料审核', DocumentChecked], ['/teacher/members', '成员确认', Briefcase], ['/teacher/ai', '审核 AI', ChatLineSquare],
+  ['/teacher/reviews', '材料审核', DocumentChecked], ['/teacher/members', '成员确认', Briefcase],
   ['/teacher/cases', '案例审核', Reading], ['/teacher/competitions', '赛事信息', Medal], ['/teacher/announcements', '通知公告', Reading],
 ]
 </script>

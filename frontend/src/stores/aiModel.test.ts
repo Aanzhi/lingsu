@@ -4,7 +4,7 @@ import type { AIAgent } from '../api'
 import {
   aiStatusLabel, aiUnavailableMessage, canGenerateAI, composeAgentPrompt, normalizeAIAgentSelection, normalizeAISelection,
   shouldPollAI, AI_PROPOSAL_ARTIFACTS, PAPER_TYPES, agentMetadata, aiQuickEntryLocation, paperAgentsForType,
-  agentInputValues, paperGenerationContext, verificationItemsForDisplay,
+  agentInputValues, paperGenerationContext, verificationItemsForDisplay, resolveAIEntryProjectId,
 } from './aiModel'
 import { aiHistoryMeta } from './aiModel'
 
@@ -103,6 +103,12 @@ it('uses backend agent metadata for workflow, stage and quick actions', () => {
   expect(agentMetadata(agent)).toMatchObject({ workflow: 'paper_writing', stage: 'drafting', quickActions: ['outline'] })
 })
 
-it('builds a task AI quick entry that preserves task, workflow and agent', () => {
-  expect(aiQuickEntryLocation(42, 'proposal_plan', 'proposal-plan')).toBe('/student/ai?taskId=42&workflow=proposal_plan&agent=proposal-plan')
+it('builds a task AI quick entry that preserves the project, task, workflow and agent', () => {
+  expect(aiQuickEntryLocation(7, 42, 'proposal_plan', 'proposal-plan')).toBe('/student/ai?projectId=7&taskId=42&workflow=proposal_plan&agent=proposal-plan')
+})
+
+it('uses only a project from the quick-entry query that is available to the student', () => {
+  expect(resolveAIEntryProjectId('7', [{ id: 3 }, { id: 7 }])).toBe(7)
+  expect(resolveAIEntryProjectId('99', [{ id: 3 }, { id: 7 }])).toBe(3)
+  expect(resolveAIEntryProjectId('not-a-number', [{ id: 3 }])).toBe(3)
 })

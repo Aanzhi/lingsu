@@ -35,7 +35,9 @@ export interface UploadSession {
   expected_sha256: string; status: 'active' | 'completed' | 'aborted' | 'expired'; expires_at: string
   part_count: number; uploaded_parts: number[]; attachment_id: number | null
 }
-export interface MaterialRevision { id: number; material: number; material_title: string; project_title: string; author: number; author_name: string; content: string; truth_confirmed: boolean; revision_note: string; status: UnifiedStatus; reviewer: number | null; review_comment: string; created_at: string; attachments: MaterialAttachment[] }
+export interface AIRevisionSource { ai_log_id: number; agent_key: string | null; purpose: string; paper_type: 'empirical' | 'case' | 'literature-review' | 'theoretical' | null; created_at: string }
+export interface AIVerificationSummary { total: number; items: VerificationItem[] }
+export interface MaterialRevision { id: number; material: number; material_title: string; project_title: string; author: number; author_name: string; content: string; truth_confirmed: boolean; revision_note: string; status: UnifiedStatus; reviewer: number | null; review_comment: string; created_at: string; attachments: MaterialAttachment[]; source_summary: AIRevisionSource | null; verification_summary: AIVerificationSummary | null }
 export interface MaterialReference { url: string; original_name: string }
 export interface Material { id: number; project: number; task: number | null; template_material: number | null; title: string; status: UnifiedStatus; required: boolean; report_section: string; report_order: number; revisions: MaterialRevision[]; guidance: string; reference: MaterialReference | null }
 export interface Competition { id: number; title: string; description: string; registration_deadline?: string; starts_at?: string; ends_at?: string; audience: string; status: string }

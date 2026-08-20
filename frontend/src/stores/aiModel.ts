@@ -72,8 +72,14 @@ export function agentMetadata(agent: AIAgent): AIWorkflowAgent {
   }
 }
 
-export function aiQuickEntryLocation(taskId: number, workflow: string, agent: string) {
-  return `/student/ai?taskId=${taskId}&workflow=${encodeURIComponent(workflow)}&agent=${encodeURIComponent(agent)}`
+export function aiQuickEntryLocation(projectId: number, taskId: number, workflow: string, agent: string) {
+  return `/student/ai?projectId=${projectId}&taskId=${taskId}&workflow=${encodeURIComponent(workflow)}&agent=${encodeURIComponent(agent)}`
+}
+
+export function resolveAIEntryProjectId(queryProjectId: unknown, projects: Array<{ id: number }>): number | null {
+  const candidate = typeof queryProjectId === 'string' ? Number(queryProjectId) : queryProjectId
+  if (typeof candidate === 'number' && Number.isSafeInteger(candidate) && projects.some((project) => project.id === candidate)) return candidate
+  return projects[0]?.id ?? null
 }
 
 export type AIStatus = 'queued' | 'processing' | 'completed' | 'failed'

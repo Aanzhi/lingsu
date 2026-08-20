@@ -38,7 +38,7 @@ export const routeRecords: RouteRecordRaw[] = [
       { path: 'reviews', name: 'teacher-reviews', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'reviews' } },
       { path: 'reviews/:submissionId', name: 'teacher-review', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'review' } },
       { path: 'members', name: 'teacher-members', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'members' } },
-      { path: 'ai', name: 'teacher-ai', component: () => import('./pages/shared/AICenter.vue') },
+      { path: 'ai', redirect: '/teacher/reviews' },
       { path: 'cases', name: 'teacher-cases', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'cases' } },
       { path: 'competitions', name: 'teacher-competitions', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'competitions' } },
       { path: 'announcements', name: 'teacher-announcements', component: () => import('./pages/teacher/TeacherAnnouncements.vue') },
