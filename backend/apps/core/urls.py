@@ -1,6 +1,6 @@
 from rest_framework.routers import DefaultRouter
 from django.urls import path
-from .views import AIGenerationLogViewSet, AgentTemplateViewSet, AIAvailabilityView, AnnouncementViewSet, CompetitionViewSet, MaterialAttachmentViewSet, MaterialRevisionViewSet, MaterialViewSet, MemberInvitationViewSet, MeView, NotificationViewSet, ProjectTaskViewSet, ProjectViewSet, PublicCaseRequestViewSet, ReportExportViewSet, SchoolViewSet, ServiceStatusView, StudentDirectoryView, TemplateViewSet, UploadSessionViewSet, change_password, csrf, demo_login, health, register, session_login, session_logout
+from .views import AIGenerationLogViewSet, AIConversationViewSet, AgentTemplateViewSet, AIAvailabilityView, AnnouncementViewSet, CompetitionViewSet, MaterialAttachmentViewSet, MaterialRevisionViewSet, MaterialViewSet, MemberInvitationViewSet, MeView, NotificationViewSet, ProjectTaskViewSet, ProjectViewSet, PublicCaseRequestViewSet, ReportExportViewSet, SchoolViewSet, ServiceStatusView, StudentDirectoryView, TemplateViewSet, UploadSessionViewSet, change_password, csrf, demo_login, health, register, session_login, session_logout
 
 router = DefaultRouter()
 router.register("projects", ProjectViewSet, basename="project")
@@ -12,6 +12,7 @@ router.register("upload-sessions", UploadSessionViewSet, basename="upload-sessio
 router.register("templates", TemplateViewSet, basename="template")
 router.register("public-case-requests", PublicCaseRequestViewSet, basename="public-case-request")
 router.register("ai-logs", AIGenerationLogViewSet, basename="ai-log")
+router.register("ai-conversations", AIConversationViewSet, basename="ai-conversation")
 router.register("ai-agents", AgentTemplateViewSet, basename="ai-agent")
 router.register("report-exports", ReportExportViewSet, basename="report-export")
 router.register("competitions", CompetitionViewSet, basename="competition")

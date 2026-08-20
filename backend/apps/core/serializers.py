@@ -6,7 +6,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import serializers
-from .models import AIGenerationLog, Account, AgentTemplate, Announcement, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, TemplateMaterial, UploadSession
+from .models import AIGenerationLog, AIConversation, AIConversationMessage, Account, AgentTemplate, Announcement, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, TemplateMaterial, UploadSession
 from .ai_agents import PAPER_AGENT_KEYS, PAPER_TYPES, validate_agent_inputs
 from .tasks import process_uploaded_material
 
@@ -356,6 +356,32 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"context_scope": f"{key} 必须是材料或步骤 ID 列表。"})
             context_scope[key] = [int(value) for value in values]
         return context_scope
+
+
+class AIConversationMessageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AIConversationMessage
+        fields = ["id", "role", "content", "status", "generation_log", "artifact_payload", "error_message", "created_at", "updated_at"]
+        read_only_fields = ["id", "role", "status", "generation_log", "artifact_payload", "error_message", "created_at", "updated_at"]
+
+
+class AIConversationSerializer(serializers.ModelSerializer):
+    message_count = serializers.SerializerMethodField()
+    project_title = serializers.CharField(source="project.title", read_only=True, allow_null=True)
+
+    class Meta:
+        model = AIConversation
+        fields = ["id", "project", "project_title", "title", "paper_type", "current_agent", "is_archived", "message_count", "created_at", "updated_at"]
+        read_only_fields = ["id", "project_title", "message_count", "created_at", "updated_at"]
+
+    def get_message_count(self, obj):
+        return obj.messages.count()
+
+    def validate_project(self, project):
+        user = self.context["request"].user
+        if project is not None and not (project.leader_id == user.id or project.members.filter(account=user).exists()):
+            raise serializers.ValidationError("无项目权限。")
+        return project
 
 
 class AgentTemplateSerializer(serializers.ModelSerializer):

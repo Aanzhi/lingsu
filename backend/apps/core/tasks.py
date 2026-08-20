@@ -13,8 +13,9 @@ from django.core.files.base import ContentFile
 from django.utils import timezone
 from docx import Document
 
-from .models import AgentTemplate
+from .models import AgentTemplate, AIConversationMessage
 from .ai_agents import PAPER_AGENT_KEYS, render_agent_prompt
+from .workflows.ai import publish_conversation_event
 
 DEFAULT_AI_INSTRUCTION = (
     "你是青少年科创项目教练。只提供可编辑建议，不虚构数据、引用或实验结果，"
@@ -151,6 +152,17 @@ def _demo_ai_response(record, context_parts, referenced=None, agent_prompt=""):
     return "\n".join(lines)
 
 
+def _finish_conversation_message(message, output, artifact):
+    for chunk in [output[i:i + 240] for i in range(0, len(output), 240)]:
+        publish_conversation_event(message.id, "message.delta", {"delta": chunk})
+    message.content = output
+    message.status = AIConversationMessage.Status.COMPLETED
+    message.artifact_payload = artifact["artifact_payload"]
+    message.save(update_fields=["content", "status", "artifact_payload", "updated_at"])
+    publish_conversation_event(message.id, "message.artifact", artifact)
+    publish_conversation_event(message.id, "message.done", {"message_id": message.id})
+
+
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
 def process_uploaded_material(self, revision_id):
     """Hash and malware-scan every attachment before it can be trusted."""
@@ -279,9 +291,14 @@ def generate_ai_response(self, record_id):
     from .models import AIGenerationLog, ProjectTask, Material, MaterialAttachment, MaterialRevision
 
     record = AIGenerationLog.objects.select_related("project", "actor", "task", "material").get(pk=record_id)
+    conversation_message = getattr(record, "conversation_message", None)
     record.status = AIGenerationLog.Status.PROCESSING
     record.error_message = ""
     record.save(update_fields=["status", "error_message"])
+    if conversation_message:
+        conversation_message.status = AIConversationMessage.Status.STREAMING
+        conversation_message.save(update_fields=["status", "updated_at"])
+        publish_conversation_event(conversation_message.id, "message.started", {"message_id": conversation_message.id})
     try:
         project = record.project
         context_parts = [f"项目题目：{project.title}", f"项目类型：{project.project_type}"]
@@ -432,6 +449,8 @@ def generate_ai_response(self, record_id):
             record.referenced_sources = referenced
             record.completed_at = timezone.now()
             record.save(update_fields=["output", "artifact_payload", "verification_items", "model_name", "status", "referenced_sources", "completed_at"])
+            if conversation_message:
+                _finish_conversation_message(conversation_message, record.output, artifact)
             return {"record_id": record.id, "status": record.status, "mode": "demo"}
         client = OpenAI(api_key=api_key)
         response = client.responses.create(
@@ -452,11 +471,18 @@ def generate_ai_response(self, record_id):
         record.referenced_sources = referenced
         record.completed_at = timezone.now()
         record.save(update_fields=["output", "artifact_payload", "verification_items", "model_name", "status", "referenced_sources", "completed_at"])
+        if conversation_message:
+            _finish_conversation_message(conversation_message, record.output, artifact)
         return {"record_id": record.id, "status": record.status}
     except Exception as exc:
         record.status = AIGenerationLog.Status.FAILED
         record.error_message = str(exc)[:2000]
         record.save(update_fields=["status", "error_message"])
+        if conversation_message:
+            conversation_message.status = AIConversationMessage.Status.FAILED
+            conversation_message.error_message = record.error_message
+            conversation_message.save(update_fields=["status", "error_message", "updated_at"])
+            publish_conversation_event(conversation_message.id, "message.error", {"error": record.error_message})
         raise
 
 

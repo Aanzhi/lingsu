@@ -456,6 +456,50 @@ class AIGenerationLog(models.Model):
     completed_at = models.DateTimeField(null=True, blank=True)
 
 
+class AIConversation(models.Model):
+    """A student's global AI workspace conversation, optionally scoped to one project."""
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_conversations")
+    project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.SET_NULL, related_name="ai_conversations")
+    title = models.CharField(max_length=160, default="新对话")
+    paper_type = models.CharField(max_length=40, blank=True, default="")
+    current_agent = models.CharField(max_length=80, blank=True, default="")
+    is_archived = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-id"]
+        indexes = [models.Index(fields=["owner", "is_archived", "updated_at"])]
+
+
+class AIConversationMessage(models.Model):
+    class Role(models.TextChoices):
+        USER = "user", "用户"
+        ASSISTANT = "assistant", "助手"
+        SYSTEM = "system", "系统"
+
+    class Status(models.TextChoices):
+        QUEUED = "queued", "排队中"
+        STREAMING = "streaming", "生成中"
+        COMPLETED = "completed", "已完成"
+        FAILED = "failed", "失败"
+
+    conversation = models.ForeignKey(AIConversation, on_delete=models.CASCADE, related_name="messages")
+    role = models.CharField(max_length=12, choices=Role.choices)
+    content = models.TextField(blank=True)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.COMPLETED)
+    generation_log = models.OneToOneField(
+        AIGenerationLog, null=True, blank=True, on_delete=models.SET_NULL, related_name="conversation_message"
+    )
+    artifact_payload = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+
 class AgentTemplate(models.Model):
     """可配置的 AI Agent 模板：每个模板拥有独立的 system 指令、提示词模板与输入变量。"""
 

@@ -1,12 +1,14 @@
 import clamd
 import redis
+import json
+import time
 import requests
 
 from django.conf import settings
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.password_validation import validate_password
 from django.core.files.base import File
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
@@ -25,16 +27,16 @@ import hashlib
 import secrets
 from pathlib import Path
 from io import BytesIO
-from .models import AIGenerationLog, Account, AgentTemplate, Announcement, AnnouncementRead, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, UploadPart, UploadSession
+from .models import AIGenerationLog, AIConversation, AIConversationMessage, Account, AgentTemplate, Announcement, AnnouncementRead, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, UploadPart, UploadSession
 from .notifiers import notify
-from .serializers import AIGenerationLogSerializer, AgentTemplateSerializer, AnnouncementSerializer, AuditEventSerializer, CompetitionSerializer, MaterialAttachmentSerializer, MaterialRevisionSerializer, MaterialSerializer, MemberInvitationSerializer, NotificationSerializer, ProjectMemberSerializer, ProjectSerializer, ProjectTaskSerializer, PublicCaseRequestSerializer, ReportExportSerializer, SchoolSerializer, TemplateSerializer, UploadSessionSerializer
+from .serializers import AIGenerationLogSerializer, AIConversationMessageSerializer, AIConversationSerializer, AgentTemplateSerializer, AnnouncementSerializer, AuditEventSerializer, CompetitionSerializer, MaterialAttachmentSerializer, MaterialRevisionSerializer, MaterialSerializer, MemberInvitationSerializer, NotificationSerializer, ProjectMemberSerializer, ProjectSerializer, ProjectTaskSerializer, PublicCaseRequestSerializer, ReportExportSerializer, SchoolSerializer, TemplateSerializer, UploadSessionSerializer
 from .tasks import generate_ai_response, generate_report_export, process_uploaded_material
 from .workflows.cases import resubmit_public_case_request, validate_public_case_request
 from .workflows.materials import create_material_draft, review_material_revision, save_ai_output_as_material, submit_material_revision
 from .workflows.memberships import assign_member, create_member_invitation, decide_member_invitation, respond_to_invitation
 from .workflows.projects import claim_project
 from .services import build_blank_reference
-from .workflows.ai import accessible_ai_logs, create_ai_request
+from .workflows.ai import accessible_ai_logs, conversation_stream_key, create_ai_request, publish_conversation_event
 
 
 def school_queryset(queryset, user, field="school"):
@@ -1071,6 +1073,119 @@ class PublicCaseRequestViewSet(viewsets.ModelViewSet):
             changes={"project_id": item.project_id, "case_id": item.id, "visible": visible},
         )
         return Response(self.get_serializer(item).data)
+
+
+class AIConversationViewSet(viewsets.ModelViewSet):
+    serializer_class = AIConversationSerializer
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        # Conversations are deliberately student-private; teachers get no rows.
+        if self.request.user.role != Account.Role.STUDENT:
+            return AIConversation.objects.none()
+        return AIConversation.objects.filter(owner=self.request.user).select_related("project")
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        if user.role != Account.Role.STUDENT:
+            raise PermissionDenied("只有学生可以创建 AI 对话。")
+        serializer.save(owner=user)
+
+    def perform_update(self, serializer):
+        conversation = self.get_object()
+        if "project" in serializer.validated_data and serializer.validated_data["project"] != conversation.project:
+            raise ValidationError({"project": "对话创建后不能切换项目，请新建对话。"})
+        serializer.save()
+
+    @action(detail=True, methods=["post"])
+    def archive(self, request, pk=None):
+        conversation = self.get_object()
+        conversation.is_archived = True
+        conversation.save(update_fields=["is_archived", "updated_at"])
+        return Response(self.get_serializer(conversation).data)
+
+    @action(detail=True, methods=["get"], url_path="messages")
+    def messages(self, request, pk=None):
+        conversation = self.get_object()
+        return Response(AIConversationMessageSerializer(conversation.messages.all(), many=True).data)
+
+    @action(detail=True, methods=["post"], url_path="messages")
+    @transaction.atomic
+    def create_message(self, request, pk=None):
+        conversation = self.get_object()
+        if conversation.is_archived:
+            raise ValidationError("已归档对话不能继续发送消息。")
+        content = str(request.data.get("content", "")).strip()
+        if not content:
+            raise ValidationError({"content": "消息不能为空。"})
+        user_message = AIConversationMessage.objects.create(
+            conversation=conversation, role=AIConversationMessage.Role.USER, content=content,
+        )
+        assistant = AIConversationMessage.objects.create(
+            conversation=conversation, role=AIConversationMessage.Role.ASSISTANT,
+            content="", status=AIConversationMessage.Status.QUEUED,
+        )
+        project = conversation.project
+        if project is None:
+            # General consultation is intentionally project-free and never creates a material-bearing AI log.
+            assistant.content = "这是通用咨询对话。选择一个科创项目后，我可以结合项目材料继续协助你。"
+            assistant.status = AIConversationMessage.Status.COMPLETED
+            assistant.save(update_fields=["content", "status", "updated_at"])
+            publish_conversation_event(assistant.id, "message.started", {})
+            publish_conversation_event(assistant.id, "message.delta", {"delta": assistant.content})
+            publish_conversation_event(assistant.id, "message.done", {"message_id": assistant.id})
+        else:
+            if not project_member(project, request.user):
+                raise PermissionDenied("无项目权限。")
+            log = AIGenerationLog.objects.create(
+                project=project, actor=request.user, purpose=conversation.current_agent or "对话咨询",
+                agent_key=conversation.current_agent or None, prompt=content,
+                paper_type=conversation.paper_type, context_scope={"project_basics": True, "approved_materials": True},
+                status=AIGenerationLog.Status.QUEUED,
+            )
+            assistant.generation_log = log
+            assistant.save(update_fields=["generation_log", "updated_at"])
+            transaction.on_commit(lambda: generate_ai_response.delay(log.id))
+        conversation.updated_at = timezone.now()
+        conversation.save(update_fields=["updated_at"])
+        return Response(AIConversationMessageSerializer(assistant).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path=r"messages/(?P<message_id>[^/.]+)/stream")
+    def stream(self, request, pk=None, message_id=None):
+        conversation = self.get_object()
+        message = get_object_or_404(conversation.messages, pk=message_id)
+        last_id = request.headers.get("Last-Event-ID") or request.query_params.get("last_event_id") or "0-0"
+        key = conversation_stream_key(message.id)
+        client = redis.Redis.from_url(getattr(settings, "CELERY_BROKER_URL", "redis://localhost:6379/0"), decode_responses=True)
+
+        def events():
+            cursor = last_id
+            deadline = time.monotonic() + 30
+            while time.monotonic() < deadline:
+                try:
+                    rows = client.xread({key: cursor}, block=1000, count=50)
+                except Exception:
+                    rows = []
+                if rows:
+                    for _, entries in rows:
+                        for event_id, fields in entries:
+                            cursor = event_id
+                            yield f"id: {event_id}\nevent: {fields.get('event', 'message.delta')}\ndata: {fields.get('payload', '{}')}\n\n"
+                            if fields.get("event") in {"message.done", "message.error"}:
+                                return
+                current = AIConversationMessage.objects.get(pk=message.id)
+                if current.status in {AIConversationMessage.Status.COMPLETED, AIConversationMessage.Status.FAILED} and not rows:
+                    if current.status == AIConversationMessage.Status.COMPLETED:
+                        yield f"event: message.done\ndata: {json.dumps({'message_id': current.id})}\n\n"
+                    else:
+                        yield f"event: message.error\ndata: {json.dumps({'error': current.error_message}, ensure_ascii=False)}\n\n"
+                    return
+                yield ": keep-alive\n\n"
+
+        response = StreamingHttpResponse(events(), content_type="text/event-stream")
+        response["Cache-Control"] = "no-cache"
+        response["X-Accel-Buffering"] = "no"
+        return response
 
 
 class AIGenerationLogViewSet(viewsets.ModelViewSet):
