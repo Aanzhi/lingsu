@@ -4,7 +4,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.core.models import Account, AgentTemplate, AIGenerationLog, Project, ProjectTask, Material, MaterialRevision, School
+from apps.core.models import Account, AgentTemplate, AIGenerationLog, AuditEvent, Project, ProjectTask, Material, MaterialRevision, School
 from apps.core.tasks import DEFAULT_AI_INSTRUCTION, generate_ai_response
 
 
@@ -234,6 +234,17 @@ class SeedAIAgentsCommandTests(TestCase):
             },
         )
 
+    def test_seed_disables_legacy_global_student_templates_but_preserves_teacher_and_school_templates(self):
+        school = School.objects.create(name="校本模板学校")
+        legacy = AgentTemplate.objects.create(key="legacy-student", name="旧学生助手", role="student", system_instruction="x", prompt_template="x")
+        teacher = AgentTemplate.objects.create(key="legacy-teacher", name="旧教师助手", role="teacher", system_instruction="x", prompt_template="x")
+        local = AgentTemplate.objects.create(key="legacy-local", name="校本学生助手", role="student", school=school, system_instruction="x", prompt_template="x")
+        call_command("seed_ai_agents")
+        legacy.refresh_from_db(); teacher.refresh_from_db(); local.refresh_from_db()
+        self.assertFalse(legacy.is_active)
+        self.assertTrue(teacher.is_active)
+        self.assertTrue(local.is_active)
+
 
 class SaveAIOutputAsMaterialTests(TestCase):
     def setUp(self):
@@ -265,17 +276,24 @@ class SaveAIOutputAsMaterialTests(TestCase):
 
     def test_completed_log_creates_auditable_material_draft(self):
         response = self.client_for(self.student).post(
-            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.material.id}, format="json"
+            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.material.id, "content": "学生已编辑的草稿", "revision_note": "保留实验原始记录"}, format="json"
         )
         self.assertEqual(response.status_code, 201)
         revision = MaterialRevision.objects.get(pk=response.data["id"])
         self.assertEqual(revision.material, self.material)
         self.assertEqual(revision.author, self.student)
-        self.assertEqual(revision.content, "结构化草稿")
+        self.assertEqual(revision.content, "学生已编辑的草稿")
+        self.assertEqual(revision.revision_note, "保留实验原始记录")
         self.log.refresh_from_db()
         self.assertEqual(self.log.saved_material_revision, revision)
         self.assertEqual(response.data["source_summary"]["ai_log_id"], self.log.id)
         self.assertEqual(response.data["verification_summary"]["total"], 1)
+        self.assertTrue(AuditEvent.objects.filter(
+            action=AuditEvent.Action.AI_OUTPUT_SAVED_AS_MATERIAL,
+            actor=self.student,
+            changes__ai_log_id=self.log.id,
+            changes__revision_id=revision.id,
+        ).exists())
 
     def test_cannot_save_to_material_from_another_project(self):
         response = self.client_for(self.student).post(
@@ -283,6 +301,13 @@ class SaveAIOutputAsMaterialTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(MaterialRevision.objects.count(), 0)
+
+    def test_save_without_edits_defaults_to_structured_artifact_content(self):
+        response = self.client_for(self.student).post(
+            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.material.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(MaterialRevision.objects.get(pk=response.data["id"]).content, "结构化草稿")
 
     def test_cannot_save_same_log_twice(self):
         client = self.client_for(self.student)

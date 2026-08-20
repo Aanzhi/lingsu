@@ -43,6 +43,7 @@ class AuditEvent(models.Model):
         CASE_REVIEWED = "case_reviewed", "公开案例已审核"
         CASE_VISIBILITY_CHANGED = "case_visibility_changed", "公开案例可见性已变更"
         REPORT_EXPORT_REQUESTED = "report_export_requested", "报告导出已请求"
+        AI_OUTPUT_SAVED_AS_MATERIAL = "ai_output_saved_as_material", "AI 结果已保存为材料草稿"
 
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="audit_events")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="audit_events")

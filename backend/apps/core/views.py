@@ -1098,7 +1098,9 @@ class AIGenerationLogViewSet(viewsets.ModelViewSet):
         material = Material.objects.select_related("project").filter(pk=material_id).first()
         if not material:
             raise ValidationError({"material": "所选材料不存在。"})
-        revision = save_ai_output_as_material(log, material, request.user)
+        content = request.data["content"] if "content" in request.data else None
+        revision_note = request.data["revision_note"] if "revision_note" in request.data else None
+        revision = save_ai_output_as_material(log, material, request.user, content=content, revision_note=revision_note)
         return Response(MaterialRevisionSerializer(revision, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 

@@ -32,7 +32,7 @@ def create_material_draft(serializer, actor):
     return serializer.save(author=actor)
 
 
-def save_ai_output_as_material(log, material, actor):
+def save_ai_output_as_material(log, material, actor, content=None, revision_note=None):
     """Persist a completed student's AI output as one auditable draft revision."""
     if actor.role != actor.Role.STUDENT:
         raise PermissionDenied("仅项目学生可将 AI 结果保存为材料草稿。")
@@ -53,14 +53,26 @@ def save_ai_output_as_material(log, material, actor):
     if material.status not in EDITABLE_MATERIAL_STATUSES:
         raise ValidationError("该材料已提交或通过审核，不能创建替换版本。")
     payload = log.artifact_payload or {}
-    content = payload.get("content") if isinstance(payload, dict) else None
+    default_content = payload.get("content") if isinstance(payload, dict) else None
+    if content is None:
+        content = default_content or log.output
+    if not isinstance(content, str):
+        raise ValidationError({"content": "材料正文必须为文本。"})
+    default_note = f"由 AI 生成记录 #{log.id} 保存；请在提交前核验全部事实、数据与文献。"
+    if revision_note is None:
+        revision_note = default_note
+    if not isinstance(revision_note, str):
+        raise ValidationError({"revision_note": "版本说明必须为文本。"})
     revision = MaterialRevision.objects.create(
-        material=material, author=actor, content=content or log.output,
-        revision_note=f"由 AI 生成记录 #{log.id} 保存；请在提交前核验全部事实、数据与文献。",
+        material=material, author=actor, content=content, revision_note=revision_note,
         status=MaterialRevision.Status.DRAFT,
     )
     log.saved_material_revision = revision
     log.save(update_fields=["saved_material_revision"])
+    AuditEvent.objects.create(
+        school=project.school, actor=actor, action=AuditEvent.Action.AI_OUTPUT_SAVED_AS_MATERIAL,
+        changes={"project_id": project.id, "material_id": material.id, "revision_id": revision.id, "ai_log_id": log.id},
+    )
     return revision
 
 

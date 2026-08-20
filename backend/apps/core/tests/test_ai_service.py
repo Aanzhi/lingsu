@@ -68,7 +68,25 @@ class AIServiceTests(TestCase):
         self.assertEqual(result["status"], "completed")
         self.assertEqual(record.output, "建议明确自变量与对照组。")
         self.assertEqual(record.status, AIGenerationLog.Status.COMPLETED)
+        self.assertEqual(record.artifact_payload["draft"], record.output)
+        self.assertEqual(record.artifact_payload["content"], record.output)
+        self.assertTrue(record.artifact_payload["title"])
+        self.assertTrue(record.artifact_payload["next_action"])
+        self.assertTrue(record.verification_items)
         self.assertEqual(self.project.status, original_status)
+
+    @override_settings(OPENAI_API_KEY="")
+    def test_demo_worker_populates_auditable_artifact_fields_without_replacing_raw_output(self):
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, purpose="问题梳理", prompt="帮我明确变量",
+            context_scope={"project_basics": True}, status=AIGenerationLog.Status.QUEUED,
+        )
+        generate_ai_response(record.id)
+        record.refresh_from_db()
+        self.assertEqual(record.status, AIGenerationLog.Status.COMPLETED)
+        self.assertIn("演示模式", record.output)
+        self.assertEqual(record.artifact_payload["content"], record.output)
+        self.assertTrue(record.verification_items)
 
     @override_settings(OPENAI_API_KEY="configured")
     def test_non_member_cannot_use_or_read_project_ai_records(self):

@@ -31,6 +31,26 @@ def _ref_label(source: dict) -> str:
     return f"材料《{title}》"
 
 
+def _artifact_fields(record, output):
+    """Build an auditable, UI-friendly artifact without replacing the raw model output."""
+    title = record.material.title if record.material_id else (record.purpose or "AI 生成草稿")
+    return {
+        "artifact_payload": {
+            "title": title,
+            "draft": output,
+            "content": output,
+            "next_action": "请结合原始资料逐项核验文献、数据和事实后再编辑或提交。",
+        },
+        "verification_items": [
+            {
+                "item": "文献、数据与事实依据",
+                "status": "needs_verification",
+                "guidance": "AI 输出仅为可编辑草稿；请使用真实、可追溯的原始资料完成核验。",
+            }
+        ],
+    }
+
+
 def _demo_ai_response(record, context_parts, referenced=None):
     """Honest, clearly-labeled illustrative reply used when no OpenAI key is set.
 
@@ -357,11 +377,14 @@ def generate_ai_response(self, record_id):
         api_key = getattr(settings, "OPENAI_API_KEY", "")
         if not api_key:
             record.output = _demo_ai_response(record, context_parts, referenced)
+            artifact = _artifact_fields(record, record.output)
+            record.artifact_payload = artifact["artifact_payload"]
+            record.verification_items = artifact["verification_items"]
             record.model_name = "演示模式（未接入真实模型）"
             record.status = AIGenerationLog.Status.COMPLETED
             record.referenced_sources = referenced
             record.completed_at = timezone.now()
-            record.save(update_fields=["output", "model_name", "status", "referenced_sources", "completed_at"])
+            record.save(update_fields=["output", "artifact_payload", "verification_items", "model_name", "status", "referenced_sources", "completed_at"])
             return {"record_id": record.id, "status": record.status, "mode": "demo"}
         client = OpenAI(api_key=api_key)
         response = client.responses.create(
@@ -370,11 +393,14 @@ def generate_ai_response(self, record_id):
             input=f"用途：{record.purpose}\n" + "\n".join(context_parts) + f"\n用户请求：{record.prompt}",
         )
         record.output = response.output_text
+        artifact = _artifact_fields(record, record.output)
+        record.artifact_payload = artifact["artifact_payload"]
+        record.verification_items = artifact["verification_items"]
         record.model_name = settings.OPENAI_MODEL
         record.status = AIGenerationLog.Status.COMPLETED
         record.referenced_sources = referenced
         record.completed_at = timezone.now()
-        record.save(update_fields=["output", "model_name", "status", "referenced_sources", "completed_at"])
+        record.save(update_fields=["output", "artifact_payload", "verification_items", "model_name", "status", "referenced_sources", "completed_at"])
         return {"record_id": record.id, "status": record.status}
     except Exception as exc:
         record.status = AIGenerationLog.Status.FAILED
