@@ -8,11 +8,11 @@ export interface PaperTypeOption { key: PaperType; label: string; description: s
 export interface AIWorkflowAgent { key: string; name: string; workflow: string; stage: string; quickActions: string[] }
 
 export const AI_PROPOSAL_ARTIFACTS: AIArtifact[] = [
-  { key: 'topic', workflow: 'proposal_topic', title: '课题名称与摘要', description: '聚焦研究问题，形成可申报的课题表述。', agentKey: 'topic-proposal' },
-  { key: 'background', workflow: 'proposal_background', title: '研究背景与意义', description: '说明真实问题、研究价值与应用场景。', agentKey: 'opening-report' },
-  { key: 'objectives', workflow: 'proposal_objectives', title: '研究目标与内容', description: '拆解目标、研究内容和关键问题。', agentKey: 'research-design-proposal' },
-  { key: 'plan', workflow: 'proposal_plan', title: '实施方案与进度', description: '形成方法、分工、时间线与风险控制。', agentKey: 'feasibility-risk-proposal' },
-  { key: 'outcomes', workflow: 'proposal_outcomes', title: '预期成果与经费', description: '明确可验证成果、展示形式和资源需求。', agentKey: 'proposal-polish' },
+  { key: 'topic', workflow: 'proposal_topic', title: '课题名称与摘要', description: '聚焦研究问题，形成可申报的课题表述。', agentKey: 'proposal-topic' },
+  { key: 'background', workflow: 'proposal_background', title: '研究背景与意义', description: '说明真实问题、研究价值与应用场景。', agentKey: 'proposal-background' },
+  { key: 'objectives', workflow: 'proposal_objectives', title: '研究目标与内容', description: '拆解目标、研究内容和关键问题。', agentKey: 'proposal-objectives' },
+  { key: 'plan', workflow: 'proposal_plan', title: '实施方案与进度', description: '形成方法、分工、时间线与风险控制。', agentKey: 'proposal-plan' },
+  { key: 'consistency', workflow: 'proposal_consistency', title: '申报材料一致性检查', description: '核对问题、目标、方法、进度与成果是否前后一致。', agentKey: 'proposal-consistency' },
 ]
 
 export const PAPER_TYPES: PaperTypeOption[] = [
@@ -23,12 +23,12 @@ export const PAPER_TYPES: PaperTypeOption[] = [
 ]
 
 const PAPER_AGENT_DEFINITIONS: AIWorkflowAgent[] = [
-  { key: 'topic-selection-paper', name: '论文选题与标题', workflow: 'paper_topic', stage: '选题', quickActions: ['生成标题', '缩小选题'] },
-  { key: 'paper-framework', name: '论文框架生成', workflow: 'paper_framework', stage: '框架', quickActions: ['生成论文框架', '调整章节'] },
-  { key: 'literature-review-paper', name: '文献综述与检索', workflow: 'paper_literature', stage: '综述', quickActions: ['制定检索式', '生成综述提纲'] },
-  { key: 'research-design-paper', name: '论文研究设计', workflow: 'paper_design', stage: '设计', quickActions: ['设计研究方法', '规划数据分析'] },
-  { key: 'results-discussion-paper', name: '结果与讨论写作', workflow: 'paper_analysis', stage: '分析', quickActions: ['解读结果', '起草讨论'] },
-  { key: 'paper-polish', name: '论文润色与规范检查', workflow: 'paper_review', stage: '校对', quickActions: ['润色论文', '检查引用格式'] },
+  { key: 'paper-title-abstract', name: '标题与摘要助手', workflow: 'paper_title_abstract', stage: '标题与摘要', quickActions: ['生成标题', '起草摘要'] },
+  { key: 'paper-framework', name: '论文框架助手', workflow: 'paper_framework', stage: '框架', quickActions: ['生成论文框架', '调整章节'] },
+  { key: 'paper-expand-polish', name: '扩写与润色助手', workflow: 'paper_expand_polish', stage: '扩写与润色', quickActions: ['扩写段落', '润色论文'] },
+  { key: 'reference-format', name: '参考文献格式助手', workflow: 'paper_reference_format', stage: '参考文献', quickActions: ['整理参考文献', '检查格式'] },
+  { key: 'results-interpretation', name: '结果解读助手', workflow: 'paper_results_interpretation', stage: '结果解读', quickActions: ['解读结果', '梳理讨论'] },
+  { key: 'reviewer-response', name: '审稿意见回复助手', workflow: 'paper_reviewer_response', stage: '审稿回复', quickActions: ['拆解意见', '起草回复'] },
 ]
 
 export function paperAgentsForType(_type: PaperType): AIWorkflowAgent[] {

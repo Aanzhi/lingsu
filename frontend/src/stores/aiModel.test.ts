@@ -49,13 +49,19 @@ it('keeps a valid selected agent and falls back to the first', () => {
 it('maps proposal work to five concrete artifacts', () => {
   expect(AI_PROPOSAL_ARTIFACTS).toHaveLength(5)
   expect(AI_PROPOSAL_ARTIFACTS.map((item) => item.workflow)).toEqual([
-    'proposal_topic', 'proposal_background', 'proposal_objectives', 'proposal_plan', 'proposal_outcomes',
+    'proposal_topic', 'proposal_background', 'proposal_objectives', 'proposal_plan', 'proposal_consistency',
+  ])
+  expect(AI_PROPOSAL_ARTIFACTS.map((item) => item.agentKey)).toEqual([
+    'proposal-topic', 'proposal-background', 'proposal-objectives', 'proposal-plan', 'proposal-consistency',
   ])
 })
 
 it('supports all paper types and keeps six agents available for each type', () => {
   expect(PAPER_TYPES.map((item) => item.key)).toEqual(['empirical', 'case', 'literature-review', 'theoretical'])
   expect(paperAgentsForType('case')).toHaveLength(6)
+  expect(paperAgentsForType('case').map((agent) => agent.key)).toEqual([
+    'paper-title-abstract', 'paper-framework', 'paper-expand-polish', 'reference-format', 'results-interpretation', 'reviewer-response',
+  ])
 })
 
 it('uses backend agent metadata for workflow, stage and quick actions', () => {

@@ -112,9 +112,9 @@ async function submitTeamDraft() {
         <div class="reward-seal"><small>完成奖励</small><strong>+{{ task.xp_reward }} XP</strong></div>
         <section class="task-ai-quick" aria-label="任务 AI 快捷入口">
           <p class="eyebrow">AI 共创</p>
-          <RouterLink :to="aiQuickEntryLocation(taskId, 'proposal_plan', 'research-design-proposal')">申报方案</RouterLink>
-          <RouterLink :to="aiQuickEntryLocation(taskId, 'paper_topic', 'topic-selection-paper')">论文选题</RouterLink>
-          <RouterLink :to="aiQuickEntryLocation(taskId, 'paper_writing', 'paper-framework')">论文写作</RouterLink>
+          <RouterLink :to="aiQuickEntryLocation(taskId, 'proposal_plan', 'proposal-plan')">申报方案</RouterLink>
+          <RouterLink :to="aiQuickEntryLocation(taskId, 'paper_title_abstract', 'paper-title-abstract')">标题与摘要</RouterLink>
+          <RouterLink :to="aiQuickEntryLocation(taskId, 'paper_framework', 'paper-framework')">论文框架</RouterLink>
         </section>
       </aside>
       <section class="task-paper paper-card" :class="{ 'task-paper--read-only': !canEdit }">
