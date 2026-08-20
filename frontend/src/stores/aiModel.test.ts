@@ -4,6 +4,7 @@ import type { AIAgent } from '../api'
 import {
   aiStatusLabel, aiUnavailableMessage, canGenerateAI, composeAgentPrompt, normalizeAIAgentSelection, normalizeAISelection,
   shouldPollAI, AI_PROPOSAL_ARTIFACTS, PAPER_TYPES, agentMetadata, aiQuickEntryLocation, paperAgentsForType,
+  agentInputValues, paperGenerationContext, verificationItemsForDisplay,
 } from './aiModel'
 import { aiHistoryMeta } from './aiModel'
 
@@ -62,6 +63,39 @@ it('supports all paper types and keeps six agents available for each type', () =
   expect(paperAgentsForType('case').map((agent) => agent.key)).toEqual([
     'paper-title-abstract', 'paper-framework', 'paper-expand-polish', 'paper-reference-format', 'paper-result-interpret', 'paper-reviewer-response',
   ])
+})
+
+it('adapts paper tools and generation context to the selected paper type', () => {
+  const empirical = paperAgentsForType('empirical')[1]
+  const review = paperAgentsForType('literature-review')[1]
+
+  expect(empirical.typeHint).toContain('研究设计')
+  expect(review.typeHint).toContain('检索')
+  expect(paperGenerationContext('literature-review')).toMatchObject({
+    paper_type: 'literature-review',
+    paper_type_label: '文献综述',
+  })
+  expect(paperGenerationContext('literature-review').promptPrefix).toContain('系统检索')
+})
+
+it('renders structured verification items without stringifying objects', () => {
+  expect(verificationItemsForDisplay([
+    { item: '样本量', status: 'needs_verification', guidance: '核对原始问卷和统计口径。' },
+  ])).toEqual([
+    { item: '样本量', status: 'needs_verification', guidance: '核对原始问卷和统计口径。' },
+  ])
+  expect(verificationItemsForDisplay()).toEqual([
+    { item: '核对全部事实、数据和引用来源。', status: 'needs_verification', guidance: '' },
+  ])
+})
+
+it('submits declared template fields instead of relying on the legacy free-form fallback', () => {
+  const agent = {
+    input_schema: [{ key: 'project_title' }, { key: 'research_question' }, { key: 'paper_type' }],
+  } as AIAgent
+  expect(agentInputValues(agent, '请分析现有观察', '校园雨水回收', '文献综述')).toEqual({
+    project_title: '校园雨水回收', research_question: '请分析现有观察', paper_type: '文献综述',
+  })
 })
 
 it('uses backend agent metadata for workflow, stage and quick actions', () => {

@@ -1,11 +1,11 @@
-import type { AIAgent, AIContextScope } from '../api'
+import type { AIAgent, AIContextScope, VerificationItem } from '../api'
 
 export type AITrack = 'proposal' | 'paper'
 export type PaperType = 'empirical' | 'case' | 'literature-review' | 'theoretical'
 
 export interface AIArtifact { key: string; workflow: string; title: string; description: string; agentKey: string }
 export interface PaperTypeOption { key: PaperType; label: string; description: string }
-export interface AIWorkflowAgent { key: string; name: string; workflow: string; stage: string; quickActions: string[] }
+export interface AIWorkflowAgent { key: string; name: string; workflow: string; stage: string; quickActions: string[]; typeHint?: string }
 
 export const AI_PROPOSAL_ARTIFACTS: AIArtifact[] = [
   { key: 'topic', workflow: 'proposal_topic', title: '课题名称与摘要', description: '聚焦研究问题，形成可申报的课题表述。', agentKey: 'proposal-topic' },
@@ -31,8 +31,35 @@ const PAPER_AGENT_DEFINITIONS: AIWorkflowAgent[] = [
   { key: 'paper-reviewer-response', name: '审稿意见回复助手', workflow: 'paper_reviewer_response', stage: '审稿回复', quickActions: ['拆解意见', '起草回复'] },
 ]
 
-export function paperAgentsForType(_type: PaperType): AIWorkflowAgent[] {
-  return PAPER_AGENT_DEFINITIONS
+const PAPER_TYPE_EXPERIENCES: Record<PaperType, { label: string; promptPrefix: string; toolHints: string[] }> = {
+  empirical: { label: '实证研究', promptPrefix: '论文类型：实证研究。请围绕可检验的问题、研究设计、变量与真实数据证据组织草稿；不要虚构统计结果。', toolHints: ['突出可检验的问题与摘要要素', '按研究问题、研究设计、结果与讨论搭建结构', '保留数据来源和统计验证位置', '标出需要追溯的实证研究来源', '区分观察结果与统计验证结论', '逐条回应方法、数据与结论质疑'] },
+  case: { label: '案例研究', promptPrefix: '论文类型：案例研究。请围绕具体案例、证据链、情境边界与可迁移性组织草稿；不要补造案例事实。', toolHints: ['突出案例对象、情境与核心发现', '按案例背景、证据、分析与启示搭建结构', '保留案例证据来源与时间线', '标出案例资料的原始出处', '区分案例描述、分析与推论', '逐条回应案例代表性和证据链质疑'] },
+  'literature-review': { label: '文献综述', promptPrefix: '论文类型：文献综述。请围绕系统检索、筛选标准、主题脉络与研究空白组织草稿；不要编造文献或引文。', toolHints: ['突出研究主题、范围与综述价值', '按检索策略、筛选标准、主题综述与空白搭建结构', '保留检索式、数据库和筛选记录位置', '只生成格式核对与待检索来源，不编造文献', '区分文献发现、综合判断与待验证空白', '逐条回应检索范围和纳排标准质疑'] },
+  theoretical: { label: '理论研究', promptPrefix: '论文类型：理论研究。请围绕概念界定、逻辑推演、论证边界与反例组织草稿；不要将推演写成已证实事实。', toolHints: ['突出核心概念、论题与理论贡献', '按概念界定、论证路径、反例与结论搭建结构', '保留关键前提和反例检验位置', '标出需核验的理论来源和概念出处', '区分逻辑推演、假设与可验证结论', '逐条回应前提、推理和适用边界质疑'] },
+}
+
+export function paperAgentsForType(type: PaperType): AIWorkflowAgent[] {
+  return PAPER_AGENT_DEFINITIONS.map((agent, index) => ({ ...agent, typeHint: PAPER_TYPE_EXPERIENCES[type].toolHints[index] }))
+}
+
+export function paperGenerationContext(type: PaperType) {
+  const experience = PAPER_TYPE_EXPERIENCES[type]
+  return { paper_type: type, paper_type_label: experience.label, promptPrefix: experience.promptPrefix }
+}
+
+export function agentInputValues(agent: AIAgent | null, prompt: string, projectTitle: string, paperTypeLabel?: string): Record<string, string> | undefined {
+  if (!agent?.input_schema?.length) return undefined
+  return Object.fromEntries(agent.input_schema.map((field) => [
+    field.key,
+    field.key === 'paper_type' ? (paperTypeLabel || '') : field.key === 'project_title' ? projectTitle : prompt,
+  ]))
+}
+
+export function verificationItemsForDisplay(items?: Array<VerificationItem | string>): VerificationItem[] {
+  if (!items?.length) return [{ item: '核对全部事实、数据和引用来源。', status: 'needs_verification', guidance: '' }]
+  return items.map((check) => typeof check === 'string'
+    ? { item: check, status: 'needs_verification', guidance: '' }
+    : { item: check.item, status: check.status || 'needs_verification', guidance: check.guidance || '' })
 }
 
 export function agentMetadata(agent: AIAgent): AIWorkflowAgent {
