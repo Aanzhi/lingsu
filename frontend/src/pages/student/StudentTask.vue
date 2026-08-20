@@ -13,6 +13,7 @@ import { makeFeedback, type FeedbackState } from '../../stores/feedbackModel'
 import { auth } from '../../stores/auth'
 import { taskPermission } from '../../stores/projectPermissions'
 import { selectPriorityTask, taskActionLabel, taskCompletion, validateTaskSubmission } from '../../stores/studentApiModel'
+import { aiQuickEntryLocation } from '../../stores/aiModel'
 
 const route = useRoute(); const loading = ref(false); const body = ref(''); const truth = ref(false); const files = ref<File[]>([]); const feedback = ref<FeedbackState | null>(null)
 const projectId = computed(() => Number(route.params.id)); const taskId = computed(() => Number(route.params.taskId))
@@ -109,6 +110,12 @@ async function submitTeamDraft() {
           <small>已按上面指引排好章节，下载后直接填写。</small>
         </section>
         <div class="reward-seal"><small>完成奖励</small><strong>+{{ task.xp_reward }} XP</strong></div>
+        <section class="task-ai-quick" aria-label="任务 AI 快捷入口">
+          <p class="eyebrow">AI 共创</p>
+          <RouterLink :to="aiQuickEntryLocation(taskId, 'proposal_plan', 'research-design-proposal')">申报方案</RouterLink>
+          <RouterLink :to="aiQuickEntryLocation(taskId, 'paper_topic', 'topic-selection-paper')">论文选题</RouterLink>
+          <RouterLink :to="aiQuickEntryLocation(taskId, 'paper_writing', 'paper-framework')">论文写作</RouterLink>
+        </section>
       </aside>
       <section class="task-paper paper-card" :class="{ 'task-paper--read-only': !canEdit }">
         <div v-if="material.status !== 'submitted' && !['approved', 'completed'].includes(task.status)" class="task-state-summary" :class="task.status">
@@ -146,3 +153,9 @@ async function submitTeamDraft() {
   </div>
   <EmptyState v-else title="任务尚不可用" description="项目可能尚未被教师认领，或你无权访问该任务。" />
 </template>
+<style scoped>
+.task-ai-quick { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: grid; gap: 7px; }
+.task-ai-quick .eyebrow { margin: 0 0 2px; }
+.task-ai-quick a { border: 1px solid var(--line-dark); color: var(--moss-dark); border-radius: var(--radius-sm); padding: 7px 9px; font-size: 12px; text-decoration: none; background: var(--paper); }
+.task-ai-quick a:hover { background: var(--sage-soft); border-color: var(--moss); }
+</style>

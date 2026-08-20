@@ -47,7 +47,8 @@ export interface ReportExport { id: number; project: number; requested_by: numbe
 export interface PublicCase { id: number; project: number; project_title: string; school_name: string; applicant: number; public_summary: string; tags: string[]; discipline: string; application_scene: string; outcome_form: string; cover: string | null; selected_materials: number[]; selected_material_summaries: { material_id: number; title: string; report_section: string; content: string }[]; status: 'pending_teacher' | 'published' | 'offline' | 'rejected'; review_comment: string }
 export type AIContextScope = Record<string, boolean | string | number[]>
 export interface AISource { kind: 'task' | 'material' | 'attachment'; id: number; title: string; project_id: number; material_id?: number | null }
-export interface AIGeneration { id: number; project: number; actor: number; actor_name: string; purpose: string; prompt: string; context_scope: AIContextScope; task: number | null; material: number | null; output: string; model_name: string; status: 'queued' | 'processing' | 'completed' | 'failed'; error_message: string; created_at: string; completed_at: string | null; referenced_sources: AISource[] }
+export interface AIArtifactOutput { title?: string; draft?: string; next_action?: string; [key: string]: unknown }
+export interface AIGeneration { id: number; project: number; actor: number; actor_name: string; purpose: string; prompt: string; context_scope: AIContextScope; task: number | null; material: number | null; agent_key?: string | null; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' | null; output: string; artifact_payload?: AIArtifactOutput; verification_items?: string[]; saved_material_revision?: number | null; model_name: string; status: 'queued' | 'processing' | 'completed' | 'failed'; error_message: string; created_at: string; completed_at: string | null; referenced_sources: AISource[] }
 export interface ProjectTaskBrief { id: number; project: number; stage_name: string; stage_order: number; title: string; description: string; status: string }
 export interface ServiceStatus { database: string; task_queue: string; virus_scan: string; document_converter: string; storage: string; ai: string }
 export interface AIAvailability { status: 'configured' | 'not_configured' | 'quota_exhausted' | 'unavailable'; remaining_quota: number }
@@ -73,6 +74,11 @@ export interface AIAgent {
   is_active: boolean
   school: number | null
   order: number
+  workflow?: string
+  applicable_stages?: string[]
+  quick_tasks?: string[]
+  project_types?: string[]
+  output_contract?: Record<string, unknown>
 }
 export interface AuditEvent { id: number; school: number; actor: number; actor_name: string; action: 'school_updated' | 'invite_code_reset' | 'project_claimed' | 'project_archived' | 'project_trashed' | 'project_restored' | 'member_invitation_decided' | 'material_submitted' | 'material_reviewed' | 'case_submitted' | 'case_reviewed' | 'case_visibility_changed' | 'report_export_requested'; changes: Record<string, string | number | boolean>; created_at: string }
 
@@ -163,7 +169,8 @@ export const approvePublicCase = (id: number) => api.post<PublicCase>(`public-ca
 export const rejectPublicCase = (id: number, comment: string) => api.post<PublicCase>(`public-case-requests/${id}/teacher_reject/`, { comment })
 export const getAIGenerations = (project?: number) => api.get<AIGeneration[]>('ai-logs/', { params: project ? { project } : undefined })
 export const getProjectTasks = (project?: number) => api.get<ApiTask[]>('project-tasks/', { params: project ? { project } : undefined })
-export const createAIGeneration = (payload: { project: number; purpose?: string; prompt: string; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number }) => api.post<AIGeneration>('ai-logs/', payload)
+export const createAIGeneration = (payload: { project: number; purpose?: string; prompt: string; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' }) => api.post<AIGeneration>('ai-logs/', payload)
+export const saveAIGenerationAsMaterial = (id: number, material: number) => api.post<MaterialRevision>(`ai-logs/${id}/save_as_material/`, { material })
 // ── AI Agent 模板（平台/校本管理 + 学生/教师按角色拉取）──────────────
 export const getAIAgents = () => api.get<AIAgent[]>('ai-agents/')
 export const createAIAgent = (payload: Partial<AIAgent>) => api.post<AIAgent>('ai-agents/', payload)

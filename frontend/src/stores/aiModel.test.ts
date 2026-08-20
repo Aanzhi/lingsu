@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
 import type { AIAgent } from '../api'
-import { aiStatusLabel, aiUnavailableMessage, canGenerateAI, composeAgentPrompt, normalizeAIAgentSelection, normalizeAISelection, shouldPollAI } from './aiModel'
+import {
+  aiStatusLabel, aiUnavailableMessage, canGenerateAI, composeAgentPrompt, normalizeAIAgentSelection, normalizeAISelection,
+  shouldPollAI, AI_PROPOSAL_ARTIFACTS, PAPER_TYPES, agentMetadata, aiQuickEntryLocation, paperAgentsForType,
+} from './aiModel'
 import { aiHistoryMeta } from './aiModel'
 
 describe('AI request states', () => {
@@ -41,4 +44,25 @@ it('keeps a valid selected agent and falls back to the first', () => {
   expect(normalizeAIAgentSelection(b, [a, b])).toBe(b)
   expect(normalizeAIAgentSelection(b, [a])).toBe(a)
   expect(normalizeAIAgentSelection(null, [a, b])).toBe(a)
+})
+
+it('maps proposal work to five concrete artifacts', () => {
+  expect(AI_PROPOSAL_ARTIFACTS).toHaveLength(5)
+  expect(AI_PROPOSAL_ARTIFACTS.map((item) => item.workflow)).toEqual([
+    'proposal_topic', 'proposal_background', 'proposal_objectives', 'proposal_plan', 'proposal_outcomes',
+  ])
+})
+
+it('supports all paper types and keeps six agents available for each type', () => {
+  expect(PAPER_TYPES.map((item) => item.key)).toEqual(['empirical', 'case', 'literature-review', 'theoretical'])
+  expect(paperAgentsForType('case')).toHaveLength(6)
+})
+
+it('uses backend agent metadata for workflow, stage and quick actions', () => {
+  const agent = { key: 'paper-framework', category: '写作', workflow: 'paper_writing', applicable_stages: ['drafting'], quick_tasks: ['outline'] } as unknown as AIAgent
+  expect(agentMetadata(agent)).toMatchObject({ workflow: 'paper_writing', stage: 'drafting', quickActions: ['outline'] })
+})
+
+it('builds a task AI quick entry that preserves task, workflow and agent', () => {
+  expect(aiQuickEntryLocation(42, 'proposal_plan', 'proposal-plan')).toBe('/student/ai?taskId=42&workflow=proposal_plan&agent=proposal-plan')
 })
