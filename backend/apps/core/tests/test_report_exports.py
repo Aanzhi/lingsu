@@ -1,4 +1,5 @@
 from io import BytesIO
+from unittest.mock import Mock, patch
 
 from django.core.files.storage import default_storage
 from django.test import TestCase, override_settings
@@ -77,6 +78,34 @@ class ReportExportTests(TestCase):
         self.assertIn("最新已通过文字", text)
         self.assertNotIn("旧的已通过文字", text)
         self.assertNotIn("不应进入报告", text)
+
+    @override_settings(DOCUMENT_CONVERTER_URL="http://gotenberg.test")
+    @patch("apps.core.tasks.requests.post")
+    def test_pdf_export_converts_docx_and_persists_pdf(self, post):
+        post.return_value = Mock(content=b"%PDF-1.7 test", raise_for_status=Mock())
+        export = ReportExport.objects.create(project=self.project, requested_by=self.leader, format="pdf")
+
+        result = generate_report_export(export.id)
+
+        export.refresh_from_db()
+        self.assertEqual(result["status"], "completed")
+        self.assertEqual(export.status, ReportExport.Status.COMPLETED)
+        self.assertTrue(export.file.name.endswith(".pdf"))
+        post.assert_called_once()
+        self.assertEqual(post.call_args.args[0], "http://gotenberg.test/forms/libreoffice/convert")
+        self.assertEqual(default_storage.open(export.file.name, "rb").read(), b"%PDF-1.7 test")
+
+    @override_settings(DOCUMENT_CONVERTER_URL="http://gotenberg.test")
+    @patch("apps.core.tasks.requests.post", side_effect=RuntimeError("converter unavailable"))
+    def test_pdf_export_failure_is_persisted_as_retryable_failed_state(self, _post):
+        export = ReportExport.objects.create(project=self.project, requested_by=self.leader, format="pdf")
+
+        with self.assertRaises(RuntimeError):
+            generate_report_export(export.id)
+
+        export.refresh_from_db()
+        self.assertEqual(export.status, ReportExport.Status.FAILED)
+        self.assertIn("converter unavailable", export.error_message)
 
     def test_export_file_download_respects_project_membership(self):
         export = ReportExport.objects.create(

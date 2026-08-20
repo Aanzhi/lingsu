@@ -24,6 +24,19 @@ class RuntimeConfigurationTests(SimpleTestCase):
             "whitenoise.storage.CompressedManifestStaticFilesStorage",
         )
 
+    def test_ai_provider_base_url_is_optional_and_not_a_secret(self):
+        from django.conf import settings
+
+        self.assertTrue(hasattr(settings, "OPENAI_BASE_URL"))
+        self.assertIsInstance(settings.OPENAI_BASE_URL, str)
+        self.assertNotIn("KEY", settings.OPENAI_BASE_URL.upper())
+
+    @override_settings(OPENAI_API_KEY="configured")
+    def test_openai_key_setting_is_available_to_the_client(self):
+        from django.conf import settings
+
+        self.assertEqual(settings.OPENAI_API_KEY, "configured")
+
     def test_cookie_security_can_be_disabled_only_by_explicit_environment_override(self):
         from config import settings as project_settings
 

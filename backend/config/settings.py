@@ -62,7 +62,10 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "1" if DEBUG else "0") == "1"
 CELERY_TASK_EAGER_PROPAGATES = DEBUG
 DOCUMENT_CONVERTER_URL = os.getenv("DOCUMENT_CONVERTER_URL", "http://localhost:3000")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+# Keep the existing OpenAI-compatible configuration while allowing the
+# deployment-provided ARK_API_KEY secret used by the MVP environment.
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("ARK_API_KEY", "")
+OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(500 * 1024 * 1024)))
 UPLOAD_CHUNK_MIN_SIZE = int(os.getenv("UPLOAD_CHUNK_MIN_SIZE", str(1024 * 1024)))
