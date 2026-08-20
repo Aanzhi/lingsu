@@ -30,7 +30,7 @@ from .notifiers import notify
 from .serializers import AIGenerationLogSerializer, AgentTemplateSerializer, AnnouncementSerializer, AuditEventSerializer, CompetitionSerializer, MaterialAttachmentSerializer, MaterialRevisionSerializer, MaterialSerializer, MemberInvitationSerializer, NotificationSerializer, ProjectMemberSerializer, ProjectSerializer, ProjectTaskSerializer, PublicCaseRequestSerializer, ReportExportSerializer, SchoolSerializer, TemplateSerializer, UploadSessionSerializer
 from .tasks import generate_ai_response, generate_report_export, process_uploaded_material
 from .workflows.cases import resubmit_public_case_request, validate_public_case_request
-from .workflows.materials import create_material_draft, review_material_revision, submit_material_revision
+from .workflows.materials import create_material_draft, review_material_revision, save_ai_output_as_material, submit_material_revision
 from .workflows.memberships import assign_member, create_member_invitation, decide_member_invitation, respond_to_invitation
 from .workflows.projects import claim_project
 from .services import build_blank_reference
@@ -1086,6 +1086,20 @@ class AIGenerationLogViewSet(viewsets.ModelViewSet):
         if not project_member(project, self.request.user): raise PermissionDenied("无项目权限。")
         record = create_ai_request(serializer, self.request.user, settings.OPENAI_MODEL)
         transaction.on_commit(lambda: generate_ai_response.delay(record.id))
+
+    @action(detail=True, methods=["post"], url_path="save_as_material")
+    @transaction.atomic
+    def save_as_material(self, request, pk=None):
+        require_authorized_school(request.user)
+        log = self.get_queryset().select_for_update().get(pk=pk)
+        material_id = request.data.get("material") or log.material_id
+        if not material_id:
+            raise ValidationError({"material": "请选择要保存到的项目材料。"})
+        material = Material.objects.select_related("project").filter(pk=material_id).first()
+        if not material:
+            raise ValidationError({"material": "所选材料不存在。"})
+        revision = save_ai_output_as_material(log, material, request.user)
+        return Response(MaterialRevisionSerializer(revision, context={"request": request}).data, status=status.HTTP_201_CREATED)
 
 
 class AgentTemplateViewSet(viewsets.ModelViewSet):

@@ -151,10 +151,12 @@ class MaterialRevisionSerializer(serializers.ModelSerializer):
     author_name = serializers.CharField(source="author.username", read_only=True)
     attachments = MaterialAttachmentSerializer(many=True, read_only=True)
     uploaded_files = serializers.ListField(child=serializers.FileField(), write_only=True, required=False)
+    source_summary = serializers.SerializerMethodField()
+    verification_summary = serializers.SerializerMethodField()
 
     class Meta:
         model = MaterialRevision
-        fields = ["id", "material", "material_title", "project_title", "author", "author_name", "content", "truth_confirmed", "revision_note", "status", "reviewer", "review_comment", "created_at", "attachments", "uploaded_files"]
+        fields = ["id", "material", "material_title", "project_title", "author", "author_name", "content", "truth_confirmed", "revision_note", "status", "reviewer", "review_comment", "created_at", "attachments", "uploaded_files", "source_summary", "verification_summary"]
         read_only_fields = ["author", "status", "reviewer", "review_comment", "truth_confirmed"]
 
     def validate_uploaded_files(self, uploads):
@@ -194,6 +196,25 @@ class MaterialRevisionSerializer(serializers.ModelSerializer):
         if uploads:
             transaction.on_commit(lambda: process_uploaded_material.delay(revision.id))
         return revision
+
+    def get_source_summary(self, obj):
+        log = getattr(obj, "source_ai_log", None)
+        if not log:
+            return None
+        return {
+            "ai_log_id": log.id,
+            "agent_key": log.agent_key,
+            "purpose": log.purpose,
+            "paper_type": log.paper_type,
+            "created_at": log.created_at,
+        }
+
+    def get_verification_summary(self, obj):
+        log = getattr(obj, "source_ai_log", None)
+        if not log:
+            return None
+        items = log.verification_items or []
+        return {"total": len(items), "items": items}
 
 class MaterialSerializer(serializers.ModelSerializer):
     revisions = MaterialRevisionSerializer(many=True, read_only=True)
@@ -252,8 +273,8 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AIGenerationLog
-        fields = ["id", "project", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "context_scope", "referenced_sources", "output", "model_name", "status", "error_message", "created_at", "completed_at"]
-        read_only_fields = ["actor", "output", "model_name", "status", "error_message", "completed_at"]
+        fields = ["id", "project", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "context_scope", "referenced_sources", "output", "artifact_payload", "verification_items", "paper_type", "saved_material_revision", "model_name", "status", "error_message", "created_at", "completed_at"]
+        read_only_fields = ["actor", "output", "artifact_payload", "verification_items", "saved_material_revision", "model_name", "status", "error_message", "completed_at"]
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -286,7 +307,7 @@ class AgentTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = AgentTemplate
         fields = ["id", "key", "name", "description", "role", "category", "system_instruction",
-                  "prompt_template", "input_schema", "context_scope_default", "is_active", "school", "order",
+                  "prompt_template", "input_schema", "context_scope_default", "workflow", "applicable_stages", "quick_tasks", "project_types", "output_contract", "is_active", "school", "order",
                   "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at", "school"]  # school 由后端按角色强制写入
 

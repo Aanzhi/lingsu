@@ -22,7 +22,7 @@ def _teacher(direction):
     return f"{GUARDRAIL} 专注帮助教师{direction}"
 
 
-AGENTS = [
+LEGACY_AGENTS = [
     # ---------------- 学生侧（9） ----------------
     {
         "key": "opening-report",
@@ -530,6 +530,44 @@ AGENTS = [
         ],
         "context_scope_default": {"project_basics": False, "approved_materials": False, "current_task": True, "current_material_draft": True, "current_guidance": True},
     },
+]
+
+
+def _agent(key, name, workflow, category, description, direction, prompt, inputs, stages, quick_tasks, output):
+    return {
+        "key": key,
+        "name": name,
+        "role": AgentTemplate.Role.STUDENT,
+        "workflow": workflow,
+        "category": category,
+        "description": description,
+        "system_instruction": _student(
+            f"{direction}。涉及文献、数据、实验结果时只给检索、整理和核验建议，不虚构来源、数据或结论。"
+        ),
+        "prompt_template": prompt,
+        "input_schema": inputs,
+        "context_scope_default": {"project_basics": True, "approved_materials": True, "current_task": True, "current_material_draft": True, "current_guidance": True},
+        "applicable_stages": stages,
+        "quick_tasks": quick_tasks,
+        "project_types": ["research", "invention", "engineering"],
+        "output_contract": output,
+    }
+
+
+# 科创共创中心学生端：开题/申报 5 个 + 论文写作 6 个。仅保留这 11 个全局种子，
+# 以免旧的宽泛模板干扰按工作流、阶段和快捷任务的匹配。
+AGENTS = [
+    _agent("proposal-topic", "课题名称与摘要", "proposal_topic", "开题申报", "把兴趣转为可研究、可验证的问题。", "澄清选题边界、研究对象和核心问题", "项目主题：{topic}\n已有观察：{observations}\n请输出可比较的选题、研究问题、变量/证据线索和待核验假设。", [{"key": "topic", "label": "项目主题", "placeholder": "你想研究的主题", "required": True, "type": "text"}, {"key": "observations", "label": "已有观察", "placeholder": "现象、痛点或灵感", "required": False, "type": "textarea"}], ["立项", "选题"], ["选题建议", "问题澄清"], {"format": "sections", "sections": ["候选选题", "研究问题", "待核验假设"]}),
+    _agent("proposal-background", "研究背景与意义", "proposal_background", "开题申报", "梳理论证链条与开题结构。", "梳理论证链条并撰写开题报告", "项目题目：{project_title}\n研究问题：{research_question}\n初步设想：{initial_idea}\n请输出研究背景、目标、方法、技术路线、预期成果、风险与待核验事项。", [{"key": "project_title", "label": "项目题目", "placeholder": "例如：校园雨水回收", "required": True, "type": "text"}, {"key": "research_question", "label": "研究问题", "placeholder": "要解决什么", "required": True, "type": "text"}, {"key": "initial_idea", "label": "初步设想", "placeholder": "已有思路", "required": True, "type": "textarea"}], ["立项", "开题"], ["生成开题结构", "补充研究背景"], {"format": "sections", "sections": ["背景", "目标", "方法", "风险", "核验清单"]}),
+    _agent("proposal-objectives", "研究目标与内容", "proposal_objectives", "开题申报", "把研究问题转成可执行的方案。", "设计可执行的实验、调查或工程验证方案", "研究问题：{research_question}\n已有条件：{resources}\n请输出变量/指标、步骤、样本或测试条件、数据记录方式、安全事项和待核验清单。", [{"key": "research_question", "label": "研究问题", "placeholder": "要回答的问题", "required": True, "type": "text"}, {"key": "resources", "label": "已有条件", "placeholder": "设备、材料、场地", "required": False, "type": "textarea"}], ["方案设计", "研究设计"], ["设计实验", "设计调查"], {"format": "checklist", "sections": ["变量与指标", "步骤", "数据记录", "安全与核验"]}),
+    _agent("proposal-plan", "实施方案与进度", "proposal_plan", "开题申报", "识别资源、伦理、安全和进度风险。", "检查方案可行性并提出可执行的风险缓解措施", "方案摘要：{plan_summary}\n限制条件：{constraints}\n请输出风险矩阵、缓解措施、资源缺口与需要教师/学生核实的事项。", [{"key": "plan_summary", "label": "方案摘要", "placeholder": "简述你的方案", "required": True, "type": "textarea"}, {"key": "constraints", "label": "限制条件", "placeholder": "时间、设备或安全限制", "required": False, "type": "textarea"}], ["开题", "方案设计"], ["检查可行性", "评估风险"], {"format": "risk_matrix", "sections": ["风险", "影响", "缓解措施", "核验项"]}),
+    _agent("proposal-consistency", "申报材料一致性检查", "proposal_consistency", "开题申报", "检查研究问题、目标、方法、进度与预期成果之间是否一致。", "检查申报材料的前后逻辑和证据缺口", "申报材料：{draft}\n请输出一致项、冲突或缺失项、修正建议及所有需要学生核验的事实/数据。", [{"key": "draft", "label": "申报材料", "placeholder": "粘贴申报书片段", "required": True, "type": "textarea"}], ["开题", "申报提交"], ["一致性检查", "检查证据缺口"], {"format": "checklist", "sections": ["一致项", "问题", "修正建议", "待核验项"]}),
+    _agent("paper-title-abstract", "标题与摘要助手", "paper_title_abstract", "论文写作", "形成有边界的论文标题与摘要。", "确定论文标题、摘要要点和研究切口", "学科领域：{field}\n已有基础：{foundation}\n研究想法：{idea}\n请输出候选标题、摘要要点、关键词、方法建议与待检索事项。", [{"key": "field", "label": "学科领域", "placeholder": "如环境科学", "required": True, "type": "text"}, {"key": "foundation", "label": "已有基础", "placeholder": "已有经验", "required": False, "type": "textarea"}, {"key": "idea", "label": "研究想法", "placeholder": "初步方向", "required": True, "type": "textarea"}], ["论文选题", "摘要"], ["生成标题", "起草摘要"], {"format": "sections", "sections": ["标题", "摘要", "关键词", "待检索"]}),
+    _agent("paper-framework", "论文框架助手", "paper_framework", "论文写作", "据题目生成可调整的论文结构。", "构建论文框架并说明各节证据需求", "论文题目：{title}\n研究思路：{research_idea}\n论文类型：{paper_type}\n请输出章节框架、各节要点、证据需求和待补充内容。", [{"key": "title", "label": "论文题目", "placeholder": "你的题目", "required": True, "type": "text"}, {"key": "research_idea", "label": "研究思路", "placeholder": "核心论证", "required": True, "type": "textarea"}, {"key": "paper_type", "label": "论文类型", "placeholder": "如实证、综述、案例", "required": False, "type": "text"}], ["论文写作", "框架"], ["生成论文框架", "调整章节"], {"format": "outline", "sections": ["章节", "要点", "证据需求", "待补充"]}),
+    _agent("paper-expand-polish", "扩写与润色助手", "paper_expand_polish", "论文写作", "在不新增未经证实事实的前提下扩写和润色论文。", "扩写、润色并标记需要补证的内容", "原文：{draft}\n写作目标：{goal}\n请输出修改建议、修订稿和待核验的文献/数据/事实。", [{"key": "draft", "label": "原文", "placeholder": "粘贴论文片段", "required": True, "type": "textarea"}, {"key": "goal", "label": "写作目标", "placeholder": "如扩写讨论、提升衔接", "required": False, "type": "text"}], ["论文写作", "修改"], ["扩写段落", "润色表达"], {"format": "revision", "sections": ["修改建议", "修订稿", "待核验"]}),
+    _agent("paper-reference-format", "参考文献格式助手", "paper_reference_format", "论文写作", "核对参考文献格式和文内引用的一致性。", "检查参考文献格式，绝不编造文献", "文内引用与参考文献：{references}\n格式规范：{style}\n请输出格式问题、交叉核对结果和需要作者查证的条目。", [{"key": "references", "label": "引用与参考文献", "placeholder": "粘贴引用和文末列表", "required": True, "type": "textarea"}, {"key": "style", "label": "格式规范", "placeholder": "如 GB/T 7714", "required": False, "type": "text"}], ["论文写作", "定稿"], ["核对引用", "检查参考文献"], {"format": "checklist", "sections": ["格式问题", "交叉核对", "待查证"]}),
+    _agent("paper-result-interpret", "结果解读助手", "paper_result_interpret", "论文写作", "把真实结果整理为谨慎的讨论。", "解读真实数据或观察并写作结果与讨论", "真实结果/观察：{results}\n预期讨论角度：{discussion_focus}\n请区分事实、解释与推测，输出结果描述、讨论框架、局限和待核验项。", [{"key": "results", "label": "真实结果或观察", "placeholder": "粘贴已核对的数据或观察", "required": True, "type": "textarea"}, {"key": "discussion_focus", "label": "讨论角度", "placeholder": "想解释什么", "required": False, "type": "textarea"}], ["结果分析", "讨论"], ["解读结果", "起草讨论"], {"format": "sections", "sections": ["结果", "解释", "局限", "待核验"]}),
+    _agent("paper-reviewer-response", "审稿意见回复助手", "paper_reviewer_response", "论文写作", "整理审稿意见并形成逐条、诚实的回复策略。", "回复审稿意见，不承诺不存在的证据或修改", "审稿意见：{review_comments}\n当前修改：{revision_summary}\n请输出逐条回复草案、修改清单与待核验项。", [{"key": "review_comments", "label": "审稿意见", "placeholder": "粘贴审稿意见", "required": True, "type": "textarea"}, {"key": "revision_summary", "label": "当前修改", "placeholder": "已完成的修改", "required": False, "type": "textarea"}], ["修改", "投稿回复"], ["拆解审稿意见", "起草回复"], {"format": "table", "sections": ["审稿意见", "回复草案", "修改动作", "待核验"]}),
 ]
 
 

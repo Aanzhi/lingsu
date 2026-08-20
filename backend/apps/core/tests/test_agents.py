@@ -200,17 +200,106 @@ class SeedAIAgentsCommandTests(TestCase):
     def test_seed_is_idempotent(self):
         call_command("seed_ai_agents")
         first = AgentTemplate.objects.filter(school=None).count()
-        self.assertEqual(first, 16)
+        self.assertEqual(first, 11)
         call_command("seed_ai_agents")
         self.assertEqual(AgentTemplate.objects.filter(school=None).count(), first)
 
     def test_reset_updates_existing_fields(self):
         call_command("seed_ai_agents")
-        AgentTemplate.objects.filter(key="opening-report", school=None).update(name="旧名")
+        AgentTemplate.objects.filter(key="proposal-topic", school=None).update(name="旧名")
         call_command("seed_ai_agents", "--reset")
         self.assertEqual(
-            AgentTemplate.objects.get(key="opening-report", school=None).name, "开题报告助手"
+            AgentTemplate.objects.get(key="proposal-topic", school=None).name, "课题名称与摘要"
         )
+
+    def test_seeded_student_agents_include_workflow_metadata_and_safety_guardrails(self):
+        call_command("seed_ai_agents")
+        agents = AgentTemplate.objects.filter(school=None, role=AgentTemplate.Role.STUDENT)
+        self.assertEqual(agents.count(), 11)
+        for agent in agents:
+            self.assertTrue(agent.workflow)
+            self.assertTrue(agent.applicable_stages)
+            self.assertTrue(agent.quick_tasks)
+            self.assertTrue(agent.project_types)
+            self.assertTrue(agent.output_contract)
+            self.assertIn("不虚构", agent.system_instruction)
+        self.assertEqual(agents.filter(workflow__startswith="proposal_").count(), 5)
+        self.assertEqual(agents.filter(workflow__startswith="paper_").count(), 6)
+        self.assertSetEqual(
+            set(agents.values_list("key", flat=True)),
+            {
+                "proposal-topic", "proposal-background", "proposal-objectives", "proposal-plan", "proposal-consistency",
+                "paper-title-abstract", "paper-framework", "paper-expand-polish", "paper-reference-format",
+                "paper-result-interpret", "paper-reviewer-response",
+            },
+        )
+
+
+class SaveAIOutputAsMaterialTests(TestCase):
+    def setUp(self):
+        self.school = School.objects.create(name="保存学校")
+        self.student = Account.objects.create_user(username="save-student", school=self.school, role="student")
+        self.peer = Account.objects.create_user(username="save-peer", school=self.school, role="student")
+        self.teacher = Account.objects.create_user(username="save-teacher", school=self.school, role="teacher")
+        self.project = Project.objects.create(
+            title="水质观察", problem="水样差异", plan="采样分析", school=self.school,
+            leader=self.student, primary_teacher=self.teacher, status=Project.Status.ACTIVE,
+        )
+        self.project.members.create(account=self.student, role="leader")
+        self.other_project = Project.objects.create(
+            title="另一项目", problem="问题", plan="方案", school=self.school,
+            leader=self.peer, primary_teacher=self.teacher, status=Project.Status.ACTIVE,
+        )
+        self.other_project.members.create(account=self.peer, role="leader")
+        self.material = Material.objects.create(project=self.project, title="研究设计", status=Material.Status.DRAFT)
+        self.other_material = Material.objects.create(project=self.other_project, title="他人材料", status=Material.Status.DRAFT)
+        self.log = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, purpose="研究设计建议", prompt="请设计",
+            output="可编辑的研究设计草稿", artifact_payload={"content": "结构化草稿", "title": "研究设计"},
+            verification_items=[{"item": "样本量", "status": "needs_verification"}],
+            paper_type="empirical", status=AIGenerationLog.Status.COMPLETED,
+        )
+
+    def client_for(self, user):
+        client = APIClient(); client.force_authenticate(user); return client
+
+    def test_completed_log_creates_auditable_material_draft(self):
+        response = self.client_for(self.student).post(
+            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.material.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 201)
+        revision = MaterialRevision.objects.get(pk=response.data["id"])
+        self.assertEqual(revision.material, self.material)
+        self.assertEqual(revision.author, self.student)
+        self.assertEqual(revision.content, "结构化草稿")
+        self.log.refresh_from_db()
+        self.assertEqual(self.log.saved_material_revision, revision)
+        self.assertEqual(response.data["source_summary"]["ai_log_id"], self.log.id)
+        self.assertEqual(response.data["verification_summary"]["total"], 1)
+
+    def test_cannot_save_to_material_from_another_project(self):
+        response = self.client_for(self.student).post(
+            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.other_material.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(MaterialRevision.objects.count(), 0)
+
+    def test_cannot_save_same_log_twice(self):
+        client = self.client_for(self.student)
+        self.assertEqual(client.post(
+            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.material.id}, format="json"
+        ).status_code, 201)
+        self.assertEqual(client.post(
+            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.material.id}, format="json"
+        ).status_code, 400)
+
+    def test_only_completed_student_owned_log_can_be_saved(self):
+        self.log.status = AIGenerationLog.Status.PROCESSING
+        self.log.save(update_fields=["status"])
+        response = self.client_for(self.student).post(
+            f"/api/ai-logs/{self.log.id}/save_as_material/", {"material": self.material.id}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 class AIGenerationContextAssemblyTests(TestCase):
@@ -272,4 +361,3 @@ class AIGenerationContextAssemblyTests(TestCase):
         inp = self._run(record)
         self.assertIn("装置设计说明", inp)                                  # 材料标题
         self.assertIn("我的装置由管道和滤网组成", inp)                       # 材料内容
-

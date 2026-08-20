@@ -441,6 +441,13 @@ class AIGenerationLog(models.Model):
     context_scope = models.JSONField(default=dict)
     referenced_sources = models.JSONField(default=list, blank=True, help_text="本次生成实际读取的来源清单（步骤/材料/文件），供前端溯源展示")
     output = models.TextField(blank=True)
+    artifact_payload = models.JSONField(default=dict, blank=True, help_text="结构化生成物；保留可写入材料的正文、标题及分段信息")
+    verification_items = models.JSONField(default=list, blank=True, help_text="生成物中需要学生核验的文献、数据、事实清单")
+    paper_type = models.CharField(max_length=40, blank=True, default="", help_text="论文类型，如 empirical、review、case")
+    saved_material_revision = models.OneToOneField(
+        MaterialRevision, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="source_ai_log", help_text="由本次 AI 生成保存而成的不可变材料草稿",
+    )
     model_name = models.CharField(max_length=100, default="configured-model")
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.QUEUED)
     error_message = models.TextField(blank=True)
@@ -465,6 +472,11 @@ class AgentTemplate(models.Model):
     prompt_template = models.TextField()  # 含 {变量} 占位
     input_schema = models.JSONField(default=list, blank=True)  # [{key,label,placeholder,required,type,options?}]
     context_scope_default = models.JSONField(default=dict, blank=True)  # {project_basics, approved_materials}
+    workflow = models.CharField(max_length=40, blank=True, default="", help_text="工作流标识，如 proposal 或 paper")
+    applicable_stages = models.JSONField(default=list, blank=True, help_text="适用研究阶段")
+    quick_tasks = models.JSONField(default=list, blank=True, help_text="可触发该助手的快捷任务")
+    project_types = models.JSONField(default=list, blank=True, help_text="适用项目类型")
+    output_contract = models.JSONField(default=dict, blank=True, help_text="结构化输出约定")
     is_active = models.BooleanField(default=True)
     school = models.ForeignKey(
         School, null=True, blank=True, on_delete=models.SET_NULL, related_name="ai_agents"

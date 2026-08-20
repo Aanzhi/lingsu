@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
-from apps.core.models import AuditEvent, Material, MaterialAttachment, MaterialRevision, Notification, Project, ProjectGrowth, ProjectTask
+from apps.core.models import AIGenerationLog, AuditEvent, Material, MaterialAttachment, MaterialRevision, Notification, Project, ProjectGrowth, ProjectTask
 from apps.core.notifiers import notify
 
 
@@ -30,6 +30,38 @@ def create_material_draft(serializer, actor):
     if material.status not in EDITABLE_MATERIAL_STATUSES:
         raise ValidationError("该材料已提交或通过审核，不能创建替换版本。")
     return serializer.save(author=actor)
+
+
+def save_ai_output_as_material(log, material, actor):
+    """Persist a completed student's AI output as one auditable draft revision."""
+    if actor.role != actor.Role.STUDENT:
+        raise PermissionDenied("仅项目学生可将 AI 结果保存为材料草稿。")
+    if log.actor_id != actor.id:
+        raise PermissionDenied("只能保存自己生成的 AI 结果。")
+    if log.status != AIGenerationLog.Status.COMPLETED:
+        raise ValidationError("仅已完成的 AI 结果可以保存为材料草稿。")
+    if log.saved_material_revision_id:
+        raise ValidationError("该 AI 结果已保存为材料草稿，不能重复保存。")
+    if material.project_id != log.project_id:
+        raise ValidationError({"material": "所选材料不属于该 AI 结果所在项目。"})
+    project = material.project
+    is_member = project.leader_id == actor.id or project.members.filter(account=actor).exists()
+    if not is_member:
+        raise PermissionDenied("无项目权限。")
+    if project.status != Project.Status.ACTIVE or not project.primary_teacher_id:
+        raise ValidationError("项目尚未由教师认领并启动，不能创建正式材料。")
+    if material.status not in EDITABLE_MATERIAL_STATUSES:
+        raise ValidationError("该材料已提交或通过审核，不能创建替换版本。")
+    payload = log.artifact_payload or {}
+    content = payload.get("content") if isinstance(payload, dict) else None
+    revision = MaterialRevision.objects.create(
+        material=material, author=actor, content=content or log.output,
+        revision_note=f"由 AI 生成记录 #{log.id} 保存；请在提交前核验全部事实、数据与文献。",
+        status=MaterialRevision.Status.DRAFT,
+    )
+    log.saved_material_revision = revision
+    log.save(update_fields=["saved_material_revision"])
+    return revision
 
 
 def submit_material_revision(revision, actor, truth_confirmed):
