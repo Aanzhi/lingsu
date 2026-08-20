@@ -7,7 +7,7 @@ from rest_framework import serializers
 
 
 RESERVED_TEMPLATE_VARIABLES = {
-    "project_title", "project_problem", "project_plan", "paper_type", "user_prompt",
+    "project_title", "project_problem", "project_plan", "project_type", "paper_type", "user_prompt",
 }
 
 
@@ -52,6 +52,7 @@ def render_agent_prompt(template, record):
         "project_title": record.project.title or "",
         "project_problem": record.project.problem or "",
         "project_plan": record.project.plan or "",
+        "project_type": record.project.project_type or "",
         "paper_type": record.paper_type or "",
         "user_prompt": record.prompt or "",
     })

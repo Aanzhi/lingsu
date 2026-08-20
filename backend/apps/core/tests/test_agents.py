@@ -95,15 +95,13 @@ class AgentTemplateViewSetTests(TestCase):
         }, format="json")
         self.assertEqual(response.status_code, 403)
 
-    def test_teacher_creates_school_scoped_non_both_template(self):
+    def test_teacher_cannot_create_school_template(self):
         response = self.client_for(self.teacher).post("/api/ai-agents/", {
             "key": "school-t", "name": "校本教师模板", "role": "teacher",
             "system_instruction": "s", "prompt_template": "p",
         }, format="json")
-        self.assertEqual(response.status_code, 201)
-        obj = AgentTemplate.objects.get(key="school-t")
-        self.assertEqual(obj.school_id, self.school.id)
-        self.assertEqual(obj.role, "teacher")
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(AgentTemplate.objects.filter(key="school-t").exists())
 
     def test_teacher_cannot_create_both_template(self):
         response = self.client_for(self.teacher).post("/api/ai-agents/", {
@@ -127,6 +125,11 @@ class AgentTemplateViewSetTests(TestCase):
             "name": "被改",
         }, format="json")
         self.assertEqual(response.status_code, 403)
+
+    def test_teacher_cannot_delete_template(self):
+        response = self.client_for(self.teacher).delete(f"/api/ai-agents/{self.teacher_tmpl.id}/")
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(AgentTemplate.objects.filter(pk=self.teacher_tmpl.id).exists())
 
 
 class AIGenerationAgentInstructionTests(TestCase):
@@ -162,7 +165,7 @@ class AIGenerationAgentInstructionTests(TestCase):
 
     @override_settings(OPENAI_API_KEY="configured")
     def test_agent_prompt_is_rendered_from_validated_inputs_and_paper_type(self):
-        self.agent.prompt_template = "题目：{topic}\n论文类型：{paper_type}\n观察：{observations}"
+        self.agent.prompt_template = "题目：{topic}\n项目类型：{project_type}\n论文类型：{paper_type}\n观察：{observations}"
         self.agent.input_schema = [
             {"key": "topic", "required": True, "type": "text"},
             {"key": "observations", "required": False, "type": "textarea"},
@@ -179,6 +182,7 @@ class AIGenerationAgentInstructionTests(TestCase):
             generate_ai_response(record.id)
             request_input = client_class.return_value.responses.create.call_args.kwargs["input"]
         self.assertIn("题目：校园雨水", request_input)
+        self.assertIn("项目类型：research", request_input)
         self.assertIn("论文类型：empirical", request_input)
         self.assertIn("观察：", request_input)
         self.assertNotIn("{topic}", request_input)
@@ -257,6 +261,73 @@ class AIGenerationAgentInstructionTests(TestCase):
             "prompt": "x", "context_scope": {"project_basics": True},
         }, format="json")
         self.assertEqual(response.status_code, 400)
+
+    @override_settings(OPENAI_API_KEY="configured")
+    @patch("apps.core.views.generate_ai_response.delay")
+    def test_agent_request_uses_template_context_without_client_boolean_override(self, delay):
+        self.agent.context_scope_default = {
+            "project_basics": True,
+            "approved_materials": False,
+            "consistency": True,
+        }
+        self.agent.save(update_fields=["context_scope_default"])
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client_for(self.student).post("/api/ai-logs/", {
+                "project": self.project.id,
+                "agent_key": "opening-report",
+                "prompt": "校园雨水",
+                "context_scope": {
+                    "project_basics": False,
+                    "approved_materials": True,
+                    "consistency": False,
+                },
+            }, format="json")
+        self.assertEqual(response.status_code, 201)
+        scope = AIGenerationLog.objects.get(pk=response.data["id"]).context_scope
+        self.assertTrue(scope["project_basics"])
+        self.assertFalse(scope["approved_materials"])
+        self.assertTrue(scope["consistency"])
+        delay.assert_called_once()
+
+    @override_settings(OPENAI_API_KEY="configured")
+    def test_agent_request_rejects_unpermitted_context_selection(self):
+        response = self.client_for(self.student).post("/api/ai-logs/", {
+            "project": self.project.id,
+            "agent_key": "opening-report",
+            "prompt": "校园雨水",
+            "context_scope": {"selected_materials": [123]},
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("context_scope", response.data)
+
+    @override_settings(OPENAI_API_KEY="configured")
+    @patch("apps.core.views.generate_ai_response.delay")
+    def test_agent_request_accepts_selection_explicitly_permitted_by_template(self, delay):
+        self.agent.context_scope_default = {"allowed_selections": ["related_tasks"]}
+        self.agent.save(update_fields=["context_scope_default"])
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client_for(self.student).post("/api/ai-logs/", {
+                "project": self.project.id,
+                "agent_key": "opening-report",
+                "prompt": "校园雨水",
+                "context_scope": {"related_tasks": [42]},
+            }, format="json")
+        self.assertEqual(response.status_code, 201)
+        scope = AIGenerationLog.objects.get(pk=response.data["id"]).context_scope
+        self.assertEqual(scope["related_tasks"], [42])
+        delay.assert_called_once()
+
+    @override_settings(OPENAI_API_KEY="configured")
+    def test_agent_request_rejects_incompatible_project_type(self):
+        self.agent.project_types = ["engineering"]
+        self.agent.save(update_fields=["project_types"])
+        response = self.client_for(self.student).post("/api/ai-logs/", {
+            "project": self.project.id,
+            "agent_key": "opening-report",
+            "prompt": "校园雨水",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("agent_key", response.data)
 
 
 class SeedAIAgentsCommandTests(TestCase):

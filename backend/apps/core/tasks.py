@@ -284,7 +284,7 @@ def generate_ai_response(self, record_id):
     record.save(update_fields=["status", "error_message"])
     try:
         project = record.project
-        context_parts = [f"项目题目：{project.title}"]
+        context_parts = [f"项目题目：{project.title}", f"项目类型：{project.project_type}"]
         referenced = []
         scope = record.context_scope or {}
         if scope.get("project_basics", True):

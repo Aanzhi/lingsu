@@ -309,13 +309,44 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
                 validated_inputs = validate_agent_inputs(tmpl, submitted_inputs)
             except serializers.ValidationError as exc:
                 raise serializers.ValidationError({"input_values": exc.detail})
-            context_scope = dict(tmpl.context_scope_default or {})
-            context_scope.update(attrs.get("context_scope") or {})
+            if tmpl.project_types and project.project_type not in tmpl.project_types:
+                raise serializers.ValidationError({
+                    "agent_key": f"该 AI 模板不适用于“{project.project_type}”类型项目。"
+                })
+            context_scope = self._template_context_scope(tmpl, attrs.get("context_scope"))
             context_scope["agent_inputs"] = validated_inputs
             attrs["context_scope"] = context_scope
             if not attrs.get("purpose"):
                 attrs["purpose"] = tmpl.name
         return attrs
+
+    @staticmethod
+    def _template_context_scope(template, submitted_scope):
+        """Keep data exposure under the template's control, not the client's."""
+        if submitted_scope is not None and not isinstance(submitted_scope, dict):
+            raise serializers.ValidationError({"context_scope": "上下文范围必须是对象。"})
+
+        defaults = dict(template.context_scope_default or {})
+        submitted_scope = submitted_scope or {}
+        permitted_selections = set(defaults.get("allowed_selections") or [])
+        safe_selection_keys = {"related_tasks", "selected_materials"}
+        supplied_selections = set(submitted_scope) & safe_selection_keys
+        disallowed = supplied_selections - permitted_selections
+        if disallowed:
+            raise serializers.ValidationError({
+                "context_scope": f"该 AI 模板不允许选择：{', '.join(sorted(disallowed))}。"
+            })
+
+        # Context booleans (including approved_materials and consistency) stay
+        # exactly as the platform template declares.  For compatible old clients,
+        # submitted boolean keys are simply ignored rather than exposing more data.
+        context_scope = defaults
+        for key in supplied_selections:
+            values = submitted_scope[key]
+            if not isinstance(values, list) or any(not str(value).isdigit() for value in values):
+                raise serializers.ValidationError({"context_scope": f"{key} 必须是材料或步骤 ID 列表。"})
+            context_scope[key] = [int(value) for value in values]
+        return context_scope
 
 
 class AgentTemplateSerializer(serializers.ModelSerializer):

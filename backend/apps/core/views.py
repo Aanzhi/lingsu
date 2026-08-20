@@ -1121,29 +1121,21 @@ class AgentTemplateViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if platform_admin(user):
             serializer.save(school=None)  # 管理员只建全局模板
-        elif teacher(user):
-            if serializer.validated_data.get("role") == AgentTemplate.Role.BOTH:
-                raise PermissionDenied("校本模板不能设为通用(both)，请选择 student 或 teacher。")
-            serializer.save(school=user.school)  # 强制归属本人学校
         else:
-            raise PermissionDenied("学生不能创建 AI 模板。")
+            raise PermissionDenied("仅平台管理员可配置 AI 模板。")
 
     def perform_update(self, serializer):
         obj = self.get_object()
         user = self.request.user
-        if platform_admin(user):
-            serializer.save()
-        elif teacher(user) and obj.school_id == user.school_id:
-            serializer.save(school=user.school)  # 锁定 school，禁止改归属
-        else:
-            raise PermissionDenied("无权限修改该模板。")
+        if not platform_admin(user):
+            raise PermissionDenied("仅平台管理员可配置 AI 模板。")
+        serializer.save()
 
     def perform_destroy(self, instance):
         user = self.request.user
-        if platform_admin(user) or (teacher(user) and instance.school_id == user.school_id):
-            instance.delete()
-        else:
-            raise PermissionDenied("无权限删除该模板。")
+        if not platform_admin(user):
+            raise PermissionDenied("仅平台管理员可配置 AI 模板。")
+        instance.delete()
 
 
 class ReportExportViewSet(viewsets.ModelViewSet):
