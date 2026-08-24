@@ -1,6 +1,6 @@
 import { computed, reactive, ref } from 'vue'
 
-import { completeUploadSession, createMaterialDraft, createMaterialRevision, createProject, createUploadSession, getAnnouncements, getCompetitions, getMaterialRevision, getMaterials, getProjects, getProjectTasks, getTrashedProjects, getUploadSession, restoreProject, setPrimaryProject, submitMaterialRevision, trashProject, unarchiveProject, archiveProject, uploadSessionPart, type Announcement, type Competition, type Material, type Project } from '../api'
+import { completeUploadSession, createMaterialDraft, createMaterialRevision, createProject, createUploadSession, getAnnouncements, getCompetitions, getMaterialRevision, getMaterials, getProjects, getProjectTasks, getTrashedProjects, getUploadSession, restoreProject, setPrimaryProject, submitMaterialRevision, trashProject, unarchiveProject, archiveProject, uploadSessionPart, type Announcement, type Competition, type Material, type Project, type ProjectTask } from '../api'
 import type { ApiTask } from './studentApiModel'
 import { waitForAttachmentSecurity } from './attachmentPolling'
 import { sha256, shouldUseChunkUpload, uploadFileInChunks } from './chunkedUploader'
@@ -19,13 +19,22 @@ const state = reactive({
 })
 const loading = ref(false); const loaded = ref(false)
 
+function compatTaskStatus(task: ProjectTask): ApiTask['status'] {
+  if (task.legacy_status === 'locked') return 'locked'
+  return task.status === 'in_progress' ? 'available' : task.status
+}
+
+function asStudentTask(task: ProjectTask): ApiTask {
+  return { ...task, status: compatTaskStatus(task) }
+}
+
 async function load() {
   loading.value = true
   try {
     const [projects, tasks, materials, competitions, announcements] = await Promise.all([
       getProjects(), getProjectTasks(), getMaterials(), getCompetitions(), getAnnouncements(),
     ])
-    state.projects = projects.data; state.tasks = tasks.data; state.materials = materials.data
+    state.projects = projects.data; state.tasks = tasks.data.map(asStudentTask); state.materials = materials.data
     state.competitions = competitions.data; state.announcements = announcements.data; loaded.value = true
   } finally { loading.value = false }
 }
@@ -38,7 +47,7 @@ export const student = {
   async refreshProject(projectId: number) {
     const [projects, tasks, materials] = await Promise.all([getProjects(), getProjectTasks(projectId), getMaterials(projectId)])
     state.projects = projects.data
-    state.tasks = [...state.tasks.filter((item) => item.project !== projectId), ...tasks.data]
+    state.tasks = [...state.tasks.filter((item) => item.project !== projectId), ...tasks.data.map(asStudentTask)]
     state.materials = [...state.materials.filter((item) => item.project !== projectId), ...materials.data]
   },
   async loadArchived() {
