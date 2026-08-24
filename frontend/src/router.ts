@@ -11,6 +11,7 @@ export const routeRecords: RouteRecordRaw[] = [
   { path: '/', name: 'entry', component: () => import('./pages/public/EntryPage.vue') },
   { path: '/login', name: 'login', component: () => import('./pages/public/LoginPage.vue'), meta: { public: true } },
   { path: '/register', name: 'register', component: () => import('./pages/public/RegisterPage.vue'), meta: { public: true } },
+  { path: '/platform/login', name: 'platform-login', component: () => import('./pages/public/PlatformLoginPage.vue'), meta: { public: true } },
   {
     path: '/student', component: StudentLayout, meta: { role: 'student' }, redirect: '/student/home', children: [
       { path: 'home', name: 'student-home', component: () => import('./pages/student/StudentHome.vue') },
@@ -21,6 +22,7 @@ export const routeRecords: RouteRecordRaw[] = [
       { path: 'projects/:id/materials', name: 'student-materials', component: () => import('./pages/student/StudentProject.vue'), meta: { surface: 'materials' } },
       { path: 'projects/:id/report', name: 'student-report', component: () => import('./pages/student/StudentProject.vue'), meta: { surface: 'report' } },
       { path: 'ai', name: 'student-ai', component: () => import('./pages/shared/AICenter.vue') },
+      { path: 'notifications', name: 'student-notifications', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'notifications' } },
       { path: 'cases', name: 'student-cases', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'cases' } },
       { path: 'public-applications', name: 'student-public-applications', component: () => import('./pages/student/PublicCaseApplication.vue') },
       { path: 'invitations', name: 'student-invitations', component: () => import('./pages/student/StudentInvitations.vue') },
@@ -39,6 +41,7 @@ export const routeRecords: RouteRecordRaw[] = [
       { path: 'reviews/:submissionId', name: 'teacher-review', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'review' } },
       { path: 'members', name: 'teacher-members', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'members' } },
       { path: 'ai', redirect: '/teacher/reviews' },
+      { path: 'notifications', name: 'teacher-notifications', component: () => import('./pages/teacher/TeacherAnnouncements.vue') },
       { path: 'cases', name: 'teacher-cases', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'cases' } },
       { path: 'competitions', name: 'teacher-competitions', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'competitions' } },
       { path: 'announcements', name: 'teacher-announcements', component: () => import('./pages/teacher/TeacherAnnouncements.vue') },
@@ -49,7 +52,7 @@ export const routeRecords: RouteRecordRaw[] = [
       { path: 'home', name: 'platform-home', component: () => import('./pages/platform/PlatformConsole.vue'), meta: { surface: 'home' } },
       { path: 'schools', name: 'platform-schools', component: () => import('./pages/platform/PlatformConsole.vue'), meta: { surface: 'schools' } },
       { path: 'schools/:id', name: 'platform-school', component: () => import('./pages/platform/SchoolDetail.vue') },
-      { path: 'licenses', redirect: 'schools' },
+      { path: 'licenses', redirect: '/platform/schools' },
       { path: 'competitions', name: 'platform-competitions', component: () => import('./pages/platform/PlatformConsole.vue'), meta: { surface: 'competitions' } },
       { path: 'announcements', name: 'platform-announcements', component: () => import('./pages/platform/PlatformConsole.vue'), meta: { surface: 'announcements' } },
       { path: 'cases', name: 'platform-cases', component: () => import('./pages/platform/PlatformCases.vue'), meta: { surface: 'cases' } },

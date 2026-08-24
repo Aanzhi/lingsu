@@ -4,6 +4,13 @@ import type { AuthRole } from './stores/authModel'
 import type { UnifiedStatus } from './stores/status'
 import type { ApiSchool } from './stores/platformApiModel'
 import type { ApiTask } from './stores/studentApiModel'
+import { optionalAgentInputs, type ResearchQuestionCandidate } from './stores/aiConversationModel'
+import type {
+  AIWorkspaceMode,
+  CurrentProjectContext,
+  JourneyTaskState,
+  ProjectLifecycleState,
+} from './stores/productContracts'
 export type { ApiTask }
 
 export const api = axios.create({ baseURL: '/api/', withCredentials: true, xsrfCookieName: 'csrftoken', xsrfHeaderName: 'X-CSRFToken' })
@@ -13,11 +20,13 @@ export interface MeResponse {
   must_change_password: boolean; authorized: boolean
   primary_project: number | null; primary_project_title: string | null
 }
+export interface AnonymousMeResponse { authenticated: false }
+export type SessionMeResponse = MeResponse | AnonymousMeResponse
 export interface ProjectMember { id: number; account: number; username: string; role: 'leader' | 'member' }
 export interface Project {
   id: number; school: number; school_name: string; title: string; problem: string; plan: string; summary: string
   leader: number; primary_teacher: number | null
-  project_type: 'research' | 'invention' | 'engineering'; status: 'unclaimed' | 'active' | 'completed'
+  project_type: 'research' | 'invention' | 'engineering'; status: 'unclaimed' | 'active' | 'completed'; lifecycle_status?: ProjectLifecycleState
   members: ProjectMember[]
   growth: { experience: number; level: number; streak_days: number; achievements: string[]; title: string }
   is_archived: boolean; archived_at: string | null
@@ -39,20 +48,21 @@ export interface AIRevisionSource { ai_log_id: number; agent_key: string | null;
 export interface AIVerificationSummary { total: number; items: VerificationItem[] }
 export interface MaterialRevision { id: number; material: number; material_title: string; project_title: string; author: number; author_name: string; content: string; truth_confirmed: boolean; revision_note: string; status: UnifiedStatus; reviewer: number | null; review_comment: string; created_at: string; attachments: MaterialAttachment[]; source_summary: AIRevisionSource | null; verification_summary: AIVerificationSummary | null }
 export interface MaterialReference { url: string; original_name: string }
-export interface Material { id: number; project: number; task: number | null; template_material: number | null; title: string; status: UnifiedStatus; required: boolean; report_section: string; report_order: number; revisions: MaterialRevision[]; guidance: string; reference: MaterialReference | null }
+export interface Material { id: number; project: Project['id']; task: ProjectTask['id'] | null; template_material: number | null; title: string; status: UnifiedStatus; required: boolean; report_section: string; report_order: number; revisions: MaterialRevision[]; guidance: string; reference: MaterialReference | null }
 export interface Competition { id: number; title: string; description: string; registration_deadline?: string; starts_at?: string; ends_at?: string; audience: string; status: string }
 export interface Announcement { id: number; title: string; body: string; audience: string; published_at?: string; is_read?: boolean }
 export interface AppNotification { id: number; kind: string; title: string; body: string; link: string; is_read: boolean; created_at?: string; actor_name?: string | null; project_id?: number | null }
 export interface MemberInvitation { id: number; project: number; project_title: string; inviter: number; invitee: number; invitee_name: string; status: 'pending_student' | 'pending_teacher' | 'approved' | 'rejected'; created_at: string }
 export interface StudentDirectoryEntry { id: number; username: string; display_name: string }
 export interface ReportExport { id: number; project: number; requested_by: number; format: 'docx' | 'pdf'; status: 'queued' | 'processing' | 'completed' | 'failed'; project_version: string; material_manifest: { material_id: number; revision_id: number; title: string }[]; error_message: string; created_at: string; completed_at: string | null; download_url: string | null }
-export interface PublicCase { id: number; project: number; project_title: string; school_name: string; applicant: number; public_summary: string; tags: string[]; discipline: string; application_scene: string; outcome_form: string; cover: string | null; selected_materials: number[]; selected_material_summaries: { material_id: number; title: string; report_section: string; content: string }[]; status: 'pending_teacher' | 'published' | 'offline' | 'rejected'; review_comment: string }
+export interface PublicCase { id: number; project: Project['id']; project_title: string; school_name: string; applicant: number; public_summary: string; tags: string[]; discipline: string; application_scene: string; outcome_form: string; cover: string | null; selected_materials: Material['id'][]; selected_material_summaries: { material_id: Material['id']; title: string; report_section: string; content: string }[]; status: 'pending_teacher' | 'published' | 'offline' | 'rejected'; review_comment: string; project_status?: ProjectLifecycleState | null }
 export type AIContextScope = Record<string, boolean | string | number[]>
 export interface AISource { kind: 'task' | 'material' | 'attachment'; id: number; title: string; project_id: number; material_id?: number | null }
-export interface AIArtifactOutput { title?: string; draft?: string; next_action?: string; [key: string]: unknown }
+export interface AIArtifactOutput { title?: string; draft?: string; next_action?: string; project_title?: string; project_type?: Project['project_type']; project_plan?: string; candidates?: ResearchQuestionCandidate[]; recommended_index?: number; missing_information?: string[]; [key: string]: unknown }
 export interface VerificationItem { item: string; status: string; guidance?: string }
 export interface AIGeneration { id: number; project: number; actor: number; actor_name: string; purpose: string; prompt: string; context_scope: AIContextScope; task: number | null; material: number | null; agent_key?: string | null; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' | null; output: string; artifact_payload?: AIArtifactOutput; verification_items?: VerificationItem[]; saved_material_revision?: number | null; model_name: string; status: 'queued' | 'processing' | 'completed' | 'failed'; error_message: string; created_at: string; completed_at: string | null; referenced_sources: AISource[] }
-export interface ProjectTaskBrief { id: number; project: number; stage_name: string; stage_order: number; title: string; description: string; status: string }
+export interface ProjectTask { id: number; project: Project['id']; stage_name: string; stage_order: number; title: string; description: string; status: JourneyTaskState }
+export interface ProjectTaskBrief extends ProjectTask {}
 export interface ServiceStatus { database: string; task_queue: string; virus_scan: string; document_converter: string; storage: string; ai: string }
 export interface AIAvailability { status: 'configured' | 'not_configured' | 'quota_exhausted' | 'unavailable'; remaining_quota: number }
 export interface AIAgentInputField {
@@ -91,20 +101,27 @@ export function errorMessage(error: unknown, fallback = '操作失败，请稍�
   if (status === 401) return '登录状态已失效，请重新登录。'
   if (status === 408 || error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') return 'AI 请求超时，请稍后重试。'
   if (status === 429) return 'AI 请求过于频繁或学校配额已用尽，请稍后重试。'
-  if (status === 502 || status === 503) return 'AI 服务暂时不可用，请稍后重试。'
   const data = error.response?.data as { detail?: string | string[]; [key: string]: unknown } | undefined
   if (typeof data === 'string') return fallback
   if (typeof data?.detail === 'string') return data.detail
   if (Array.isArray(data?.detail)) return data.detail.join('；')
+  if (status === 502 || status === 503) return 'AI 服务暂时不可用，请稍后重试。'
   if (data) {
-    const first = Object.values(data)[0]
-    if (typeof first === 'string') return first
-    if (Array.isArray(first)) return first.join('；')
+    const render = (value: unknown, field = ''): string => {
+      if (typeof value === 'string') return field ? `${field}：${value}` : value
+      if (Array.isArray(value)) return value.map((item) => render(item, field)).filter(Boolean).join('；')
+      if (value && typeof value === 'object') {
+        return Object.entries(value).map(([key, child]) => render(child, key === 'input_values' ? field : key)).filter(Boolean).join('；')
+      }
+      return ''
+    }
+    const detail = render(data)
+    if (detail) return detail
   }
   return fallback
 }
 
-export const getMe = () => api.get<MeResponse>('me/')
+export const getMe = () => api.get<SessionMeResponse>('me/')
 export const getServiceStatus = () => api.get<ServiceStatus>('service-status/')
 export const getAIAvailability = () => api.get<AIAvailability>('ai-availability/')
 export const getCsrf = () => api.get<{ detail: string }>('csrf/')
@@ -115,12 +132,15 @@ export const getProjects = (params?: { include_archived?: boolean; only_archived
 export const getTrashedProjects = () => api.get<Project[]>('projects/trashed/')
 export const getProject = (id: number) => api.get<Project>(`projects/${id}/`)
 export const createProject = (payload: Pick<Project, 'title' | 'problem' | 'plan' | 'project_type'>) => api.post<Project>('projects/', payload)
+export const updateProjectBasics = (id: number, payload: Partial<Pick<Project, 'title' | 'problem' | 'plan' | 'summary'>>) => api.post<Project>(`projects/${id}/update_basics/`, payload)
 export const archiveProject = (id: number) => api.post<Project>(`projects/${id}/archive/`)
 export const unarchiveProject = (id: number) => api.post<Project>(`projects/${id}/unarchive/`)
 export const trashProject = (id: number) => api.post<Project>(`projects/${id}/trash/`)
 export const restoreProject = (id: number) => api.post<Project>(`projects/${id}/restore/`)
-export const setPrimaryProject = (id: number) => api.post<Project>(`projects/${id}/set_primary/`)
+export interface SetPrimaryProjectResponse extends Project { current_project?: CurrentProjectContext | null }
+export const setPrimaryProject = (id: number) => api.post<SetPrimaryProjectResponse>(`projects/${id}/set_primary/`)
 export const getMaterials = (project?: number) => api.get<Material[]>('materials/', { params: project ? { project } : undefined })
+export const getMaterial = (id: number) => api.get<Material>(`materials/${id}/`)
 export const createMaterialRevision = (material: number, content: string, files: File[], revisionNote = '') => {
   const body = new FormData()
   body.append('material', String(material)); body.append('content', content); body.append('revision_note', revisionNote)
@@ -142,9 +162,11 @@ export const getCompetitions = () => api.get<Competition[]>('competitions/')
 export const getAnnouncements = () => api.get<Announcement[]>('announcements/')
 export const markAnnouncementRead = (id: number) => api.post<Announcement>(`announcements/${id}/mark_read/`)
 // ── 个人站内信（Phase 1 T3 后端端点，前端消息中心接入）──────────────
+export interface NotificationReadReceipt { id: AppNotification['id']; is_read: boolean }
+export interface NotificationReadSummary { unread_count: number; updated_ids: AppNotification['id'][] }
 export const getNotifications = () => api.get<AppNotification[]>('notifications/')
-export const markNotificationRead = (id: number) => api.post<AppNotification>(`notifications/${id}/mark_read/`)
-export const markAllNotificationsRead = () => api.post('notifications/mark_all_read/')
+export const markNotificationRead = (id: number) => api.post<AppNotification & NotificationReadReceipt>(`notifications/${id}/mark_read/`)
+export const markAllNotificationsRead = () => api.post<NotificationReadSummary>('notifications/mark_all_read/')
 export const getProjectPool = () => api.get<Project[]>('projects/pool/')
 export const getGuidedProjects = () => api.get<Project[]>('projects/guided/')
 export const claimProject = (id: number) => api.post<Project>(`projects/${id}/claim/`)
@@ -178,15 +200,22 @@ export const rejectPublicCase = (id: number, comment: string) => api.post<Public
 export const getAIGenerations = (project?: number) => api.get<AIGeneration[]>('ai-logs/', { params: project ? { project } : undefined })
 export const getProjectTasks = (project?: number) => api.get<ApiTask[]>('project-tasks/', { params: project ? { project } : undefined })
 export const createAIGeneration = (payload: { project: number; purpose?: string; prompt: string; input_values?: Record<string, string>; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' }) => api.post<AIGeneration>('ai-logs/', payload)
-export interface AIConversation { id: number; title: string; project: number | null; project_title: string | null; paper_type: string | null; current_agent: string | null; is_archived: boolean; updated_at: string; created_at: string }
+export interface AIConversation { id: number; title: string; project: Project['id'] | null; project_title: string | null; paper_type: string | null; current_agent: string | null; workspace_mode?: AIWorkspaceMode | null; current_project?: CurrentProjectContext | null; is_archived: boolean; updated_at: string; created_at: string }
 export interface AIConversationMessage { id: number; role: 'user' | 'assistant' | 'system'; content: string; status: 'queued' | 'streaming' | 'completed' | 'failed'; generation_log?: number | null; artifact_payload?: AIArtifactOutput | null; verification_items?: Array<VerificationItem | string>; error_message?: string; created_at: string }
 export interface AIConversationMessageInput { content: string; agent_key?: string; project?: number | null; task?: number; paper_type?: string; input_values?: Record<string, string>; context_scope?: AIContextScope }
 export const getAIConversations = (params?: { project?: number; include_archived?: boolean }) => api.get<AIConversation[]>('ai-conversations/', { params })
-export const createAIConversation = (payload: { title?: string; project?: number | null; paper_type?: string | null; current_agent?: string | null }) => api.post<AIConversation>('ai-conversations/', payload)
-export const updateAIConversation = (id: number, payload: Partial<Pick<AIConversation, 'title' | 'paper_type' | 'current_agent'>>) => api.patch<AIConversation>(`ai-conversations/${id}/`, payload)
+export const createAIConversation = (payload: { title?: string; project?: number | null; paper_type?: string | null; current_agent?: string | null }) => {
+  const cleanPayload = Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== null && value !== undefined))
+  return api.post<AIConversation>('ai-conversations/', cleanPayload)
+}
+export const updateAIConversation = (id: number, payload: Partial<Pick<AIConversation, 'title' | 'paper_type' | 'current_agent'>>) => {
+  const cleanPayload = Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== null && value !== undefined))
+  return api.patch<AIConversation>(`ai-conversations/${id}/`, cleanPayload)
+}
 export const archiveAIConversation = (id: number) => api.post<AIConversation>(`ai-conversations/${id}/archive/`)
 export const getAIConversationMessages = (id: number) => api.get<AIConversationMessage[]>(`ai-conversations/${id}/messages/`)
 export const createAIConversationMessage = (id: number, payload: AIConversationMessageInput) => api.post<AIConversationMessage>(`ai-conversations/${id}/messages/`, payload)
+export const retryAIConversationMessage = (conversationId: number, messageId: number) => api.post<AIConversationMessage>(`ai-conversations/${conversationId}/messages/${messageId}/retry/`)
 
 function csrfToken() { return document.cookie.split('; ').find((item) => item.startsWith('csrftoken='))?.split('=').slice(1).join('=') || '' }
 export async function streamAIConversationMessage(id: number, messageId: number, onEvent: (event: { id?: string; event: string; data: Record<string, unknown> }) => void, signal?: AbortSignal, lastEventId?: string) {
@@ -204,7 +233,14 @@ export async function streamAIConversationMessage(id: number, messageId: number,
     })
   }
 }
-export const saveAIGenerationAsMaterial = (id: number, payload: { material: number; content: string; revision_note: string }) => api.post<MaterialRevision>(`ai-logs/${id}/save_as_material/`, payload)
+export interface SaveAIGenerationAsMaterialPayload {
+  material: Material['id']
+  content: string
+  revision_note: string
+  workspace_mode?: AIWorkspaceMode
+  current_project?: CurrentProjectContext | null
+}
+export const saveAIGenerationAsMaterial = (id: number, payload: SaveAIGenerationAsMaterialPayload) => api.post<MaterialRevision>(`ai-logs/${id}/save_as_material/`, payload)
 // ── AI Agent 模板（平台/校本管理 + 学生/教师按角色拉取）──────────────
 export const getAIAgents = () => api.get<AIAgent[]>('ai-agents/')
 export const createAIAgent = (payload: Partial<AIAgent>) => api.post<AIAgent>('ai-agents/', payload)
