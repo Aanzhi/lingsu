@@ -1,0 +1,228 @@
+@media (max-width: 1280px) {
+  .app-topbar { padding: 0 24px; }
+  .brand-subtitle { display: none; }
+  .desk-main, .console-main { padding-left: 28px; padding-right: 28px; }
+  .task-workspace { grid-template-columns: 175px minmax(480px, 1fr) 230px; }
+  .task-workspace--two-column { grid-template-columns: minmax(0, 1fr) 260px; }
+  .review-desk { grid-template-columns: 145px minmax(420px, 1fr) 250px; }
+  .ai-center-grid { grid-template-columns: 165px minmax(420px, 1fr) 220px; }
+}
+
+@media (max-width: 860px) {
+  .desk-shell, .console-shell { grid-template-columns: 1fr; }
+  .side-nav { height: auto; position: relative; top: 0; align-self: start; padding: 9px 42px 9px 14px; border-right: 0; border-bottom: 1px solid var(--line); display: flex; align-items: center; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; -ms-overflow-style: none; }
+  .side-nav::after { content: '›'; position: absolute; z-index: 1; top: 0; right: 0; display: grid; place-items: center; width: 38px; height: 58px; color: var(--moss-dark); font-size: 22px; font-weight: 700; pointer-events: none; border-left: 1px solid var(--line); background: var(--paper); }
+  .side-nav::-webkit-scrollbar { display: none; }
+  .side-nav > p { display: none; }
+  .side-nav .side-note { display: none; }
+  .side-nav a { flex: 0 0 auto; min-height: 40px; padding: 0 11px; font-size: 12px; }
+  .side-nav-subnav { display: flex; flex: 0 0 auto; gap: 3px; margin: 0 5px; padding: 0 0 0 5px; border-left: 1px solid var(--line); }
+  .side-nav-subnav a { min-height: 36px; padding: 0 9px; border-radius: var(--radius-sm); font-size: 11px; }
+  .student-top-navigation { position: sticky; }
+  .student-nav-scroll { max-width: none; padding: 0 40px 0 14px; overflow-x: auto; overscroll-behavior-inline: contain; scrollbar-width: none; -ms-overflow-style: none; }
+  .student-nav-scroll::-webkit-scrollbar { display: none; }
+  .student-project-select { flex-basis: 160px; }
+  .student-nav-link, .student-nav-menu-trigger { min-height: 44px; }
+  .student-nav-dropdown { position: fixed; top: calc(var(--topbar-height) + 60px); right: 14px; width: min(220px, calc(100vw - 28px)); }
+}
+
+@media (max-width: 1180px) {
+  .task-workspace { grid-template-columns: 178px minmax(0, 1fr); }
+  .task-workspace--two-column { grid-template-columns: minmax(0, 1fr) 240px; }
+  .task-paper { min-width: 0; }
+  .ai-companion { grid-column: 1 / -1; position: static; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 20px; align-items: center; }
+  .ai-companion .eyebrow, .ai-companion h2 { grid-column: 1; }
+  .ai-companion > p:not(.eyebrow) { grid-column: 1; margin: 0; }
+  .ai-companion .primary-button { grid-column: 2; grid-row: 1 / span 3; min-width: 178px; }
+  .review-desk { grid-template-columns: 150px minmax(0, 1fr); }
+  .review-actions { grid-column: 1 / -1; position: static; display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 12px 16px; align-items: end; }
+  .review-actions > p, .review-actions > h2 { grid-column: 1; }
+  .review-actions > .secondary-button { grid-column: 2; grid-row: 1 / span 2; }
+  .review-actions label { grid-column: 1; margin-top: 0; }
+  .review-actions .approve-button, .review-actions .return-button { grid-column: 2; }
+  .ai-center-grid { grid-template-columns: 174px minmax(0, 1fr); }
+  .ai-history { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .ai-history > .eyebrow { grid-column: 1 / -1; }
+  .ai-history .empty-state { grid-column: 1 / -1; }
+}
+
+@media (max-width: 1040px) {
+  .teacher-home-grid, .console-grid, .overview-grid, .report-layout { grid-template-columns: 1fr; }
+  .task-workspace, .review-desk, .ai-center-grid { grid-template-columns: 1fr; }
+  .task-rail, .ai-companion, .review-actions, .report-aside { position: static; }
+  .metric-grid, .case-grid { grid-template-columns: repeat(2, 1fr); }
+  .task-rail { display: block; order: 2; }
+  .ai-companion { order: 3; }
+  .task-paper { order: 1; }
+  .ai-companion { display: block; }
+  .ai-companion .primary-button { min-width: 0; }
+  .review-actions { display: block; }
+  .review-actions label { margin-top: 23px; }
+  .ai-history { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ai-history > .eyebrow, .ai-history .empty-state { grid-column: 1 / -1; }
+  .task-progress-panel { grid-template-columns: minmax(180px, 1fr) auto; }
+  .task-progress-panel .task-progress-track { grid-column: 1 / -1; }
+  .growth-row { grid-template-columns: 150px minmax(80px, 1fr) auto; }
+  .growth-row > span:last-child { grid-column: 1 / -1; }
+  .configuration-form { grid-template-columns: 1fr 1fr; }
+  .service-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .auth-two-col { grid-template-columns: 1fr; }
+  .auth-panel { padding: 0; }
+}
+
+@media (max-width: 980px) {
+  .pool-grid, .guided-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 1240px) {
+  .data-table { overflow-x: auto; }
+  .data-table > header, .data-row { min-width: 850px; }
+}
+
+@media (max-width: 900px) {
+  .student-home-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 780px) {
+  .app-topbar { height: var(--topbar-height); padding: 0 14px; }
+  .brand-lockup { gap: 8px; min-width: 0; }
+  .brand-lockup strong { font-size: 20px; }
+  .brand-mark { width: 32px; height: 27px; font-size: 26px; }
+  .profile-button { padding: 3px; }
+  .profile-button > span:not(.avatar), .profile-button .chevron { display: none; }
+  .desk-main, .console-main, .student-main { padding: 26px 18px 60px; }
+  .brand-divider, .brand-subtitle { display: none; }
+  .project-grid, .pool-grid, .guided-grid, .announcement-list, .metric-grid, .case-grid { grid-template-columns: 1fr; }
+  .case-card { min-height: 0; }
+  .case-card > div:last-child > p:nth-of-type(2) { min-height: 0; }
+  .project-tabs { width: calc(100% + 36px); margin-right: -18px; margin-left: -18px; padding: 0 18px; overflow-x: auto; scrollbar-width: none; }
+  .project-tabs::-webkit-scrollbar { display: none; }
+  .project-tabs a { flex: 0 0 auto; }
+  .overview-paper, .report-paper, .materials-table { padding: 25px 20px; }
+  .overview-paper > label { max-width: none; }
+  .overview-grid, .report-layout { gap: 14px; }
+  .level-seal { align-self: flex-end; width: 88px; height: 88px; }
+  .material-row { grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; }
+  .material-row > :last-child { grid-column: 2 / -1; justify-self: start; }
+  .report-aside { position: static; }
+  .report-title { padding-bottom: 22px; }
+  .report-title h1 { font-size: 25px; }
+  .review-row { grid-template-columns: 38px minmax(0, 1fr) auto; }
+  .review-row > :last-child { display: none; }
+  .member-approval { grid-template-columns: 40px minmax(0, 1fr); }
+  .member-approval .status-tag, .member-approval button { grid-row: 2; }
+  .review-inbox { grid-template-columns: 1fr; }
+  .review-guide { display: none; }
+  .teacher-project-summary { align-items: flex-start; flex-direction: column; }
+  .teacher-project-score { min-width: 0; text-align: left; }
+  .teacher-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .teacher-chapters-panel, .teacher-detail-aside { min-width: 0; }
+  .teacher-stage-row, .teacher-material-row { grid-template-columns: 1fr auto; }
+  .teacher-material-row > :last-child { grid-column: 1 / -1; }
+  .review-complete { grid-template-columns: 44px minmax(0, 1fr); padding: 25px 22px; }
+  .review-complete > .el-icon { width: 44px; height: 44px; font-size: 22px; }
+  .review-complete > div:last-child { grid-column: 1 / -1; grid-template-columns: 1fr; }
+  .review-complete > div:last-child > * { width: 100%; }
+  .school-detail-grid, .school-summary-grid { grid-template-columns: 1fr; }
+  .school-usage > div:first-of-type { grid-template-columns: 1fr 1fr; }
+  .license-table article, .management-list article, .case-governance article { grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; }
+  .license-table article > :nth-last-child(2), .management-list article > :nth-last-child(2) { display: none; }
+  .filter-bar { flex-wrap: wrap; }
+  .filter-bar > span { width: 100%; margin-left: 0; }
+  .school-summary-grid, .configuration-form { grid-template-columns: 1fr; }
+  .form-row, .stage-summary { grid-template-columns: 1fr; }
+  .stage-summary { gap: 14px; }
+  .stage-summary > div + div { padding-left: 0; border-left: 0; }
+  .configuration-form footer { align-items: flex-start; flex-direction: column; }
+  .data-table { overflow-x: auto; }
+  .data-table > header, .data-row { min-width: 850px; }
+  .topbar-actions .icon-button { width: 36px; height: 36px; }
+  .topbar-divider { display: block; height: 20px; }
+  .page-header-row { align-items: flex-start; flex-direction: column; }
+  .page-header { margin-bottom: 24px; }
+  .page-header h1 { font-size: 25px; }
+  .page-description { line-height: 1.7; }
+  .page-actions { width: 100%; }
+  .page-actions > * { flex: 1 1 auto; }
+  .page-actions > .status-tag { flex: 0 0 auto; }
+  .journey-hero { min-height: 0; padding: 26px 22px; }
+  .growth-row { grid-template-columns: 1fr auto; gap: 12px; margin: 22px 0; }
+  .growth-row .xp-track { grid-column: 1 / -1; }
+  .growth-row > span:last-child { grid-column: 1 / -1; }
+  .hero-actions { display: grid; grid-template-columns: 1fr; }
+  .hero-actions > * { width: 100%; }
+  .next-task-card { min-height: 300px; padding: 25px 22px; }
+  .task-card-meta { flex-direction: column; align-items: flex-start; gap: 4px; }
+  .task-progress-panel { grid-template-columns: 1fr auto; padding: 14px; gap: 10px; }
+  .task-progress-panel small { margin-top: 2px; }
+  .task-paper { padding: 25px 20px; }
+  .task-state-summary, .submitted-state, .approved-state { align-items: flex-start; }
+  .approved-state { flex-wrap: wrap; }
+  .approved-state .secondary-button { width: 100%; }
+  .attachment-box { grid-template-columns: 1fr; }
+  .attachment-box .secondary-button { width: 100%; }
+  .task-submit-row { align-items: stretch; flex-direction: column; }
+  .task-submit-row .primary-button { width: 100%; }
+  .feedback-banner { min-width: 0; width: calc(100% - 28px); top: 74px; align-items: flex-start; }
+  .feedback-action { margin-left: 0; }
+  .competition-card { grid-template-columns: 66px minmax(0, 1fr); gap: 13px; padding: 17px; }
+  .competition-card .date-block { width: 66px; height: 66px; }
+  .competition-card > div:nth-child(2) > div:first-child { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .competition-card > .status-tag, .competition-card > .secondary-button, .competition-card > .primary-button { grid-column: 2; justify-self: start; }
+  .settings-card { grid-template-columns: 40px minmax(0, 1fr); padding: 20px; }
+  .settings-card > .primary-button, .settings-card > .secondary-button { grid-column: 1 / -1; width: 100%; }
+  .el-dialog { width: calc(100% - 28px) !important; margin: 0 auto !important; }
+  .el-dialog__header { padding: 21px 20px 7px !important; }
+  .el-dialog__body { padding: 15px 20px !important; }
+  .el-dialog__footer { padding: 10px 20px 20px !important; }
+  .dialog-actions { width: 100%; flex-direction: column-reverse; }
+  .dialog-actions > button { width: 100%; }
+  .notification-popover { right: -8px; width: min(330px, calc(100vw - 28px)); }
+  .ai-studio { padding: 25px 20px; }
+  .ai-history { grid-template-columns: 1fr; }
+  .ai-submit { align-items: stretch; flex-direction: column; gap: 12px; }
+  .ai-submit .primary-button { width: 100%; }
+  .ai-result { padding: 20px; }
+  .public-auth-page { width: calc(100% - 28px); padding-bottom: 40px; }
+  .auth-two-col { gap: 14px; padding-top: 24px; }
+  .auth-panel { padding: 0; }
+  .auth-card { padding: 22px 18px; }
+  .auth-card h2 { font-size: 23px; }
+  .metric-card { min-height: 132px; }
+  .service-status-grid { grid-template-columns: 1fr; }
+  .desk-panel, .console-panel { min-height: 0; }
+  .empty-state { min-height: 180px; }
+}
+
+/* Shared responsive guardrails: keep shell controls readable without forcing the
+   document wider than the viewport. Page-specific layouts can opt into tighter
+   grids, while long content remains scrollable inside its own region. */
+@media (max-width: 780px) {
+  .app-topbar { gap: 8px; }
+  .topbar-actions { gap: 2px; }
+  .topbar-actions .topbar-school.school-badge { display: none; }
+  .brand-lockup strong { max-width: 7em; }
+  .desk-main, .console-main, .student-main { overflow-x: hidden; }
+  .page-actions { flex-wrap: wrap; }
+  .page-actions > * { min-width: min(100%, 170px); }
+  .page-actions > .status-tag { min-width: auto; }
+  .paper-card, .desk-panel, .console-panel { max-width: 100%; }
+}
+
+@media (max-width: 480px) {
+  .app-topbar { padding-inline: 10px; }
+  .brand-lockup strong { font-size: 18px; max-width: 5.5em; }
+  .desk-main, .console-main, .student-main { padding-inline: 14px; }
+  .page-actions > * { width: 100%; min-width: 0; }
+  .page-actions > .status-tag { width: fit-content; }
+  .el-message-box { width: calc(100vw - 28px) !important; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

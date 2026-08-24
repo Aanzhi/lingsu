@@ -1,0 +1,69 @@
+<script setup lang="ts">
+import { Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick } from '@element-plus/icons-vue'
+import { computed, type Component } from 'vue'
+import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
+
+import { auth } from '../stores/auth'
+import { studentTopNavigation, type NavigationIcon } from '../stores/navigationRegistry'
+import AppTopbar from './AppTopbar.vue'
+
+const route = useRoute()
+const router = useRouter()
+const studentTopNavigationLabels = ['首页', '我的项目', '灵思 AI', '研究旅程', '材料档案', '项目邀请', '成果申请']
+const navItems = computed(() => studentTopNavigation(auth.user.value?.primaryProject)
+  .filter((item) => studentTopNavigationLabels.includes(item.label)))
+const projectTarget = computed(() => auth.user.value?.primaryProject ? `/student/projects/${auth.user.value.primaryProject}` : '/student/projects')
+const projectLabel = computed(() => auth.user.value?.primaryProjectTitle ?? '我的项目')
+
+const iconMap: Record<NavigationIcon, Component> = {
+  home: House,
+  projects: FolderOpened,
+  journey: Collection,
+  review: DocumentChecked,
+  members: Briefcase,
+  content: Collection,
+  schools: Collection,
+  ai: MagicStick,
+  settings: Collection,
+}
+
+function isActive(to: string) {
+  const path = to.split('?')[0]
+  return route.path === path || route.path.startsWith(`${path}/`)
+}
+
+function goToProject(to: string) {
+  void router.push(to)
+}
+</script>
+
+<template>
+  <div class="student-portal-shell">
+    <AppTopbar role-tone="student" />
+    <nav class="student-top-navigation" aria-label="学生顶部导航">
+      <div class="student-nav-scroll">
+        <label class="student-project-select">
+          <span>当前项目</span>
+          <el-select :model-value="projectTarget" size="small" @change="goToProject">
+            <el-option :label="projectLabel" :value="projectTarget" />
+            <el-option label="查看全部项目" value="/student/projects" />
+          </el-select>
+        </label>
+        <RouterLink
+          v-for="item in navItems"
+          :key="item.key"
+          class="student-nav-link"
+          :to="item.to"
+          :class="{ 'router-link-active': isActive(item.to) }"
+          :aria-current="isActive(item.to) ? 'page' : undefined"
+        >
+          <el-icon aria-hidden="true"><component :is="iconMap[item.icon]" /></el-icon>
+          <span>{{ item.label }}</span>
+        </RouterLink>
+      </div>
+    </nav>
+    <main class="student-main">
+      <RouterView />
+    </main>
+  </div>
+</template>

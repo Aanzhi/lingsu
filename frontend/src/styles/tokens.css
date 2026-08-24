@@ -1,0 +1,107 @@
+:root {
+  /* B「安静工作台」palette. Keep the legacy aliases below so page-level
+     components can migrate without introducing a second visual language. */
+  --ivory: #f3f4f0;
+  --paper: #ffffff;
+  --paper-soft: #f8faf7;
+  --paper-muted: #eef2ed;
+  --ink: #1e2d26;
+  --muted: #526159;
+  --muted-light: #829088;
+  --line: #dfe5df;
+  --line-dark: #cad6cc;
+  --line-strong: var(--line-dark);
+  --moss: #4f6f59;
+  --moss-dark: #365440;
+  --management-brand: #3d6c6a;
+  --management-brand-deep: #285250;
+  --sage: #7e9b84;
+  --sage-soft: #e7f0e8;
+  --clay: #ad7953;
+  --clay-soft: #f5ece5;
+  --amber: #a8752f;
+  --amber-soft: #faf1df;
+  --sage-line: #c3d6c6;
+  --sage-line-soft: #dbe8dd;
+  --amber-line: #ead7ae;
+  --clay-deep: #7d573e;
+  --clay-text: #8a5b3f;
+  --danger: #a8564d;
+  --danger-soft: #f9e9e6;
+  --success: #4d8560;
+  --success-soft: #e8f3eb;
+  --info: #536d68;
+  --info-soft: #e8f0ef;
+  --surface-raised: var(--paper);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-10: 48px;
+  --shadow: 0 12px 32px rgba(41, 62, 48, .07);
+  --shadow-soft: 0 2px 8px rgba(41, 62, 48, .05);
+  --shadow-hover: 0 16px 34px rgba(41, 62, 48, .1);
+
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  /* 兼容旧组件名；方案 B 全站只使用系统无衬线字体。 */
+  --serif: var(--sans);
+  --space-page: clamp(16px, 3.5vw, 48px);
+  --content-max: 1120px;
+  --pc-min-width: 1280px;
+  --content-wide: 1280px;
+  --topbar-height: 66px;
+  --sidebar-width: 232px;
+  --control-height: 40px;
+  --control-height-compact: 36px;
+  --mobile-control-height: 44px;
+
+  /* Semantic aliases used by shared and Element Plus components. */
+  --color-bg-canvas: var(--ivory);
+  --color-bg-surface: var(--paper);
+  --color-bg-subtle: var(--paper-soft);
+  --color-bg-muted: var(--paper-muted);
+  --color-border-default: var(--line);
+  --color-border-strong: var(--line-dark);
+  --color-text-primary: var(--ink);
+  --color-text-secondary: var(--muted);
+  --color-text-muted: var(--muted-light);
+  --color-primary: var(--moss);
+  --color-primary-strong: var(--moss-dark);
+  --color-success: var(--success);
+  --color-warning: var(--amber);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
+  --color-focus-ring: rgba(79, 111, 89, .28);
+  --surface-page: var(--color-bg-canvas);
+  --surface-card: var(--color-bg-surface);
+  --surface-float: var(--color-bg-surface);
+  --space-section: 32px;
+  --space-card: 24px;
+  --transition-fast: 160ms ease;
+
+  --el-color-primary: var(--color-primary);
+  --el-color-success: var(--color-success);
+  --el-color-warning: var(--color-warning);
+  --el-color-danger: var(--color-danger);
+  --el-color-info: var(--color-info);
+  --el-bg-color: var(--color-bg-surface);
+  --el-bg-color-page: var(--color-bg-canvas);
+  --el-fill-color-blank: var(--color-bg-surface);
+  --el-fill-color-light: var(--color-bg-subtle);
+  --el-text-color-primary: var(--color-text-primary);
+  --el-text-color-regular: var(--color-text-secondary);
+  --el-text-color-secondary: var(--color-text-muted);
+  --el-border-color: var(--color-border-default);
+  --el-border-color-light: var(--color-bg-muted);
+  --el-border-radius-base: var(--radius-sm);
+  --el-border-radius-small: var(--radius-sm);
+  --el-component-size: var(--control-height);
+}
