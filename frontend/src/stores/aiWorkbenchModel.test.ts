@@ -1,0 +1,59 @@
+import { describe, expect, it } from 'vitest'
+import type { AIAgent } from '../api'
+import { AI_WORKBENCH_MODES, draftActions, resolveAIContext, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
+
+const agent = (overrides: Partial<AIAgent>): AIAgent => ({
+  id: 1,
+  key: 'agent',
+  name: '科创助手',
+  description: '辅助研究',
+  role: 'student',
+  category: '研究',
+  system_instruction: '',
+  prompt_template: '',
+  input_schema: [],
+  context_scope_default: {},
+  is_active: true,
+  school: null,
+  order: 1,
+  workflow: 'research',
+  ...overrides,
+})
+
+describe('AI workbench model', () => {
+  it('exposes the three student AI modes in product order', () => {
+    expect(AI_WORKBENCH_MODES.map((item) => item.key)).toEqual(['opening', 'research', 'defense'])
+  })
+
+  it('maps research and defense to the current project', () => {
+    expect(resolveAIContext('research', 8)).toEqual({ projectId: 8, scope: 'current_project' })
+    expect(resolveAIContext('defense', 8)).toEqual({ projectId: 8, scope: 'current_project' })
+  })
+
+  it('keeps opening project-free even when a current project exists', () => {
+    expect(resolveAIContext('opening', 8)).toEqual({ projectId: null, scope: 'none' })
+    expect(resolveAIContext('opening', null)).toEqual({ projectId: null, scope: 'none' })
+  })
+
+  it('filters agents by mode without mutating the API list', () => {
+    const agents = [
+      agent({ id: 1, key: 'opening-agent', category: '开题', workflow: 'opening' }),
+      agent({ id: 2, key: 'research-agent', category: '研究', workflow: 'research' }),
+      agent({ id: 3, key: 'defense-agent', category: '答辩', workflow: 'defense' }),
+      agent({ id: 4, key: 'shared-agent', category: '科创 Agent', workflow: 'research,defense' }),
+    ]
+    expect(visibleAgents('opening', agents).map((item) => item.key)).toEqual(['opening-agent'])
+    expect(visibleAgents('research', agents).map((item) => item.key)).toEqual(['research-agent', 'shared-agent'])
+    expect(visibleAgents('defense', agents).map((item) => item.key)).toEqual(['defense-agent', 'shared-agent'])
+  })
+
+  it('requires an explicit action for completed drafts', () => {
+    expect(draftActions('completed')).toEqual(['save_material', 'create_project_from_opening'])
+    expect(draftActions('streaming')).toEqual([])
+  })
+
+  it('keeps mode input narrow and deterministic', () => {
+    const modes: AIWorkspaceMode[] = ['opening', 'research', 'defense']
+    expect(modes).toHaveLength(3)
+  })
+})

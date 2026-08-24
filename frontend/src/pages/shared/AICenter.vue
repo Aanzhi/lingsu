@@ -4,12 +4,17 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, archiveAIConversation, createAIConversation, createAIConversationMessage, createProject, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, saveAIGenerationAsMaterial, streamAIConversationMessage, updateAIConversation, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
 import { auth } from '../../stores/auth'
 import { aiWorkspaceMode, buildResearchQuestionPrompt, filterConversations, groupAgentsByCategory, isNearBottom, isTerminalSSEEvent, normalizeResearchQuestionArtifact, optionalAgentInputs, researchProjectDraftFromArtifact, researchResponseNotice, type ResearchQuestionArtifact, type ResearchQuestionInputs } from '../../stores/aiConversationModel'
+import { normalizeAIWorkspaceMode, resolveAIContext, visibleAgents, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
 import { conversationDisplayTitle, groupConversationSummaries } from '../../stores/presentationModel'
+import AIModeTabs from '../../components/ai/AIModeTabs.vue'
 import AIContextChooser from '../../components/ai/AIContextChooser.vue'
+import AIContextDrawer from '../../components/ai/AIContextDrawer.vue'
 import AIConversationHistory from '../../components/ai/AIConversationHistory.vue'
+import AIDraftActions from '../../components/ai/AIDraftActions.vue'
 import AIProjectAssistant from '../../components/ai/AIProjectAssistant.vue'
 import AIResearchWizard from '../../components/ai/AIResearchWizard.vue'
 import AIToolPicker from '../../components/ai/AIToolPicker.vue'
+import AIWorkbenchComposer from '../../components/ai/AIWorkbenchComposer.vue'
 import PageHeader from '../../components/PageHeader.vue'
 
 const route = useRoute()
@@ -21,7 +26,7 @@ function queryNumber(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null
 }
 function routeAgent(): string | undefined {
-  if (route.query.mode === 'brainstorm' || route.query.researchQuestion === '1') return 'proposal-topic'
+  if (route.query.mode === 'brainstorm' || route.query.mode === 'opening' || route.query.researchQuestion === '1') return 'proposal-topic'
   return typeof route.query.agent === 'string' ? route.query.agent : undefined
 }
 
@@ -56,6 +61,7 @@ const titleDraft = ref('')
 const chatStreamRef = ref<HTMLElement | null>(null)
 const showJumpLatest = ref(false)
 const streamNotice = ref('')
+const referencedSources = ref<string[]>([])
 const streamController = ref<AbortController | null>(null)
 const requestVersion = ref(0)
 const selectionVersion = ref(0)
@@ -71,6 +77,8 @@ const researchFallback = ref('')
 const projectDraft = ref<{ title: string; problem: string; plan: string; project_type: Project['project_type'] }>({ title: '', problem: '', plan: '', project_type: 'research' })
 const creatingProject = ref(false)
 const projectCreated = ref(false)
+const aiInputHelp = '补充信息（可选）'
+const aiInputHelpDescription = '填写后可让 AI 工具更准确；不填写也可以直接提问。'
 const paperTypes = [{ value: 'empirical', label: '实证研究' }, { value: 'case', label: '案例研究' }, { value: 'literature-review', label: '文献综述' }, { value: 'theoretical', label: '理论研究' }]
 
 const current = computed(() => conversations.value.find((item) => item.id === selectedId.value) || null)
@@ -83,14 +91,16 @@ const visibleConversations = computed(() => filterConversations(conversations.va
 }))
 const visibleConversationGroups = computed(() => groupConversationSummaries(visibleConversations.value, conversationPreviews.value))
 const currentAgent = computed(() => agents.value.find((item) => item.key === selectedAgent.value) || agents.value.find((item) => item.key === current.value?.current_agent) || null)
-const agentCategories = computed(() => ['all', ...new Set(agents.value.map((agent) => agent.category?.trim()).filter(Boolean) as string[])])
-const filteredAgents = computed(() => agents.value.filter((agent) => {
+const workbenchMode = computed<AIWorkspaceMode>(() => normalizeAIWorkspaceMode(route.query.mode))
+const modeAgents = computed(() => visibleAgents(workbenchMode.value, agents.value))
+const agentCategories = computed(() => ['all', ...new Set(modeAgents.value.map((agent) => agent.category?.trim()).filter(Boolean) as string[])])
+const filteredAgents = computed(() => modeAgents.value.filter((agent) => {
   const keyword = agentSearch.value.trim().toLowerCase()
   const matchesKeyword = !keyword || `${agent.name} ${agent.description} ${agent.category}`.toLowerCase().includes(keyword)
   return matchesKeyword && (agentCategory.value === 'all' || (agent.category || '其他') === agentCategory.value)
 }))
 const groupedAgents = computed(() => groupAgentsByCategory(filteredAgents.value))
-const brainstormMode = computed(() => route.query.mode === 'brainstorm')
+const brainstormMode = computed(() => workbenchMode.value === 'opening')
 const workspaceMode = computed(() => aiWorkspaceMode({
   brainstorm: brainstormMode.value,
   researchQuestion: route.query.researchQuestion === '1',
@@ -98,24 +108,28 @@ const workspaceMode = computed(() => aiWorkspaceMode({
   conversationProject: current.value?.project ?? null,
   selectedAgent: selectedAgent.value,
 }))
-const researchMode = computed(() => workspaceMode.value === 'brainstorm' || (workspaceMode.value === 'project' && (route.query.researchQuestion === '1' || selectedAgent.value === 'proposal-topic')))
-const workspaceContextLabel = computed(() => workspaceMode.value === 'brainstorm' ? '无项目 · 选题引导' : currentProject.value?.title || (workspaceMode.value === 'project' ? '当前项目 · 正在加载' : '未绑定项目 · 通用咨询'))
+const researchMode = computed(() => brainstormMode.value || (workbenchMode.value === 'research' && workspaceMode.value === 'project' && (route.query.researchQuestion === '1' || selectedAgent.value === 'proposal-topic')))
+const aiContext = computed(() => resolveAIContext(workbenchMode.value, currentProject.value?.id ?? projectFilter.value))
+const workspaceContextLabel = computed(() => brainstormMode.value ? '无项目 · 开题引导' : currentProject.value?.title || (aiContext.value.projectId ? '当前项目 · 正在加载' : '未绑定项目 · 请选择项目'))
 const aiPageDescription = computed(() => {
-  if (researchMode.value) return '从真实观察开始，AI 会逐步追问、比较和整理；确认前不会创建项目。'
+  if (workbenchMode.value === 'opening') return '从真实观察开始，AI 会逐步追问、比较和整理；确认前不会创建项目。'
+  if (workbenchMode.value === 'defense') return '围绕当前项目整理成果、模拟问答和表达重点；生成内容先由你检查。'
   if (currentProject.value) return '围绕当前项目和当前任务提供帮助，生成内容先由你检查，再决定保存位置。'
-  return '可以开题选题，也可以围绕项目持续对话、完善材料，或调用专门的科创 Agent。'
+  return '研究模式默认绑定当前项目；请选择一个项目后，再让 AI 读取项目材料。'
 })
 const aiContextTitle = computed(() => {
-  if (researchMode.value || brainstormMode.value) return '从一个真实观察开始'
+  if (workbenchMode.value === 'opening') return '从一个真实观察开始'
+  if (workbenchMode.value === 'defense') return '把成果讲清楚，准备好回答'
   if (currentProject.value) return '围绕当前项目继续研究'
   return '先选择一个研究场景'
 })
 const aiContextDescription = computed(() => {
-  if (researchMode.value || brainstormMode.value) return 'AI 不会直接替你命题，会先追问、比较和整理，最后由你确认项目草稿。'
+  if (workbenchMode.value === 'opening') return 'AI 不会直接替你命题，会先追问、比较和整理，最后由你确认项目草稿。'
+  if (workbenchMode.value === 'defense') return 'AI 默认读取当前项目的已确认材料，帮助你准备答辩提纲、演示和问答。'
   if (currentProject.value) return 'AI 只读取当前项目和当前任务，不会替你创建新项目或直接提交材料。'
-  return '先选择已有项目，或进入“无课题”引导；未绑定项目时不会读取任何项目材料。'
+  return '先选择当前项目；未绑定项目时不会读取任何项目材料。'
 })
-const aiStepperLabels = computed(() => currentProject.value ? ['选择目标', '补充背景', '得到建议', '确认保存'] : ['发现现象', '打开问题', '头脑风暴', '共同成题'])
+const aiStepperLabels = computed(() => workbenchMode.value === 'defense' ? ['梳理成果', '模拟提问', '修正表达', '确认输出'] : currentProject.value ? ['选择目标', '补充背景', '得到建议', '确认保存'] : ['发现现象', '打开问题', '头脑风暴', '共同成题'])
 const isResearchLeader = computed(() => Boolean(currentProject.value && auth.user.value?.authorized && currentProject.value.leader === auth.user.value.id))
 
 function scrollToLatest(behavior: ScrollBehavior = 'smooth') {
@@ -283,7 +297,7 @@ function syncResearchArtifact(message?: AIConversationMessage) {
 }
 
 function goToBrainstorm() {
-  void router.push({ path: '/student/ai', query: { mode: 'brainstorm', agent: 'proposal-topic' } })
+  selectWorkbenchMode('opening')
 }
 
 function goToExistingProject() {
@@ -292,7 +306,15 @@ function goToExistingProject() {
     void router.push('/student/projects')
     return
   }
-  void router.push({ path: '/student/ai', query: { projectId: String(projectId) } })
+  void router.push({ path: '/student/ai', query: { mode: 'research', projectId: String(projectId) } })
+}
+
+function selectWorkbenchMode(mode: AIWorkspaceMode) {
+  const projectId = currentProject.value?.id ?? projectFilter.value ?? auth.user.value?.primaryProject ?? projects.value.find((project) => project.status === 'active')?.id ?? null
+  const query: Record<string, string> = { mode }
+  if (mode === 'opening') query.agent = 'proposal-topic'
+  else if (projectId) query.projectId = String(projectId)
+  void router.push({ path: '/student/ai', query })
 }
 
 function openScienceAgentPicker() {
@@ -302,7 +324,18 @@ function openScienceAgentPicker() {
 
 function fillQuickPrompt(prompt: string) {
   draft.value = prompt
-  void nextTick(() => document.querySelector<HTMLTextAreaElement>('.composer textarea')?.focus())
+  void nextTick(() => document.querySelector<HTMLTextAreaElement>('.ai-workbench-composer__textarea')?.focus())
+}
+
+function citeProjectMaterial() {
+  if (workbenchMode.value === 'opening') return
+  referencedSources.value = materials.value.slice(0, 3).map((material) => material.title)
+  contextOpen.value = true
+  streamNotice.value = referencedSources.value.length ? `已打开 ${referencedSources.value.length} 份当前项目材料，可在提问时引用。` : '当前项目暂时没有可引用材料。'
+}
+
+function updateAgentInput(key: string, value: string) {
+  agentInputs.value[key] = value
 }
 
 function advanceFromObservation() {
@@ -519,18 +552,18 @@ function chooseAgent(agent: AIAgent) {
   agentOpen.value = false
   researchSaveError.value = ''
   if (agent.key === 'proposal-topic') {
-    void router.push({ query: { ...route.query, researchQuestion: '1', agent: agent.key } })
+    void router.push({ query: { ...route.query, mode: route.query.mode || (currentProject.value ? 'research' : 'opening'), researchQuestion: '1', agent: agent.key } })
     researchStep.value = currentProject.value?.problem?.trim() ? 1 : 1
     prefillResearchFromProject(currentProject.value)
-  } else if (route.query.researchQuestion || route.query.mode) {
-    const query = { ...route.query }; delete query.researchQuestion; delete query.mode; query.agent = agent.key
+  } else if (route.query.researchQuestion) {
+    const query = { ...route.query }; delete query.researchQuestion; query.agent = agent.key
     void router.push({ query })
   }
   if (current.value) void updateAIConversation(current.value.id, { current_agent: agent.key })
 }
 async function changePaperType() { if (current.value && !sending.value) await updateAIConversation(current.value.id, { paper_type: paperType.value || null }) }
-async function saveArtifact(message: AIConversationMessage) { const material = materials.value.find((item) => item.id === targetMaterialId.value); const logId = Number(message.generation_log); const content = artifactDrafts.value[message.id] || message.artifact_payload?.draft || message.content; if (!material || !logId || !content) return; savingMessage.value = message.id; try { await saveAIGenerationAsMaterial(logId, { material: material.id, content, revision_note: '由全局 AI 对话保存为材料草稿' }) } catch (reason) { error.value = errorMessage(reason, '保存材料草稿失败。') } finally { savingMessage.value = null } }
-function onKeydown(event: KeyboardEvent) { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); void sendMessage() } }
+async function saveArtifact(message: AIConversationMessage) { const material = materials.value.find((item) => item.id === targetMaterialId.value); const logId = Number(message.generation_log); const content = artifactDrafts.value[message.id] || message.artifact_payload?.draft || message.content; if (!material) { error.value = '请选择要保存到的目标材料。'; return } if (!logId || !content) { error.value = '这份草稿还没有可保存的内容。'; return } savingMessage.value = message.id; try { await saveAIGenerationAsMaterial(logId, { material: material.id, content, revision_note: '由全局 AI 对话保存为材料草稿' }); streamNotice.value = `草稿已提交到材料“${material.title}”，请在材料页面继续审核。` } catch (reason) { error.value = errorMessage(reason, '保存材料草稿失败。') } finally { savingMessage.value = null } }
+function createProjectFromArtifact(message: AIConversationMessage) { const artifact = normalizeResearchQuestionArtifact(message.artifact_payload); if (!artifact) { error.value = '这份输出还不是结构化开题报告，请先继续对话整理。'; return } researchArtifact.value = artifact; researchSelectedIndex.value = artifact.recommended_index; researchDraft.value = artifact.candidates[artifact.recommended_index]?.question || ''; projectDraft.value = researchProjectDraftFromArtifact(artifact, artifact.recommended_index); researchStep.value = 4; streamNotice.value = '已将开题报告放入确认区，确认后才会创建项目。' }
 function onGlobalKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
   agentOpen.value = false
@@ -560,7 +593,7 @@ async function reloadForRouteContext() {
   if (applyingRouteContext) return
   applyingRouteContext = true
   try {
-    projectFilter.value = brainstormMode.value ? null : queryNumber(route.query.projectId)
+    projectFilter.value = brainstormMode.value ? null : queryNumber(route.query.projectId) ?? auth.user.value?.primaryProject ?? projects.value.find((project) => project.status === 'active')?.id ?? null
     taskId.value = queryNumber(route.query.taskId) ?? undefined
     selectedAgent.value = routeAgent()
     resetConversationSelection()
@@ -588,40 +621,41 @@ watch(() => route.query.researchQuestion, (value) => {
   }
 })
 watch(() => route.query.mode, (value) => {
-  if (value === 'brainstorm') {
+  if (value === 'brainstorm' || value === 'opening') {
     projectFilter.value = null
     selectedAgent.value = 'proposal-topic'
   }
 })
 watch(currentProject, (project) => prefillResearchFromProject(project), { immediate: true })
-onMounted(async () => { window.addEventListener('keydown', onGlobalKeydown); try { if (brainstormMode.value) { projectFilter.value = null; selectedAgent.value = 'proposal-topic' } const [projectResponse, agentResponse] = await Promise.all([getProjects(), getAIAgents()]); projects.value = projectResponse.data; agents.value = agentResponse.data; if (brainstormMode.value) { await refreshConversationList(); await newConversation() } else { await loadConversations(); if (!selectedId.value) await newConversation() } } catch (reason) { error.value = errorMessage(reason, 'AI 工作台加载失败。') } finally { loading.value = false; await nextTick(); scrollToLatest('auto') } })
+onMounted(async () => { window.addEventListener('keydown', onGlobalKeydown); try { if (brainstormMode.value) { projectFilter.value = null; selectedAgent.value = 'proposal-topic' } const [projectResponse, agentResponse] = await Promise.all([getProjects(), getAIAgents()]); projects.value = projectResponse.data; agents.value = agentResponse.data; if (!brainstormMode.value && projectFilter.value === null) projectFilter.value = queryNumber(route.query.projectId) ?? auth.user.value?.primaryProject ?? projects.value.find((project) => project.status === 'active')?.id ?? null; if (brainstormMode.value) { await refreshConversationList(); await newConversation() } else { await loadConversations(); if (!selectedId.value) await newConversation() } } catch (reason) { error.value = errorMessage(reason, 'AI 工作台加载失败。') } finally { loading.value = false; await nextTick(); scrollToLatest('auto') } })
 onBeforeUnmount(() => { window.removeEventListener('keydown', onGlobalKeydown); requestVersion.value += 1; abortActiveStream() })
 </script>
 
 <template>
   <div class="page ai-center-page">
     <PageHeader eyebrow="AI 助手" :title="researchMode ? '一步一步把问题想清楚' : '灵思 AI'" :description="aiPageDescription" />
+    <AIModeTabs :model-value="workbenchMode" :agents="modeAgents" :selected-agent="selectedAgent" :disabled="sending" @update:model-value="selectWorkbenchMode" @select-agent="chooseAgent" @more-agents="openScienceAgentPicker" />
     <div class="conversation-page">
     <AIConversationHistory v-if="historyOpen" :groups="visibleConversationGroups" :selected-id="selectedId" :sending="sending" :search="conversationSearch" :show-archived="showArchived" @update:search="conversationSearch = $event" @new="void newConversation()" @select="void selectConversation($event)" @toggle-archived="showArchived = !showArchived" @close="historyOpen = false" />
 
     <div class="ai-simple-layout" :class="{ 'is-research-mode': researchMode }">
       <section class="chat-main ai-main-panel">
         <header class="chat-header"><div><span class="eyebrow">灵思 AI · 研究伙伴</span><div v-if="renaming" class="rename-row"><input v-model="titleDraft" aria-label="对话标题" @keydown.enter="void saveRename()" /><button type="button" :disabled="sending" @click="void saveRename()">保存</button><button type="button" :disabled="sending" @click="renaming = false">取消</button></div><div v-else class="title-row"><h2>{{ researchMode ? '研究问题引导' : currentDisplayTitle }}</h2><button v-if="current && !current.is_archived && !researchMode" class="rename-button" type="button" :disabled="sending" @click="startRename">重命名对话</button></div><small>{{ researchMode ? 'AI 会追问、比较和整理；最终决定权在你。' : workspaceContextLabel }}</small></div><div class="chat-actions"><button v-if="!researchMode" type="button" :aria-expanded="historyOpen" aria-controls="conversation-history" @click="historyOpen = !historyOpen">历史对话</button><button v-if="!researchMode" type="button" :disabled="sending" :aria-label="`选择 AI 工具（${agents.length} 个）${currentAgent ? ` · ${currentAgent.name}` : ''}`" aria-controls="agent-menu" :aria-expanded="agentOpen" @click="agentOpen = !agentOpen">科创 Agent{{ currentAgent ? ` · ${currentAgent.name}` : '' }}⌄</button><button v-if="current && !current.is_archived && !researchMode" type="button" :disabled="sending" @click="archiveCurrent">归档</button></div></header>
-        <AIContextChooser :brainstorm="brainstormMode" :agent-active="agentOpen" :disabled="sending" @existing="goToExistingProject" @brainstorm="goToBrainstorm" @agent="openScienceAgentPicker" />
+        <AIContextChooser v-if="!researchMode && !loading && !messages.length" :brainstorm="brainstormMode" :agent-active="agentOpen" :disabled="sending" @existing="goToExistingProject" @brainstorm="goToBrainstorm" @agent="openScienceAgentPicker" />
         <div v-if="!researchMode" class="ai-context-summary"><div><p class="eyebrow">当前使用场景</p><h2>{{ aiContextTitle }}</h2><p>{{ aiContextDescription }}</p></div><span class="ai-context-status">{{ currentProject ? '已有项目 · 当前任务' : brainstormMode ? '无项目 · 选题引导' : '等待选择场景' }}</span></div>
         <div v-if="!researchMode && !loading && !messages.length" class="ai-stepper-simple" aria-label="AI 工作方式"><div v-for="(label, index) in aiStepperLabels" :key="label" class="ai-step-simple" :class="{ active: index === 0 }"><span>{{ index + 1 }}</span><small>{{ label }}</small></div></div>
         <div v-if="!researchMode && !loading && !messages.length" class="ai-guide-card"><AIProjectAssistant :project="currentProject" @prompt="fillQuickPrompt" @choose-project="router.push('/student/projects')" /></div>
       <AIToolPicker v-if="agentOpen" :categories="agentCategories" :groups="groupedAgents" :search="agentSearch" :category="agentCategory" :sending="sending" @update:search="agentSearch = $event" @update:category="agentCategory = $event" @choose="chooseAgent" />
       <AIResearchWizard v-if="researchMode && !loading" :workspace-mode="workspaceMode === 'brainstorm' ? 'brainstorm' : 'project'" :workspace-context-label="workspaceContextLabel" :research-step="researchStep" :research-inputs="researchInputs" :research-artifact="researchArtifact" :research-selected-index="researchSelectedIndex" :research-draft="researchDraft" :research-save-confirm="researchSaveConfirm" :research-saved="researchSaved" :research-save-error="researchSaveError" :research-fallback="researchFallback" :project-draft="projectDraft" :current-project="currentProject" :sending="sending" :creating-project="creatingProject" :project-created="projectCreated" @update:research-step="researchStep = $event" @update:research-draft="researchDraft = $event" @update:research-save-confirm="researchSaveConfirm = $event" @update:research-fallback="researchFallback = $event; projectDraft.problem = $event" @advance-from-observation="advanceFromObservation" @generate="void generateResearchCandidates()" @choose-candidate="chooseResearchCandidate" @edit-candidate="editResearchCandidate" @open-draft="openResearchDraft" @request-save="requestResearchSave" @create-project="void createProjectFromResearch()" @save-question="void saveResearchQuestion()" @copy-question="copyResearchQuestion" />
       <div v-if="error" class="error-banner">{{ error }}</div><div v-if="streamNotice" class="stream-notice">{{ streamNotice }}</div>
-      <section v-if="!researchMode && (loading || messages.length)" ref="chatStreamRef" class="chat-stream" aria-live="polite" :aria-busy="sending" @scroll="updateScrollAffordance"><div v-if="loading" class="empty-state">正在加载对话…</div><article v-for="message in messages" :key="message.id" class="message" :class="message.role"><div class="message-label">{{ message.role === 'user' ? '你' : '灵思 AI' }}</div><div class="message-body">{{ message.content || (message.status === 'queued' ? '正在排队…' : message.status === 'streaming' ? '正在生成…' : '') }}<div v-if="message.status === 'failed'" class="message-error"><span>{{ message.error_message || '生成失败' }}</span><button type="button" class="retry-button" :disabled="sending" @click="retryMessage(message)">{{ sending ? '重试中…' : '重试' }}</button></div><div v-if="message.artifact_payload?.draft" class="artifact-card"><b>{{ message.artifact_payload.title || '可编辑草稿' }}</b><textarea v-model="artifactDrafts[message.id]" :placeholder="message.artifact_payload.draft" rows="5" /><small>核验项：{{ message.verification_items?.length || 0 }} 项 · {{ message.artifact_payload.next_action || '请核对事实与引用' }}</small><label v-if="materials.length" class="target-material"><span>保存到指定材料</span><select v-model="targetMaterialId"><option :value="null">请选择目标材料</option><option v-for="material in materials" :key="material.id" :value="material.id">{{ material.title }}</option></select></label><button v-if="materials.length && message.status === 'completed'" type="button" class="save-draft" :disabled="savingMessage === message.id || !targetMaterialId" @click="saveArtifact(message)">{{ savingMessage === message.id ? '保存中…' : '保存到指定材料' }}</button></div></div></article></section>
+      <section v-if="!researchMode && (loading || messages.length)" ref="chatStreamRef" class="chat-stream" aria-live="polite" :aria-busy="sending" @scroll="updateScrollAffordance"><div v-if="loading" class="empty-state">正在加载对话…</div><article v-for="message in messages" :key="message.id" class="message" :class="message.role"><div class="message-label">{{ message.role === 'user' ? '你' : '灵思 AI' }}</div><div class="message-body">{{ message.content || (message.status === 'queued' ? '正在排队…' : message.status === 'streaming' ? '正在生成…' : '') }}<div v-if="message.status === 'failed'" class="message-error"><span>{{ message.error_message || '生成失败' }}</span><button type="button" class="retry-button" :disabled="sending" @click="retryMessage(message)">{{ sending ? '重试中…' : '重试' }}</button></div><div v-if="message.artifact_payload?.draft" class="artifact-card"><b>{{ message.artifact_payload.title || '可编辑草稿' }}</b><textarea v-model="artifactDrafts[message.id]" :placeholder="message.artifact_payload.draft" rows="5" /><small>核验项：{{ message.verification_items?.length || 0 }} 项 · {{ message.artifact_payload.next_action || '请核对事实与引用' }}</small><label v-if="materials.length" class="target-material"><span>保存到指定材料</span><select v-model="targetMaterialId"><option :value="null">请选择目标材料</option><option v-for="material in materials" :key="material.id" :value="material.id">{{ material.title }}</option></select></label><AIDraftActions :mode="workbenchMode" :status="message.status" :can-save-material="Boolean(materials.length)" :can-create-project="workbenchMode === 'opening'" :saving="savingMessage === message.id" @save-material="void saveArtifact(message)" @create-project="createProjectFromArtifact(message)" /></div></div></article></section>
       <button v-if="!researchMode && showJumpLatest" type="button" class="jump-latest" @click="scrollToLatest()">↓ 跳到最新消息</button>
-      <footer v-if="(!researchMode && currentProject) || researchSaved" class="composer"><details v-if="!researchMode && currentAgent?.input_schema?.length" class="input-details"><summary>补充信息（可选）</summary><p class="input-help">填写后可让 AI 工具更准确；不填写也可以直接提问。</p><label v-for="field in currentAgent.input_schema" :key="field.key">{{ field.label }}<textarea v-if="field.type === 'textarea'" v-model="agentInputs[field.key]" :placeholder="field.placeholder" rows="2" /><input v-else v-model="agentInputs[field.key]" :placeholder="field.placeholder" /></label></details><div class="composer-meta"><span>{{ currentAgent ? `使用 ${currentAgent.name}` : '自由咨询' }}</span><span>{{ currentProject ? `项目：${currentProject.title}` : '未绑定项目' }}</span></div><textarea v-model="draft" :disabled="sending || current?.is_archived" placeholder="输入问题，或输入 / 选择一个 AI 工具…" rows="3" @keydown="onKeydown" /><div class="composer-footer"><small>Enter 发送 · Shift+Enter 换行</small><button class="send-button" type="button" :disabled="sending || !draft.trim() || !selectedId" @click="void sendMessage()">{{ sending ? '生成中…' : '发送' }}</button></div></footer>
+      <AIWorkbenchComposer v-if="(!researchMode && currentProject) || researchSaved" :draft="draft" :mode="workbenchMode" :agent-name="currentAgent?.name" :project-label="currentProject ? `项目：${currentProject.title}` : '已确认草稿'" :input-schema="!researchMode ? currentAgent?.input_schema : undefined" :input-values="agentInputs" :input-help="`${aiInputHelp}：${aiInputHelpDescription}`" :disabled="sending || Boolean(current?.is_archived)" :can-send="Boolean(draft.trim() && selectedId)" :referenced-count="referencedSources.length" :sending="sending" @update:draft="draft = $event" @update:input="updateAgentInput" @send="void sendMessage()" @cite-material="citeProjectMaterial" />
       </section>
 
-      <aside v-if="!researchMode" class="ai-scope-card"><p class="eyebrow">AI 的边界</p><h2>{{ currentProject ? '只帮助当前项目' : '你决定，AI 陪你想' }}</h2><ul><li>AI 会追问和整理，不直接替你下结论</li><li>{{ currentProject ? '不会切换到其他项目' : '确认草稿前不会创建空项目' }}</li><li>每次生成后都由你检查和确认</li></ul><div class="ai-scope-divider" /><p class="eyebrow">下一步</p><strong>{{ currentProject ? '确认建议是否可用' : '先选择已有项目或进入选题引导' }}</strong><p class="ai-note">{{ currentProject ? '建议只作为研究过程中的辅助，保存前请核对事实和引用。' : '无课题时，AI 会从现象、问题和头脑风暴开始，不会直接替你命题。' }}</p><button class="scope-context-button" type="button" @click="contextOpen = !contextOpen">{{ contextOpen ? '收起上下文设置' : '查看上下文设置' }}</button></aside>
+      <aside v-if="!researchMode" class="ai-scope-card"><p class="eyebrow">AI 的边界</p><h2>{{ currentProject ? '只帮助当前项目' : '先选择一个项目' }}</h2><ul><li>AI 会追问和整理，不直接替你下结论</li><li>{{ currentProject ? '不会切换到其他项目' : '未绑定项目时不会读取项目材料' }}</li><li>每次生成后都由你检查和确认</li></ul><div class="ai-scope-divider" /><p class="eyebrow">下一步</p><strong>{{ currentProject ? '确认建议是否可用' : '选择当前项目后开始研究' }}</strong><p class="ai-note">{{ currentProject ? '建议只作为研究过程中的辅助，保存前请核对事实和引用。' : '开题请切换到开题模式；研究和答辩只绑定当前项目。' }}</p><button class="scope-context-button" type="button" @click="contextOpen = !contextOpen">{{ contextOpen ? '收起上下文设置' : '查看上下文设置' }}</button></aside>
     </div>
-    <aside v-if="contextOpen" id="conversation-context" class="context-panel"><div class="context-heading"><b>项目上下文</b><button type="button" aria-label="关闭上下文设置" @click="contextOpen = false">×</button></div><p class="eyebrow">当前项目</p><h3>{{ currentProject?.title || '未绑定项目' }}</h3><p class="muted">当前对话只能绑定一个项目，切换项目请新建对话。</p><label v-if="currentAgent?.workflow === 'paper'" class="paper-picker"><span class="eyebrow">论文类型</span><select v-model="paperType" @change="changePaperType"><option value="">请选择</option><option v-for="item in paperTypes" :key="item.value" :value="item.value">{{ item.label }}</option></select></label><p class="eyebrow">可读取范围</p><ul><li>项目基本信息</li><li>当前任务与材料</li><li>AI 工具允许读取的项目摘要</li></ul><p class="eyebrow">当前 AI 工具</p><p>{{ currentAgent?.name || '自由咨询' }}</p></aside>
+    <AIContextDrawer :open="contextOpen" :mode="workbenchMode" :project="currentProject" :materials="materials" :agent="currentAgent" :paper-type="paperType" :paper-types="paperTypes" :referenced-sources="referencedSources" @close="contextOpen = false" @update-paper-type="paperType = $event; void changePaperType()" />
     </div>
   </div>
 </template>
