@@ -7,9 +7,9 @@ describe('application routes', () => {
     const paths = routeRecords.flatMap((route) => [route.path, ...(route.children ?? []).map((child) => `${route.path}/${child.path}`.replace(/\/+/g, '/'))])
     expect(paths).toEqual(expect.arrayContaining([
       '/', '/login', '/register', '/platform/login', '/student/home', '/student/projects', '/student/projects/:id/map',
-      '/student/projects/:id/tasks/:taskId', '/student/projects/:id/materials', '/student/projects/:id/report',
+      '/student/projects/:id', '/student/projects/:id/tasks/:taskId', '/student/projects/:id/materials', '/student/projects/:id/report',
       '/student/ai', '/student/notifications', '/teacher/home', '/teacher/pool', '/teacher/reviews/:submissionId', '/teacher/members',
-      '/teacher/notifications',
+      '/teacher/projects/:id', '/teacher/projects/:id/template', '/teacher/notifications',
       '/platform/home', '/platform/schools/:id', '/platform/settings',
     ]))
   })

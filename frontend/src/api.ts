@@ -1,4 +1,4 @@
-import axios, { AxiosError } from 'axios'
+import axios, { AxiosError, type AxiosResponse } from 'axios'
 
 import type { AuthRole } from './stores/authModel'
 import type { UnifiedStatus } from './stores/status'
@@ -26,7 +26,7 @@ export interface ProjectMember { id: number; account: number; username: string; 
 export interface Project {
   id: number; school: number; school_name: string; title: string; problem: string; plan: string; summary: string
   leader: number; primary_teacher: number | null
-  project_type: 'research' | 'invention' | 'engineering'; status: 'unclaimed' | 'active' | 'completed'; lifecycle_status?: ProjectLifecycleState
+  project_type: 'research' | 'invention' | 'engineering'; status: ProjectLifecycleState
   members: ProjectMember[]
   growth: { experience: number; level: number; streak_days: number; achievements: string[]; title: string }
   is_archived: boolean; archived_at: string | null
@@ -61,7 +61,7 @@ export interface AISource { kind: 'task' | 'material' | 'attachment'; id: number
 export interface AIArtifactOutput { title?: string; draft?: string; next_action?: string; project_title?: string; project_type?: Project['project_type']; project_plan?: string; candidates?: ResearchQuestionCandidate[]; recommended_index?: number; missing_information?: string[]; [key: string]: unknown }
 export interface VerificationItem { item: string; status: string; guidance?: string }
 export interface AIGeneration { id: number; project: number; actor: number; actor_name: string; purpose: string; prompt: string; context_scope: AIContextScope; task: number | null; material: number | null; agent_key?: string | null; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' | null; output: string; artifact_payload?: AIArtifactOutput; verification_items?: VerificationItem[]; saved_material_revision?: number | null; model_name: string; status: 'queued' | 'processing' | 'completed' | 'failed'; error_message: string; created_at: string; completed_at: string | null; referenced_sources: AISource[] }
-export interface ProjectTask { id: number; project: Project['id']; stage_name: string; stage_order: number; title: string; description: string; status: JourneyTaskState }
+export interface ProjectTask extends Omit<ApiTask, 'status'> { status: JourneyTaskState; legacy_status: 'locked' | null }
 export interface ProjectTaskBrief extends ProjectTask {}
 export interface ServiceStatus { database: string; task_queue: string; virus_scan: string; document_converter: string; storage: string; ai: string }
 export interface AIAvailability { status: 'configured' | 'not_configured' | 'quota_exhausted' | 'unavailable'; remaining_quota: number }
@@ -132,7 +132,6 @@ export const getProjects = (params?: { include_archived?: boolean; only_archived
 export const getTrashedProjects = () => api.get<Project[]>('projects/trashed/')
 export const getProject = (id: number) => api.get<Project>(`projects/${id}/`)
 export const createProject = (payload: Pick<Project, 'title' | 'problem' | 'plan' | 'project_type'>) => api.post<Project>('projects/', payload)
-export const updateProjectBasics = (id: number, payload: Partial<Pick<Project, 'title' | 'problem' | 'plan' | 'summary'>>) => api.post<Project>(`projects/${id}/update_basics/`, payload)
 export const archiveProject = (id: number) => api.post<Project>(`projects/${id}/archive/`)
 export const unarchiveProject = (id: number) => api.post<Project>(`projects/${id}/unarchive/`)
 export const trashProject = (id: number) => api.post<Project>(`projects/${id}/trash/`)
@@ -198,24 +197,30 @@ export const resubmitPublicCase = (id: number, payload: Partial<{ public_summary
 export const approvePublicCase = (id: number) => api.post<PublicCase>(`public-case-requests/${id}/teacher_approve/`)
 export const rejectPublicCase = (id: number, comment: string) => api.post<PublicCase>(`public-case-requests/${id}/teacher_reject/`, { comment })
 export const getAIGenerations = (project?: number) => api.get<AIGeneration[]>('ai-logs/', { params: project ? { project } : undefined })
-export const getProjectTasks = (project?: number) => api.get<ApiTask[]>('project-tasks/', { params: project ? { project } : undefined })
+type ProjectTaskApiStatus = JourneyTaskState | 'locked'
+type ProjectTaskApiResponse = Omit<ProjectTask, 'status' | 'legacy_status'> & { status: ProjectTaskApiStatus }
+
+export function normalizeProjectTask(task: ProjectTaskApiResponse): ProjectTask {
+  const { status, ...rest } = task
+  if (status === 'locked') return { ...rest, status: 'available', legacy_status: 'locked' }
+  return { ...rest, status, legacy_status: null }
+}
+
+function normalizeProjectTaskResponse(response: AxiosResponse<ProjectTaskApiResponse[]>): AxiosResponse<ProjectTask[]> {
+  return { ...response, data: response.data.map(normalizeProjectTask) }
+}
+
+export const getProjectTasks = (project?: number) => api.get<ProjectTaskApiResponse[]>('project-tasks/', { params: project ? { project } : undefined }).then(normalizeProjectTaskResponse)
 export const createAIGeneration = (payload: { project: number; purpose?: string; prompt: string; input_values?: Record<string, string>; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' }) => api.post<AIGeneration>('ai-logs/', payload)
 export interface AIConversation { id: number; title: string; project: Project['id'] | null; project_title: string | null; paper_type: string | null; current_agent: string | null; workspace_mode?: AIWorkspaceMode | null; current_project?: CurrentProjectContext | null; is_archived: boolean; updated_at: string; created_at: string }
 export interface AIConversationMessage { id: number; role: 'user' | 'assistant' | 'system'; content: string; status: 'queued' | 'streaming' | 'completed' | 'failed'; generation_log?: number | null; artifact_payload?: AIArtifactOutput | null; verification_items?: Array<VerificationItem | string>; error_message?: string; created_at: string }
 export interface AIConversationMessageInput { content: string; agent_key?: string; project?: number | null; task?: number; paper_type?: string; input_values?: Record<string, string>; context_scope?: AIContextScope }
 export const getAIConversations = (params?: { project?: number; include_archived?: boolean }) => api.get<AIConversation[]>('ai-conversations/', { params })
-export const createAIConversation = (payload: { title?: string; project?: number | null; paper_type?: string | null; current_agent?: string | null }) => {
-  const cleanPayload = Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== null && value !== undefined))
-  return api.post<AIConversation>('ai-conversations/', cleanPayload)
-}
-export const updateAIConversation = (id: number, payload: Partial<Pick<AIConversation, 'title' | 'paper_type' | 'current_agent'>>) => {
-  const cleanPayload = Object.fromEntries(Object.entries(payload).filter(([, value]) => value !== null && value !== undefined))
-  return api.patch<AIConversation>(`ai-conversations/${id}/`, cleanPayload)
-}
+export const createAIConversation = (payload: { title?: string; project?: number | null; paper_type?: string | null; current_agent?: string | null }) => api.post<AIConversation>('ai-conversations/', payload)
+export const updateAIConversation = (id: number, payload: Partial<Pick<AIConversation, 'title' | 'paper_type' | 'current_agent'>>) => api.patch<AIConversation>(`ai-conversations/${id}/`, payload)
 export const archiveAIConversation = (id: number) => api.post<AIConversation>(`ai-conversations/${id}/archive/`)
 export const getAIConversationMessages = (id: number) => api.get<AIConversationMessage[]>(`ai-conversations/${id}/messages/`)
 export const createAIConversationMessage = (id: number, payload: AIConversationMessageInput) => api.post<AIConversationMessage>(`ai-conversations/${id}/messages/`, payload)
-export const retryAIConversationMessage = (conversationId: number, messageId: number) => api.post<AIConversationMessage>(`ai-conversations/${conversationId}/messages/${messageId}/retry/`)
 
 function csrfToken() { return document.cookie.split('; ').find((item) => item.startsWith('csrftoken='))?.split('=').slice(1).join('=') || '' }
 export async function streamAIConversationMessage(id: number, messageId: number, onEvent: (event: { id?: string; event: string; data: Record<string, unknown> }) => void, signal?: AbortSignal, lastEventId?: string) {
