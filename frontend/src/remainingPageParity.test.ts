@@ -1,0 +1,117 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
+
+describe('remaining Demo B page parity', () => {
+  it('keeps student and teacher collections compact at desktop density', () => {
+    const studentProjects = read('./pages/student/StudentProjects.vue')
+    const teacherWorkbench = read('./pages/teacher/TeacherWorkbench.vue')
+
+    expect(studentProjects).toContain('const pageSize = 2')
+    expect(studentProjects).toContain('eyebrow="项目" title="我的项目"')
+    expect(studentProjects).toContain('class="paper-card demo-project-list"')
+    expect(studentProjects).toContain('class="pilot-list-row"')
+    expect(studentProjects).not.toContain('新建项目时，你可以选择')
+    expect(studentProjects).not.toContain('class="demo-project-create-grid"')
+    expect(studentProjects).toContain('const focusMessage = computed')
+    expect(teacherWorkbench).toContain('class="pool-compact-list"')
+    expect(teacherWorkbench).toContain('visiblePool')
+    expect(teacherWorkbench).toContain('pool-pagination')
+  })
+
+  it('uses bounded tables and accordion detail instead of unbounded pages', () => {
+    const agents = read('./pages/platform/PlatformAIAgents.vue')
+    const platformConsole = read('./pages/platform/PlatformConsole.vue')
+    const platformCases = read('./pages/platform/PlatformCases.vue')
+    const platformSettings = read('./pages/platform/PlatformSettings.vue')
+    const template = read('./pages/teacher/TeacherProjectTemplate.vue')
+    const school = read('./pages/platform/SchoolDetail.vue')
+
+    expect(agents).toContain('pagedAgents')
+    expect(agents).toContain('const pageSize = 3')
+    expect(agents).toContain('class="demo-agent-table table-wrap"')
+    expect(agents).toContain('class="agent-pagination"')
+    expect(template).toContain('openStage')
+    expect(template).toContain('class="template-stage template-accordion')
+    expect(template).toContain('editingMaterialId')
+    expect(template).toContain('class="template-material-row"')
+    expect(template).toContain('class="demo-template-layout"')
+    expect(template).toContain('class="demo-template-status paper-card"')
+    expect(template).toContain('draft.file = null')
+    expect(template).toContain(':aria-controls="`template-stage-${group.stageOrder}`"')
+    expect(template).toContain(':id="`template-stage-${group.stageOrder}`"')
+    expect(school).toContain('class="pilot-metric-grid school-metric-grid"')
+    expect(school).toContain('visibleAuditEvents')
+    expect(school).toContain('class="school-advanced"')
+    expect(school).toContain('class="audit-pagination"')
+    expect(school).toContain("'重新保存'")
+    expect(school).toContain('handleFeedbackAction')
+    expect(platformConsole).toContain('class="platform-school-list paper-card"')
+    expect(platformConsole).toContain('class="platform-content-grid"')
+    expect(platformCases).toContain('class="demo-governance-grid"')
+    expect(platformSettings).toContain('class="demo-settings-layout"')
+  })
+
+  it('uses the Scheme B compact case cards and two-column task workspace', () => {
+    const library = read('./pages/shared/ContentLibrary.vue')
+    const workspace = read('./styles/workspace.css')
+    const responsive = read('./styles/responsive.css')
+    const task = read('./pages/student/StudentTask.vue')
+
+    expect(library).not.toContain('class="case-cover"')
+    expect(library).not.toContain('class="case-card__mark"')
+    expect(task).toContain('class="task-layout demo-task-layout"')
+    expect(task).toContain('class="demo-task-main paper-card"')
+    expect(task).toContain('class="demo-task-aside"')
+    expect(task).not.toContain('class="task-progress-panel')
+    expect(task).toContain('grid-template-columns: minmax(0, 1.58fr) minmax(260px, .72fr)')
+    expect(workspace).not.toContain('.journey-hero::after')
+    expect(workspace).toContain('.journey-hero { min-height: 0;')
+  })
+
+  it('uses the Demo B compact list and card compositions for student secondary pages', () => {
+    const library = read('./pages/shared/ContentLibrary.vue')
+    const invitations = read('./pages/student/StudentInvitations.vue')
+    const applications = read('./pages/student/PublicCaseApplication.vue')
+
+    expect(library).toContain('class="demo-content-grid"')
+    expect(library).toContain('class="demo-content-card paper-card"')
+    expect(invitations).toContain('eyebrow="项目协作"')
+    expect(invitations).toContain('class="demo-invitation-list paper-card"')
+    expect(applications).toContain('eyebrow="成果" title="公开成果申请"')
+    expect(applications).toContain('class="demo-application-list paper-card"')
+  })
+
+  it('uses the Demo B journey, material archive and report compositions', () => {
+    const project = read('./pages/student/StudentProject.vue')
+
+    expect(project).toContain('class="demo-journey-summary paper-card"')
+    expect(project).toContain('class="demo-chapter-accordion paper-card"')
+    expect(project).toContain('class="demo-journey-actions"')
+    expect(project).toContain('class="demo-material-archive paper-card"')
+    expect(project).toContain('class="demo-report-grid"')
+    expect(project).not.toContain('<JourneyHero')
+    expect(project).not.toContain('<JourneyTimeline')
+    expect(project).not.toContain('<JourneyDeliveryBoard')
+  })
+
+  it('keeps teacher project lists bounded and the AI editor on the shared form grid', () => {
+    const teacherWorkbench = read('./pages/teacher/TeacherWorkbench.vue')
+    const teacherDetail = read('./pages/teacher/TeacherProjectDetail.vue')
+    const agents = read('./pages/platform/PlatformAIAgents.vue')
+
+    expect(teacherWorkbench).toContain('visibleTeacherProjects')
+    expect(teacherWorkbench).toContain('teacherProjectPageSize = 3')
+    expect(teacherWorkbench).toContain('class="teacher-project-pagination"')
+    expect(teacherWorkbench).toContain('class="pool-filter-bar filter-bar"')
+    expect(teacherWorkbench).toContain('class="teacher-project-table table-wrap"')
+    expect(teacherDetail).toContain('class="demo-teacher-detail-layout"')
+    expect(teacherDetail).toContain('class="demo-teacher-chapters paper-card"')
+    expect(teacherDetail).toContain('class="demo-teacher-detail-aside"')
+    expect(teacherWorkbench).toContain('class="demo-member-list paper-card"')
+    expect(agents).toContain('.agent-form { display: grid;')
+    expect(agents).toContain('.agent-form input, .agent-form textarea, .agent-form select')
+    expect(agents).toContain('.dialog-footer { display: flex;')
+  })
+})

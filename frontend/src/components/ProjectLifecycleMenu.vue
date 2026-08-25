@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ArrowDown, Delete, Folder, RefreshRight, Star } from '@element-plus/icons-vue'
 
 import type { Project } from '../api'
@@ -20,12 +20,18 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
+const trigger = ref<HTMLButtonElement | null>(null)
+const panel = ref<HTMLElement | null>(null)
+const menuId = `lifecycle-menu-${props.project.id}`
 
 function toggle() {
-  if (props.project.deleted_at) return
   open.value = !open.value
+  if (open.value) void nextTick(() => panel.value?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus())
 }
-function close() { open.value = false }
+function close(restoreFocus = false) {
+  open.value = false
+  if (restoreFocus) void nextTick(() => trigger.value?.focus())
+}
 function handle(target: 'primary' | 'archive' | 'unarchive' | 'trash' | 'restore') {
   close()
   ;(emit as (event: typeof target) => void)(target)
@@ -35,24 +41,34 @@ function onDocumentClick(event: MouseEvent) {
   if (!root.value) return
   if (!root.value.contains(event.target as Node)) close()
 }
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && open.value) close(true)
+}
 
 onMounted(() => document.addEventListener('mousedown', onDocumentClick))
-onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick))
+onMounted(() => document.addEventListener('keydown', onKeydown))
+onBeforeUnmount(() => {
+  document.removeEventListener('mousedown', onDocumentClick)
+  document.removeEventListener('keydown', onKeydown)
+})
 </script>
 
 <template>
   <div ref="root" class="lifecycle-menu" v-on:click.stop>
     <button
       class="lifecycle-menu__trigger secondary-button"
+      ref="trigger"
       type="button"
       :aria-expanded="open"
+      aria-haspopup="menu"
+      :aria-controls="menuId"
       :disabled="!authorized"
       @click="toggle"
     >
       管理项目 <el-icon><ArrowDown /></el-icon>
     </button>
-    <ul v-if="open" class="lifecycle-menu__panel" role="menu">
-      <li v-if="studentMode && !project.is_primary && !project.deleted_at && !project.is_archived">
+    <ul v-if="open" ref="panel" :id="menuId" class="lifecycle-menu__panel" role="menu" aria-label="项目操作">
+      <li v-if="studentMode && !project.is_primary && !project.deleted_at && !project.is_archived" role="none">
         <button type="button" role="menuitem" @click="handle('primary')">
           <el-icon><Star /></el-icon>
           <span>
@@ -61,7 +77,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
           </span>
         </button>
       </li>
-      <li v-if="!project.is_archived && !project.deleted_at && project.status === 'completed'">
+      <li v-if="!project.is_archived && !project.deleted_at && project.status === 'completed'" role="none">
         <button type="button" role="menuitem" @click="handle('archive')">
           <el-icon><Folder /></el-icon>
           <span>
@@ -70,7 +86,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
           </span>
         </button>
       </li>
-      <li v-if="project.is_archived && !project.deleted_at">
+      <li v-if="project.is_archived && !project.deleted_at" role="none">
         <button type="button" role="menuitem" @click="handle('unarchive')">
           <el-icon><RefreshRight /></el-icon>
           <span>
@@ -79,7 +95,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
           </span>
         </button>
       </li>
-      <li v-if="!project.deleted_at">
+      <li v-if="!project.deleted_at" role="none">
         <button type="button" role="menuitem" class="lifecycle-menu__danger" @click="handle('trash')">
           <el-icon><Delete /></el-icon>
           <span>
@@ -88,7 +104,7 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
           </span>
         </button>
       </li>
-      <li v-else>
+      <li v-else role="none">
         <button type="button" role="menuitem" @click="handle('restore')">
           <el-icon><RefreshRight /></el-icon>
           <span>

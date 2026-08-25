@@ -14,7 +14,7 @@ export const routeRecords: RouteRecordRaw[] = [
   { path: '/platform/login', name: 'platform-login', component: () => import('./pages/public/PlatformLoginPage.vue'), meta: { public: true } },
   {
     path: '/student', component: StudentLayout, meta: { role: 'student' }, redirect: '/student/home', children: [
-      { path: 'home', name: 'student-home', component: () => import('./pages/student/StudentHome.vue') },
+      { path: 'home', name: 'student-home', component: () => import('./pages/student/StudentHome.vue'), meta: { layout: 'hero' } },
       { path: 'projects', name: 'student-projects', component: () => import('./pages/student/StudentProjects.vue') },
       { path: 'projects/:id', name: 'student-project', component: () => import('./pages/student/StudentProject.vue'), meta: { surface: 'overview' } },
       { path: 'projects/:id/map', name: 'student-map', component: () => import('./pages/student/StudentProject.vue'), meta: { surface: 'map' } },
@@ -32,7 +32,7 @@ export const routeRecords: RouteRecordRaw[] = [
   },
   {
     path: '/teacher', component: TeacherLayout, meta: { role: 'teacher' }, redirect: '/teacher/home', children: [
-      { path: 'home', name: 'teacher-home', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'home' } },
+      { path: 'home', name: 'teacher-home', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'home', layout: 'hero' } },
       { path: 'pool', name: 'teacher-pool', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'pool' } },
       { path: 'projects', name: 'teacher-projects', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'projects' } },
       { path: 'projects/:id', name: 'teacher-project', component: () => import('./pages/teacher/TeacherProjectDetail.vue') },
@@ -41,7 +41,7 @@ export const routeRecords: RouteRecordRaw[] = [
       { path: 'reviews/:submissionId', name: 'teacher-review', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'review' } },
       { path: 'members', name: 'teacher-members', component: () => import('./pages/teacher/TeacherWorkbench.vue'), meta: { surface: 'members' } },
       { path: 'ai', redirect: '/teacher/reviews' },
-      { path: 'notifications', name: 'teacher-notifications', component: () => import('./pages/teacher/TeacherAnnouncements.vue') },
+      { path: 'notifications', name: 'teacher-notifications', component: () => import('./pages/teacher/TeacherNotifications.vue') },
       { path: 'cases', name: 'teacher-cases', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'cases' } },
       { path: 'competitions', name: 'teacher-competitions', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'competitions' } },
       { path: 'announcements', name: 'teacher-announcements', component: () => import('./pages/teacher/TeacherAnnouncements.vue') },

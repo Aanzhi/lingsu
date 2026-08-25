@@ -30,12 +30,12 @@ const enrichedNodes = computed(() => props.nodes.map((node) => ({ ...node })))
         :key="node.order"
         class="journey-rail__node"
         :class="[`is-${node.status}`, { 'is-active': active === node.order }]"
-        :aria-current="active === node.order ? 'step' : undefined"
       >
         <button
           type="button"
           class="journey-rail__btn"
-          :aria-label="`跳转到第 ${node.order} 阶段：${node.title}`"
+          :aria-current="active === node.order ? 'step' : undefined"
+          :aria-label="`跳转到第 ${node.order} 章：${node.title}`"
           @click="emit('select', node.order)"
         >
           <span class="journey-rail__pin">{{ String(node.order).padStart(2, '0') }}</span>
@@ -72,7 +72,7 @@ const enrichedNodes = computed(() => props.nodes.map((node) => ({ ...node })))
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1 0 calc(100% / 10);
+  flex: 1 0 calc(100% / 5);
   min-width: 90px;
 }
 .journey-rail__btn {
@@ -92,7 +92,7 @@ const enrichedNodes = computed(() => props.nodes.map((node) => ({ ...node })))
   height: 44px;
   display: grid;
   place-items: center;
-  font: 700 14px var(--serif);
+  font: 700 14px var(--sans);
   color: #fff;
   background: var(--moss);
   border: 3px solid var(--paper);
@@ -106,7 +106,7 @@ const enrichedNodes = computed(() => props.nodes.map((node) => ({ ...node })))
   color: var(--moss-dark);
   box-shadow: 0 0 0 2px var(--moss);
 }
-.journey-rail__node.is-pending .journey-rail__pin { background: #a8b9a0; color: #fff; }
+.journey-rail__node.is-pending .journey-rail__pin { background: var(--sage); color: #fff; }
 .journey-rail__node.is-locked .journey-rail__pin {
   background: var(--paper-soft);
   color: var(--muted);
@@ -114,7 +114,7 @@ const enrichedNodes = computed(() => props.nodes.map((node) => ({ ...node })))
 }
 .journey-rail__node.is-active .journey-rail__pin {
   transform: scale(1.1);
-  box-shadow: 0 0 0 2px var(--moss), 0 0 0 7px rgba(76, 114, 69, .15);
+  box-shadow: 0 0 0 2px var(--moss), 0 0 0 7px var(--color-focus-ring);
 }
 .journey-rail__btn:hover .journey-rail__pin { transform: scale(1.06); }
 
@@ -128,7 +128,7 @@ const enrichedNodes = computed(() => props.nodes.map((node) => ({ ...node })))
   max-width: 140px;
 }
 .journey-rail__caption strong {
-  font: 700 13.5px/1.4 var(--serif);
+  font: 700 13.5px/1.4 var(--sans);
   color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -158,4 +158,14 @@ const enrichedNodes = computed(() => props.nodes.map((node) => ({ ...node })))
 }
 .journey-rail__node.is-pending .journey-rail__line { background: var(--line-dark); }
 .journey-rail__node.is-locked .journey-rail__line { background: var(--line-dark); }
+@media (max-width: 768px) {
+  .journey-rail { overflow: visible; padding: 18px 16px; }
+  .journey-rail__track { display: grid; min-width: 0; padding: 4px 0; }
+  .journey-rail__node { display: grid; grid-template-columns: 48px minmax(0, 1fr); column-gap: 10px; align-items: start; min-width: 0; min-height: 66px; }
+  .journey-rail__btn { grid-column: 1; grid-row: 1; width: 48px; height: 48px; }
+  .journey-rail__caption { grid-column: 2; grid-row: 1; align-items: flex-start; max-width: none; margin-top: 4px; text-align: left; }
+  .journey-rail__caption strong { -webkit-line-clamp: 2; }
+  .journey-rail__line { top: 44px; bottom: -18px; left: 23px; right: auto; width: 2px; height: auto; }
+  .journey-rail__node.is-current .journey-rail__line { background: repeating-linear-gradient(180deg, var(--moss) 0 6px, transparent 6px 12px); }
+}
 </style>

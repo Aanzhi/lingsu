@@ -62,7 +62,7 @@ const kpiEntries = computed(() => props.kpis.slice(0, 4))
   gap: 8px;
   padding: 8px 14px 9px;
   background: var(--sage-soft);
-  border: 1px solid #c8d8c0;
+  border: 1px solid var(--sage-line);
   border-radius: 999px;
   color: var(--moss-dark);
 }
@@ -74,24 +74,17 @@ const kpiEntries = computed(() => props.kpis.slice(0, 4))
   text-transform: uppercase;
 }
 .journey-hero__kpis li strong {
-  font: 700 16px/1 var(--serif);
+  font: 700 16px/1 var(--sans);
   color: var(--moss-dark);
 }
 .journey-hero__kpis li span { font-size: 11.5px; color: var(--moss); }
 
 .level-seal { position: relative; }
 .level-seal__xp {
-  position: absolute;
-  bottom: -14px;
-  left: 50%;
-  transform: translateX(-50%);
+  position: static;
   font-size: 10px;
   font-weight: 700;
   color: var(--moss-dark);
-  background: var(--paper);
-  padding: 2px 8px;
-  border: 1px solid var(--sage);
-  border-radius: 999px;
   white-space: nowrap;
 }
 

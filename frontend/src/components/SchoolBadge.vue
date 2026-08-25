@@ -50,7 +50,7 @@ const isPlatformAdmin = computed(() => auth.user.value?.role === 'platform_admin
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 600 13px var(--serif);
+  font: 600 13px var(--sans);
   color: var(--moss-dark);
 }
 .school-badge--warn {

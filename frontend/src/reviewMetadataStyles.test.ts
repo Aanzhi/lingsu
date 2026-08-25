@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const styles = readFileSync(new URL('./lingsu-system.css', import.meta.url), 'utf8')
+const styles = ['foundations.css', 'workspace.css', 'responsive.css']
+  .map((file) => readFileSync(new URL(`./styles/${file}`, import.meta.url), 'utf8'))
+  .join('\n')
 
 describe('teacher review metadata', () => {
   it('stacks author and submitted time rather than allowing the two values to collide', () => {

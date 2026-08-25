@@ -1,0 +1,143 @@
+import importlib.util
+import json
+import os
+import re
+import threading
+import unittest
+from unittest.mock import patch
+from urllib.request import Request, urlopen
+
+
+SPEC = importlib.util.spec_from_file_location("project_console", "scripts/project-console.py")
+console = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(console)
+
+
+class ProjectConsoleTests(unittest.TestCase):
+    def test_console_uses_shared_desktop_workspace_geometry(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            html = handle.read()
+        self.assertIn("--brand:#3d6c6a", html)
+        self.assertIn("--brand-deep:#285250", html)
+        self.assertIn("grid-template-columns:232px minmax(0,1fr)", html)
+        self.assertIn('class="console-sidebar"', html)
+        self.assertIn('class="console-main"', html)
+
+    def test_console_uses_demo_b_management_primitives(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            html = handle.read()
+        self.assertIn('class="console-metric-grid"', html)
+        self.assertIn('class="console-two-col"', html)
+        self.assertIn('console-card console-control-card', html)
+        self.assertIn('查看本机服务状态，按需启停项目资源、执行健康验收和读取日志。', html)
+        self.assertNotIn('查看运行状态', html)
+        self.assertIn('--brand:#3d6c6a', html)
+        self.assertIn('max-height:150px', html)
+        self.assertIn('class="ghost" id="e2e-btn"', html)
+        self.assertEqual(html.count('id="e2e-btn"'), 1)
+
+    def test_console_does_not_render_role_or_sidebar_tip_labels(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            html = handle.read()
+        self.assertNotIn('class="console-role-chip"', html)
+        self.assertNotIn('class="console-sidebar-label"', html)
+        self.assertNotIn('class="console-sidebar-note"', html)
+        self.assertNotIn('项目控制台 · 概览', html)
+
+    def test_console_is_host_process_and_has_its_own_port(self):
+        status = console.console_status()
+        self.assertEqual(status["runtime"], "host")
+        self.assertFalse(status["managed_by_docker"])
+        self.assertEqual(status["port"], console.CONSOLE_PORT)
+        self.assertEqual(status["pid"], os.getpid())
+
+    def test_compose_does_not_define_console_service(self):
+        with open("docker-compose.yml", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertNotRegex(content, re.compile(r"^\s{2}console:\s*$", re.MULTILINE))
+
+    def test_console_html_has_one_backend_stack_start_button(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertEqual(content.count('data-target="backend" data-action="start"'), 1)
+
+    def test_console_html_does_not_render_persistent_bottom_tip(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertNotIn("控制台仅绑定 127.0.0.1", content)
+
+    def test_colima_stop_and_restart_are_valid_actions(self):
+        self.assertTrue(console.is_valid_action("colima", "start"))
+        self.assertTrue(console.is_valid_action("colima", "stop"))
+        self.assertTrue(console.is_valid_action("colima", "restart"))
+
+    def test_frontend_status_identifies_unmanaged_host_vite(self):
+        with patch.object(console, "http_ok", return_value=True), \
+             patch.object(console, "read_pidfile", return_value=None), \
+             patch.object(console, "listener_pid", return_value=61425), \
+             patch.object(console, "process_command", return_value="node vite"), \
+             patch.object(console, "compose_frontend_state", return_value="not_created"):
+            status = console.frontend_status()
+        self.assertEqual(status["mode"], "host")
+        self.assertEqual(status["pid"], 61425)
+        self.assertEqual(status["source"], "宿主机 Vite（未由控制台启动）")
+
+    def test_service_profile_is_applied_to_profile_services(self):
+        with patch.object(console, "ensure_docker", return_value=True), \
+             patch.object(console, "compose", return_value=(0, "ok", "")) as compose:
+            self.assertTrue(console.compose_service_action("nginx", "start"))
+        compose.assert_called_once_with("--profile", "production", "up", "-d", "nginx", timeout=180)
+
+    def test_collect_services_keeps_expected_services_when_compose_is_empty(self):
+        with patch.object(console, "compose", return_value=(0, "", "")):
+            services = console.collect_services()
+        self.assertEqual([item["service"] for item in services], console.ALL_PROJECT_SERVICES)
+        self.assertTrue(all(item["state"] == "not_created" for item in services))
+
+    def test_collect_checks_marks_ai_as_demo_without_secret(self):
+        services = [{"service": name, "state": "running", "health": "healthy", "ports": []} for name in console.COMPOSE_SERVICES]
+        with patch.object(console, "docker_ready", return_value=True), \
+             patch.object(console, "http_detail", return_value={"ok": True, "status": 200}), \
+             patch.object(console, "compose", return_value=(0, "", "")), \
+             patch.object(console, "env_value", side_effect=lambda *names: "" if "OPENAI_API_KEY" in names or "ARK_API_KEY" in names else ""):
+            checks, _ = console.collect_checks(services)
+        ai = next(item for item in checks if item["key"] == "ai")
+        self.assertEqual(ai["state"], "pass")
+        self.assertEqual(ai["mode"], "demo")
+
+    def test_action_endpoint_rejects_stop_without_confirmation(self):
+        server = console.ThreadingHTTPServer(("127.0.0.1", 0), console.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            request = Request(
+                "http://127.0.0.1:%d/api/action" % server.server_port,
+                data=json.dumps({"target": "all", "action": "stop"}).encode(),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with self.assertRaises(Exception) as ctx:
+                urlopen(request, timeout=3)
+            self.assertIn("400", str(ctx.exception))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_logs_endpoint_rejects_unknown_service(self):
+        server = console.ThreadingHTTPServer(("127.0.0.1", 0), console.Handler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with self.assertRaises(Exception) as ctx:
+                urlopen("http://127.0.0.1:%d/api/logs?service=rm+-rf" % server.server_port, timeout=3)
+            self.assertIn("400", str(ctx.exception))
+        finally:
+            server.shutdown()
+            server.server_close()
+
+    def test_safe_endpoint_masks_query_credentials(self):
+        self.assertEqual(console.safe_endpoint("https://example.test/v1?api_key=secret&x=1"), "https://example.test/v1?api_key=***&x=1")
+
+
+if __name__ == "__main__":
+    unittest.main()

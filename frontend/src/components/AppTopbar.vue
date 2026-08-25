@@ -1,69 +1,119 @@
 <script setup lang="ts">
-import { Bell, CircleCheck, Reading, SwitchButton } from '@element-plus/icons-vue'
+import { Bell, CircleCheck, Key, SwitchButton } from '@element-plus/icons-vue'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 
-import { errorMessage, getAnnouncements, getPendingStudentInvitations, markAnnouncementRead, type Announcement, type MemberInvitation } from '../api'
+import { errorMessage, getNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification } from '../api'
 import { auth } from '../stores/auth'
+import ChangePasswordDialog from './ChangePasswordDialog.vue'
 import SchoolBadge from './SchoolBadge.vue'
 
-const props = defineProps<{ roleTone?: 'student' | 'teacher' | 'platform' }>()
+const props = defineProps<{
+  roleTone?: 'student' | 'teacher' | 'platform'
+  homeMode?: boolean
+}>()
 const router = useRouter()
 const notificationsOpen = ref(false)
 const notificationLoading = ref(false)
+const notificationBusy = ref(false)
 const notificationError = ref('')
-const announcements = ref<Announcement[]>([])
-const invitations = ref<MemberInvitation[]>([])
+const notifications = ref<AppNotification[]>([])
 const notificationsLoaded = ref(false)
-const unreadCount = computed(() => announcements.value.filter((item) => item.is_read === false).length + invitations.value.length)
+const passwordOpen = ref(false)
+const unreadCount = computed(() => notifications.value.filter((item) => !item.is_read).length)
 const homePath = computed(() => {
   const role = auth.user.value?.role
   if (!role) return '/login'
   return role === 'platform_admin' ? '/platform/home' : `/${role}/home`
 })
-const announcementsPath = computed(() => props.roleTone === 'student'
-  ? '/student/announcements'
+const notificationCenterPath = computed(() => props.roleTone === 'student'
+  ? '/student/notifications'
   : props.roleTone === 'teacher'
-    ? '/teacher/announcements'
+    ? '/teacher/notifications'
     : '/platform/announcements')
+const workspacePath = computed(() => props.roleTone === 'teacher' ? '/teacher/projects' : '/student/projects')
+
 async function logout() {
   await auth.logout()
   await router.replace('/login')
 }
-async function toggleNotifications() {
-  notificationsOpen.value = !notificationsOpen.value
-  if (!notificationsOpen.value || notificationsLoaded.value) return
+
+async function loadNotifications() {
+  if (notificationsLoaded.value || notificationLoading.value) return
   notificationLoading.value = true
   notificationError.value = ''
   try {
-    const [announcementResponse, invitationResponse] = await Promise.all([
-      getAnnouncements(),
-      auth.user.value?.role === 'student' ? getPendingStudentInvitations() : Promise.resolve({ data: [] as MemberInvitation[] }),
-    ])
-    announcements.value = announcementResponse.data.slice(0, 6)
-    invitations.value = invitationResponse.data
+    notifications.value = (await getNotifications()).data
     notificationsLoaded.value = true
-  }
-  catch (reason) { notificationError.value = errorMessage(reason) }
+  } catch (reason) { notificationError.value = errorMessage(reason) }
   finally { notificationLoading.value = false }
 }
-async function markRead(item: Announcement) {
-  if (item.is_read !== false) return
-  try { const updated = (await markAnnouncementRead(item.id)).data; announcements.value = announcements.value.map((notice) => notice.id === updated.id ? updated : notice) }
-  catch (reason) { notificationError.value = errorMessage(reason) }
+
+async function refreshNotifications() {
+  notificationsLoaded.value = false
+  await loadNotifications()
 }
-async function openAnnouncement(item: Announcement) {
+
+async function toggleNotifications() {
+  notificationsOpen.value = !notificationsOpen.value
+  if (notificationsOpen.value) await loadNotifications()
+}
+
+async function markRead(item: AppNotification) {
+  if (item.is_read) return
+  try {
+    const updated = (await markNotificationRead(item.id)).data
+    notifications.value = notifications.value.map((notice) => notice.id === updated.id ? updated : notice)
+  } catch (reason) { notificationError.value = errorMessage(reason) }
+}
+
+async function markAllRead() {
+  if (!unreadCount.value || notificationBusy.value) return
+  notificationBusy.value = true
+  try {
+    await markAllNotificationsRead()
+    notifications.value = notifications.value.map((item) => ({ ...item, is_read: true }))
+  } catch (reason) { notificationError.value = errorMessage(reason) }
+  finally { notificationBusy.value = false }
+}
+
+async function openNotification(item: AppNotification) {
   await markRead(item)
   notificationsOpen.value = false
-  void router.push(announcementsPath.value)
+  void router.push(item.link || notificationCenterPath.value)
 }
-function openInvitations() { notificationsOpen.value = false; void router.push('/student/invitations') }
+
+function openNotificationCenter() {
+  notificationsOpen.value = false
+  void router.push(notificationCenterPath.value)
+}
+
+function notificationDate(value?: string) { return value ? value.slice(0, 16).replace('T', ' ') : '刚刚' }
+function notificationKind(kind: string) {
+  const labels: Record<string, string> = {
+    invitation_pending: '项目邀请', invitation_accepted: '成员动态', invitation_rejected: '成员动态', member_assigned: '成员动态',
+    material_approved: '材料审核', material_revision_required: '材料审核', review_feedback: '材料审核',
+    school_announcement: '学校通知', platform_announcement: '平台公告', case_published: '成果展示', case_rejected: '成果展示',
+    case_consent_required: '成果申请', case_pending_platform: '成果申请',
+  }
+  return labels[kind] ?? '工作台通知'
+}
+
 function onKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
   notificationsOpen.value = false
 }
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+function onNotificationsChanged() { void refreshNotifications() }
+
+onMounted(() => {
+  void loadNotifications()
+  window.addEventListener('keydown', onKeydown)
+  window.addEventListener('notifications:changed', onNotificationsChanged)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('notifications:changed', onNotificationsChanged)
+})
 </script>
 
 <template>
@@ -76,19 +126,31 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
     </button>
     <div class="topbar-actions">
       <SchoolBadge class="topbar-school" />
+      <RouterLink v-if="props.homeMode" class="topbar-workspace-link" :to="workspacePath">进入工作台</RouterLink>
       <div class="topbar-popover-anchor">
-        <button class="icon-button" type="button" aria-label="通知" :aria-expanded="notificationsOpen" @click="toggleNotifications"><el-icon><Bell /></el-icon><i v-if="unreadCount" /></button>
+        <button class="icon-button" type="button" aria-label="通知" :aria-expanded="notificationsOpen" @click="void toggleNotifications()"><el-icon><Bell /></el-icon><i v-if="unreadCount" /></button>
         <section v-if="notificationsOpen" class="topbar-popover notification-popover" role="dialog" aria-modal="false" aria-label="通知中心">
-          <header><strong>通知中心</strong><button type="button" aria-label="关闭通知" @click="notificationsOpen = false">×</button></header>
+          <header>
+            <strong>通知中心</strong>
+            <button class="mark-all" type="button" :disabled="notificationBusy || !unreadCount" @click="void markAllRead()">全部已读</button>
+            <button type="button" aria-label="关闭通知" @click="notificationsOpen = false">×</button>
+          </header>
           <p v-if="notificationLoading" class="popover-muted">正在读取通知…</p>
           <p v-else-if="notificationError" class="popover-error">{{ notificationError }}</p>
-          <p v-else-if="!announcements.length && !invitations.length" class="popover-muted">暂无新通知</p>
-          <button v-for="invite in invitations" :key="`invite-${invite.id}`" class="notification-item unread" type="button" @click="openInvitations">
-            <span><strong>项目邀请：{{ invite.project_title }}</strong><small>接受后还需主指导教师确认</small></span><el-icon><Reading /></el-icon>
-          </button>
-          <button v-for="item in announcements" :key="item.id" class="notification-item" :class="{ unread: item.is_read === false }" type="button" @click="void openAnnouncement(item)">
-            <span><strong>{{ item.title }}</strong><small>{{ item.published_at?.slice(0, 10) ?? '刚刚' }}</small></span><el-icon v-if="item.is_read !== false"><CircleCheck /></el-icon>
-          </button>
+          <p v-else-if="!notifications.length" class="popover-muted">暂无新通知</p>
+          <template v-else>
+            <button v-for="item in notifications.slice(0, 6)" :key="item.id" class="notification-item" :class="{ unread: !item.is_read }" type="button" @click="void openNotification(item)">
+              <span>
+                <small class="note-kind">{{ notificationKind(item.kind) }}</small>
+                <strong>{{ item.title }}</strong>
+                <small>{{ item.body || notificationDate(item.created_at) }}</small>
+              </span>
+              <el-icon v-if="item.is_read"><CircleCheck /></el-icon>
+            </button>
+            <footer class="notification-popover__footer">
+              <button type="button" class="text-link" @click="openNotificationCenter">查看全部通知</button>
+            </footer>
+          </template>
         </section>
       </div>
       <span class="topbar-divider" />
@@ -100,10 +162,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         </button>
         <template #dropdown>
           <el-dropdown-menu>
+            <el-dropdown-item :icon="Key" @click="passwordOpen = true">修改密码</el-dropdown-item>
             <el-dropdown-item :icon="SwitchButton" @click="logout">退出登录</el-dropdown-item>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
     </div>
   </header>
+  <ChangePasswordDialog v-model="passwordOpen" />
 </template>

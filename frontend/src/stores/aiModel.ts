@@ -87,7 +87,8 @@ export function taskQuickEntryAgents(agents: AIAgent[], task: Pick<{ stage_name:
 }
 
 export function aiQuickEntryLocation(projectId: number, taskId: number, workflow: string, agent: string, projectType: Project['project_type']) {
-  return `/student/ai?projectId=${projectId}&taskId=${taskId}&workflow=${encodeURIComponent(workflow)}&agent=${encodeURIComponent(agent)}&projectType=${encodeURIComponent(projectType)}`
+  const guided = agent === 'proposal-topic' ? '&researchQuestion=1' : ''
+  return `/student/ai?mode=research&projectId=${projectId}&taskId=${taskId}&agent=${encodeURIComponent(agent)}${guided}`
 }
 
 export function resolveAIEntryProjectId(queryProjectId: unknown, projects: Array<{ id: number }>): number | null {

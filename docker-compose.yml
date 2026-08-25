@@ -1,6 +1,7 @@
 name: lingsu
 
 services:
+  # 项目控制台由宿主机 scripts/console.sh 单独运行，不作为 Compose 服务。
   postgres:
     image: postgres:16-alpine
     environment:

@@ -1,3 +1,5 @@
+import { studentProjectRoute, studentTaskRoute } from './pageContracts'
+
 export type TaskStatus = 'locked' | 'available' | 'pending_review' | 'revision_required' | 'approved' | 'completed'
 
 export interface ApiTask {
@@ -129,6 +131,23 @@ export function buildChapters(steps: JourneyStep[]): JourneyChapter[] {
 }
 
 /**
+ * 首页和项目摘要只展示章节级进度，避免把 22 个任务误读成 22 个阶段。
+ * 任务仍完整保留在 chapters[].steps 中，供旅程和任务详情使用。
+ */
+export function projectJourneySummary(tasks: ApiTask[], materials: Parameters<typeof buildStepModels>[1]) {
+  const chapters = buildChapters(buildStepModels(tasks, materials, tasks[0]?.stage_order ?? 1))
+  const completed = chapters.filter((chapter) => chapter.status === 'done').length
+  return {
+    chapters,
+    summary: {
+      completed,
+      total: chapters.length,
+      percent: chapters.length ? Math.round((completed / chapters.length) * 100) : 0,
+    },
+  }
+}
+
+/**
  * 从 tasks + materials 数组构建有序的 JourneyStep[]。
  *
  * @param tasks - 同一项目的全部任务（须按 order 排序）
@@ -221,6 +240,13 @@ export function selectHomeTask(tasks: ApiTask[]) {
     ?? [...tasks].sort((left, right) => left.order - right.order).find((item) => item.status === 'pending_review')
     ?? [...tasks].sort((left, right) => left.order - right.order).find((item) => item.status === 'locked')
     ?? [...tasks].sort((left, right) => right.order - left.order).find((item) => ['approved', 'completed'].includes(item.status))
+}
+
+export function studentPrimaryAction(input: { currentTaskId: number | null; projectId: number; reportReady: boolean }) {
+  if (input.currentTaskId) return { label: '开始当前任务', to: studentTaskRoute(input.projectId, input.currentTaskId) }
+  return input.reportReady
+    ? { label: '查看研究报告', to: studentProjectRoute(input.projectId, 'report') }
+    : { label: '查看研究进度', to: studentProjectRoute(input.projectId, 'map') }
 }
 
 export function validateTaskSubmission(task: ApiTask, body: string, files: File[] | unknown[], truthConfirmed: boolean) {

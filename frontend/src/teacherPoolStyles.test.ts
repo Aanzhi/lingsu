@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const styles = readFileSync(new URL('./lingsu-system.css', import.meta.url), 'utf8')
+const styles = ['foundations.css', 'workspace.css', 'responsive.css']
+  .map((file) => readFileSync(new URL(`./styles/${file}`, import.meta.url), 'utf8'))
+  .join('\n')
 
 describe('teacher project pool styles', () => {
   it('keeps project type as a readable Chinese-friendly metadata pill', () => {

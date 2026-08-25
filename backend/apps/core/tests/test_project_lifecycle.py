@@ -159,3 +159,16 @@ class ProjectLifecycleTests(TestCase):
             {"title": "   "}, format="json",
         )
         self.assertEqual(resp.status_code, 400)
+
+    def test_leader_can_save_only_research_problem_without_overwriting_plan(self):
+        client = self._client(self.student)
+        original_plan = self.project.plan
+        resp = client.post(
+            f"/api/projects/{self.project.id}/update_basics/",
+            {"problem": "一个由学生确认的新研究问题"}, format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.project.refresh_from_db()
+        self.assertEqual(self.project.problem, "一个由学生确认的新研究问题")
+        self.assertEqual(self.project.plan, original_plan)
+        self.assertTrue(AuditEvent.objects.filter(action=AuditEvent.Action.PROJECT_UPDATED).exists())

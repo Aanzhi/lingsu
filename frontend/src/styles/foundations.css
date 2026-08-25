@@ -25,6 +25,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .brand-divider, .topbar-divider { width: 1px; height: 24px; background: var(--line); }
 .brand-subtitle { color: var(--muted); font-family: var(--sans); letter-spacing: .05em; }
 .topbar-actions { gap: 8px; min-width: 0; flex: 0 0 auto; }
+.topbar-workspace-link { min-height: 32px; padding: 0 11px; display: inline-flex; align-items: center; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); color: var(--muted); background: var(--paper); font-size: 12px; font-weight: 700; white-space: nowrap; transition: color var(--transition-fast), border-color var(--transition-fast), background-color var(--transition-fast); }
+.topbar-workspace-link:hover { color: var(--moss-dark); border-color: var(--moss); background: var(--paper-soft); }
 .topbar-popover-anchor { position: relative; }
 .topbar-popover { position: absolute; z-index: 80; top: 46px; right: 0; width: 330px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); box-shadow: var(--shadow-hover); }
 .topbar-popover header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 10px; border-bottom: 1px solid var(--line); }
@@ -41,6 +43,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .notification-popover header .mark-all { margin-left: auto; border: 1px solid var(--line); background: var(--paper-soft); color: var(--muted); font-size: 12px; padding: 4px 10px; border-radius: 999px; cursor: pointer; }
 .notification-popover header .mark-all:hover:not(:disabled) { color: var(--moss-dark); border-color: var(--sage-line); }
 .notification-popover header .mark-all:disabled { opacity: .5; cursor: default; }
+.notification-popover__footer { display: flex; justify-content: flex-end; padding: 10px 8px 2px; }
+.notification-popover__footer .text-link { min-height: 28px; font-size: 12px; }
 .popover-section-label { margin: 14px 4px 2px; font-size: 11px; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
 .notification-item .note-kind { align-self: flex-start; margin-bottom: 2px; padding: 1px 8px; font-size: 11px; font-weight: 600; color: var(--moss-dark); background: var(--sage-soft); border: 1px solid var(--sage-line); border-radius: 999px; }
 .icon-button { width: 38px; height: 38px; border: 0; background: transparent; color: var(--muted); border-radius: var(--radius-sm); cursor: pointer; display: inline-grid; place-items: center; position: relative; }
@@ -77,6 +81,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-sidebar__subnav a.router-link-active { color: var(--moss-dark); background: var(--sage-soft); font-weight: 700; }
 .workspace-main, .desk-main, .console-main { min-width: 0; padding: 32px clamp(20px, 4vw, 64px) 72px; background: var(--color-bg-canvas); }
 .workspace-main--edge { padding: 0; }
+.workspace-shell--hero .workspace-main { min-height: calc(100vh - var(--topbar-height)); padding: 0; background: var(--color-bg-canvas); }
+.workspace-shell--hero .workspace-main > .page { width: 100%; max-width: 1360px; min-height: calc(100vh - var(--topbar-height)); margin: 0 auto; padding: 42px clamp(28px, 5vw, 80px) 80px; }
 .desk-shell, .console-shell { min-height: calc(100vh - var(--topbar-height)); display: grid; grid-template-columns:232px minmax(0, 1fr); }
 .side-nav { min-width: 0; padding: 24px 16px; border-right: 1px solid var(--line); background: var(--paper); position: sticky; top: var(--topbar-height); height: calc(100vh - var(--topbar-height)); display: flex; flex-direction: column; }
 .side-nav > p { flex: 0 0 auto; color: var(--muted-light); font-size: 10px; font-weight: 800; letter-spacing: .15em; margin: 0 12px 16px; }
@@ -168,6 +174,35 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .text-link:hover { color: var(--moss-dark); text-decoration: underline; text-underline-offset: 3px; }
 
 .paper-card { background: var(--color-bg-surface); border: 1px solid var(--line); box-shadow: var(--shadow-soft); border-radius: var(--radius-md); }
+
+/* Scheme B shared primitives. Keep these selectors global because the same
+   markup is rendered by student, teacher and platform pages. */
+.chip, .status { display:inline-flex; align-items:center; gap:5px; min-height:24px; padding:3px 9px; border:1px solid var(--line); border-radius:999px; color:var(--muted); font-size:12px; white-space:nowrap; }
+.status { border-color:transparent; background:var(--paper-muted); }
+.status.done { background:var(--success-soft); color:var(--success); }
+.status.active { background:var(--sage-soft); color:var(--moss-dark); }
+.status.pending { background:var(--paper-muted); color:var(--muted-light); }
+.status.warning { background:var(--amber-soft); color:var(--clay-text); }
+.status.danger { background:var(--danger-soft); color:var(--danger); }
+.list { display:grid; gap:0; }
+.list-row { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:var(--space-4); padding:15px 0; border-bottom:1px solid var(--line); }
+.list-row:first-child { padding-top:0; }
+.list-row:last-child { padding-bottom:0; border-bottom:0; }
+.row-main { min-width:0; }
+.row-title { overflow:hidden; margin-bottom:3px; color:var(--ink); font-size:13px; font-weight:650; text-overflow:ellipsis; white-space:nowrap; }
+.row-meta { color:var(--muted-light); font-size:12px; }
+.row-actions { display:flex; flex:0 0 auto; align-items:center; gap:8px; }
+.table-wrap { overflow-x:auto; }
+table { width:100%; border-collapse:collapse; text-align:left; }
+th { padding:0 12px 12px; color:var(--muted-light); font-size:11px; font-weight:600; letter-spacing:.04em; white-space:nowrap; }
+td { padding:15px 12px; border-top:1px solid var(--line); color:var(--muted); font-size:13px; vertical-align:middle; }
+td:first-child, th:first-child { padding-left:0; }
+td:last-child, th:last-child { padding-right:0; text-align:right; }
+.filter-bar { display:flex; flex-wrap:wrap; align-items:center; gap:9px; margin-bottom:var(--space-5); }
+.input, .select { min-height:36px; border:1px solid var(--line); border-radius:var(--radius-sm); padding:8px 11px; background:var(--paper); color:var(--ink); }
+.input { min-width:220px; }
+.select { min-width:130px; }
+.input::placeholder { color:var(--muted-light); }
 
 /* Phase-one Demo B primitives. The four authenticated pilot pages use these
    classes directly so their geometry cannot drift through page-scoped rules. */

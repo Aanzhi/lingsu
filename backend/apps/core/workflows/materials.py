@@ -102,6 +102,10 @@ def submit_material_revision(revision, actor, truth_confirmed):
     if not revision.content.strip() and not revision.attachments.exists():
         raise ValidationError("请填写正文或上传附件。")
 
+    missing_experiment_logs = _missing_experiment_logs(material.task)
+    if missing_experiment_logs:
+        raise ValidationError({"detail": f"请先填写实验日志：{'、'.join(missing_experiment_logs)}。"})
+
     revision.truth_confirmed = True
     revision.status = MaterialRevision.Status.SUBMITTED
     revision.save(update_fields=["truth_confirmed", "status"])
@@ -117,6 +121,29 @@ def submit_material_revision(revision, actor, truth_confirmed):
         changes={"project_id": project.id, "material_id": material.id, "revision_id": revision.id},
     )
     return None
+
+
+def _missing_experiment_logs(task):
+    """Return required experiment-log titles that have no usable revision yet."""
+    if task is None:
+        return []
+    missing = []
+    required_logs = task.materials.filter(required=True, kind=Material.Kind.EXPERIMENT_LOG).prefetch_related("revisions__attachments")
+    valid_statuses = {
+        MaterialRevision.Status.DRAFT,
+        MaterialRevision.Status.SUBMITTED,
+        MaterialRevision.Status.REVISION_REQUIRED,
+        MaterialRevision.Status.APPROVED,
+    }
+    for material in required_logs:
+        has_content = any(
+            revision.status in valid_statuses
+            and (bool(revision.content.strip()) or revision.attachments.exists())
+            for revision in material.revisions.all()
+        )
+        if not has_content:
+            missing.append(material.title)
+    return missing
 
 
 def review_material_revision(revision, teacher, outcome, comment):

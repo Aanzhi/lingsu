@@ -7,6 +7,7 @@ const aiPage = readFileSync(new URL('./pages/shared/AICenter.vue', import.meta.u
 const aiHistory = readFileSync(new URL('./components/ai/AIConversationHistory.vue', import.meta.url), 'utf8')
 const aiTools = readFileSync(new URL('./components/ai/AIToolPicker.vue', import.meta.url), 'utf8')
 const aiWizard = readFileSync(new URL('./components/ai/AIResearchWizard.vue', import.meta.url), 'utf8')
+const aiModel = readFileSync(new URL('./stores/aiModel.ts', import.meta.url), 'utf8')
 
 describe('student AI center entries', () => {
   it('removes the retired material assistant in favor of task-scoped AI center links', () => {
@@ -18,8 +19,8 @@ describe('student AI center entries', () => {
 
   it('routes material consistency checks to the new proposal-consistency agent', () => {
     expect(projectPage).not.toContain('ConsistencyCheckCard')
-    expect(projectPage).toContain("agent: 'proposal-consistency'")
-    expect(projectPage).toContain("workflow: 'proposal_consistency'")
+    expect(aiModel).toContain("agentKey: 'proposal-consistency'")
+    expect(aiModel).toContain("workflow: 'proposal_consistency'")
   })
 
   it('requires an explicit target material and exposes conversation rename in the MVP AI workflow', () => {
@@ -54,7 +55,7 @@ describe('student AI center entries', () => {
   })
 
   it('exposes an in-place retry action for failed assistant messages', () => {
-    expect(aiPage).toContain("ai-conversations/${conversationId}/messages/${message.id}/retry/")
+    expect(aiPage).toContain('retryAIConversationMessage(conversationId, message.id)')
     expect(aiPage).toContain('重试')
     expect(aiPage).toContain('retryMessage')
   })
@@ -90,7 +91,7 @@ describe('student AI center entries', () => {
   })
 
   it('exposes the guided research-question workbench without exposing technical tool keys', () => {
-    expect(aiPage).toContain('一步一步把问题想清楚')
+    expect(aiPage).toContain('开题引导')
     expect(aiWizard).toContain('发现现象')
     expect(aiWizard).toContain('研究对象与场景')
     expect(aiWizard).toContain('头脑风暴')
@@ -109,6 +110,6 @@ describe('student AI center entries', () => {
   })
 
   it('keeps stage-level AI recommendations bound to the current project', () => {
-    expect(projectPage).toContain("query: { projectId: String(project.id), stage: currentChapter?.index }")
+    expect(projectPage).toContain("query: { mode: 'research', projectId: String(project.id) }")
   })
 })

@@ -5,6 +5,13 @@ from django.utils import timezone
 import secrets
 
 
+AI_WORKSPACE_MODE_CHOICES = (
+    ("opening", "开题"),
+    ("research", "研究"),
+    ("defense", "答辩"),
+)
+
+
 def make_invite_code():
     return secrets.token_urlsafe(8)
 
@@ -44,6 +51,9 @@ class AuditEvent(models.Model):
         CASE_VISIBILITY_CHANGED = "case_visibility_changed", "公开案例可见性已变更"
         REPORT_EXPORT_REQUESTED = "report_export_requested", "报告导出已请求"
         AI_OUTPUT_SAVED_AS_MATERIAL = "ai_output_saved_as_material", "AI 结果已保存为材料草稿"
+        AI_DRAFT_CONFIRMED_SAVE = "ai_draft_confirmed_save", "AI 草稿已确认保存"
+        STUDENT_CONSENT_GIVEN = "student_consent_given", "学生已同意公域展示"
+        PROJECT_PURGED = "project_purged", "项目已清理"
 
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="audit_events")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="audit_events")
@@ -66,6 +76,12 @@ class Notification(models.Model):
         MATERIAL_REVISION_REQUIRED = "material_revision_required", "材料需修订"
         CASE_PUBLISHED = "case_published", "案例已发布"
         CASE_REJECTED = "case_rejected", "案例被驳回"
+        SCHOOL_ANNOUNCEMENT = "school_announcement", "学校通知"
+        PLATFORM_ANNOUNCEMENT = "platform_announcement", "平台公告"
+        INVITATION_PENDING = "invitation_pending", "邀请待处理"
+        REVIEW_FEEDBACK = "review_feedback", "审核建议"
+        CASE_CONSENT_REQUIRED = "case_consent_required", "案例等待同意"
+        CASE_PENDING_PLATFORM = "case_pending_platform", "案例待平台审核"
 
     school = models.ForeignKey(School, on_delete=models.CASCADE, related_name="notifications")
     recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
@@ -189,8 +205,13 @@ class TemplateTask(models.Model):
 
 
 class TemplateMaterial(models.Model):
+    class Kind(models.TextChoices):
+        STANDARD = "standard", "标准材料"
+        EXPERIMENT_LOG = "experiment_log", "实验日志"
+
     task = models.ForeignKey(TemplateTask, on_delete=models.CASCADE, related_name="materials")
     title = models.CharField(max_length=120)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.STANDARD)
     required = models.BooleanField(default=True)
     submission_type = models.CharField(max_length=20, default="rich_text")
     report_section = models.CharField(max_length=120, blank=True)
@@ -292,10 +313,15 @@ class Material(models.Model):
         REVISION_REQUIRED = "revision_required", "需修订"
         APPROVED = "approved", "已通过"
 
+    class Kind(models.TextChoices):
+        STANDARD = "standard", "标准材料"
+        EXPERIMENT_LOG = "experiment_log", "实验日志"
+
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="materials")
     task = models.ForeignKey(ProjectTask, null=True, blank=True, on_delete=models.SET_NULL, related_name="materials")
     template_material = models.ForeignKey(TemplateMaterial, null=True, blank=True, on_delete=models.SET_NULL)
     title = models.CharField(max_length=120)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.STANDARD)
     status = models.CharField(max_length=24, choices=Status.choices, default=Status.DRAFT)
     required = models.BooleanField(default=True)
     report_section = models.CharField(max_length=120, blank=True)
@@ -410,9 +436,26 @@ class UploadPart(models.Model):
 
 
 class PublicCaseRequest(models.Model):
-    class Status(models.TextChoices): PENDING_TEACHER = "pending_teacher", "教师审核"; PUBLISHED = "published", "已公开"; OFFLINE = "offline", "已下架"; REJECTED = "rejected", "已拒绝"
+    class RequestType(models.TextChoices):
+        STUDENT_SCHOOL = "student_school", "学生校内申请"
+        TEACHER_PLATFORM = "teacher_platform", "教师公域邀请"
+
+    class VisibilityScope(models.TextChoices):
+        SCHOOL = "school", "校内"
+        PLATFORM = "platform", "全平台"
+
+    class Status(models.TextChoices):
+        WAITING_STUDENT = "waiting_student", "等待学生同意"
+        PENDING_TEACHER = "pending_teacher", "教师审核"
+        PENDING_PLATFORM = "pending_platform", "平台审核"
+        PUBLISHED = "published", "已公开"
+        OFFLINE = "offline", "已下架"
+        REJECTED = "rejected", "已拒绝"
+
     project = models.OneToOneField(Project, on_delete=models.CASCADE, related_name="public_request")
     applicant = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    request_type = models.CharField(max_length=20, choices=RequestType.choices, default=RequestType.STUDENT_SCHOOL)
+    visibility_scope = models.CharField(max_length=16, choices=VisibilityScope.choices, default=VisibilityScope.SCHOOL)
     public_summary = models.TextField()
     tags = models.JSONField(default=list, blank=True)
     discipline = models.CharField(max_length=80, blank=True)
@@ -424,6 +467,9 @@ class PublicCaseRequest(models.Model):
     teacher_reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="teacher_public_reviews")
     review_comment = models.TextField(blank=True)
     admin_reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="admin_public_reviews")
+    student_consent_at = models.DateTimeField(null=True, blank=True)
+    student_consent_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="consented_public_cases")
+    platform_reviewer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="platform_public_reviews")
 
 
 class AIGenerationLog(models.Model):
@@ -432,7 +478,8 @@ class AIGenerationLog(models.Model):
         PROCESSING = "processing", "生成中"
         COMPLETED = "completed", "已完成"
         FAILED = "failed", "失败"
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="ai_logs")
+    project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.SET_NULL, related_name="ai_logs")
+    workspace_mode = models.CharField(max_length=16, choices=AI_WORKSPACE_MODE_CHOICES, default="research")
     conversation = models.ForeignKey("AIConversation", null=True, blank=True, on_delete=models.SET_NULL, related_name="generation_logs")
     message = models.OneToOneField("AIConversationMessage", null=True, blank=True, on_delete=models.SET_NULL, related_name="generation_record")
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
@@ -460,8 +507,15 @@ class AIGenerationLog(models.Model):
 
 class AIConversation(models.Model):
     """A student's global AI workspace conversation, optionally scoped to one project."""
+    class WorkspaceMode(models.TextChoices):
+        OPENING = "opening", "开题"
+        RESEARCH = "research", "研究"
+        DEFENSE = "defense", "答辩"
+
     owner = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_conversations")
     project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.SET_NULL, related_name="ai_conversations")
+    opening_project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.SET_NULL, related_name="opening_conversations")
+    workspace_mode = models.CharField(max_length=16, choices=WorkspaceMode.choices, default=WorkspaceMode.RESEARCH)
     title = models.CharField(max_length=160, default="新对话")
     paper_type = models.CharField(max_length=40, blank=True, default="")
     current_agent = models.CharField(max_length=80, blank=True, default="")

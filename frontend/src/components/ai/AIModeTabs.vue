@@ -17,7 +17,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <section class="ai-mode-tabs" aria-label="灵思 AI 工作模式" data-mode-labels="开题 / 研究 / 答辩">
+  <section class="ai-mode-tabs" aria-label="灵思 AI 工作模式" data-mode-labels="开题 / 研究 / 成果表达">
     <div class="ai-mode-tabs__row" role="tablist" aria-label="选择 AI 模式">
       <button
         v-for="mode in AI_WORKBENCH_MODES"

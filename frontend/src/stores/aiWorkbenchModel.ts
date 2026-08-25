@@ -5,7 +5,7 @@ export type AIWorkspaceMode = 'opening' | 'research' | 'defense'
 export const AI_WORKBENCH_MODES: Array<{ key: AIWorkspaceMode; label: string; description: string }> = [
   { key: 'opening', label: '开题', description: '从观察开始，形成研究问题和开题草稿' },
   { key: 'research', label: '研究', description: '围绕当前项目完善材料、实验和证据' },
-  { key: 'defense', label: '答辩', description: '整理成果、演练问答和表达项目价值' },
+  { key: 'defense', label: '成果表达', description: '整理成果、演练问答和表达项目价值' },
 ]
 
 export type AIContextScope = 'none' | 'current_project'
@@ -21,7 +21,7 @@ function matchesMode(mode: AIWorkspaceMode, agent: AIAgent): boolean {
   const workflow = (agent.workflow || '').toLowerCase()
   const category = agent.category || ''
   if (mode === 'opening') return /opening|proposal/.test(workflow) || /开题|选题|申报/.test(category)
-  if (mode === 'defense') return /defense/.test(workflow) || /答辩|展示|汇报/.test(category) || workflow.startsWith('paper')
+  if (mode === 'defense') return /defense/.test(workflow) || /答辩|成果表达|展示|汇报/.test(category) || workflow.startsWith('paper')
   return /research|experiment|paper/.test(workflow) || /研究|实验|科创|写作/.test(category)
 }
 

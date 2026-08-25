@@ -1,50 +1,82 @@
-**Comparison target**
+# 灵溯第一阶段样板页 Design QA
 
-- Source visual truth: `/Users/anzhi/.codex/generated_images/019ff4e9-d008-7f62-9c01-108ff98b8786/exec-f15755d7-f152-43cd-8ae4-197ce0676bf0.png` (1472 × 1058 px).
-- Implementation: `http://127.0.0.1:5173/student`; browser-rendered screenshot captured during this run (1265 px content viewport; browser viewport override could not alter the in-app content frame).
-- State: student has entered material text, submitted it, and opened the AI thinking aid. Teacher return and platform school-space creation were separately exercised.
+## 验收基准
 
-**Full-view comparison evidence**
+- 视觉真值：`http://127.0.0.1:5173/design-demo.html` 的方案 B「安静工作台」。
+- 实现页面：`/`、`/student/home`、`/teacher/home`、`/platform/home`、`http://127.0.0.1:8800/`。
+- 验收状态：学生、教师、平台均使用对应演示角色登录后的真实首页；控制台等待宿主机状态加载完成；公共入口使用未登录状态。
+- 取景尺寸：1280 × 900 与 1440 × 960，浏览器像素密度 1；截图时禁用页面进入动画，避免把过渡帧误判为最终视觉。
 
-- Both source and implementation use the same macro structure: warm paper canvas, narrow research journey at left, center task paper with notebook binding edge, and a right-side AI coach.
-- The implementation preserves the source hierarchy: task heading → instructional copy → evidence → author input → review feedback. The task input and submission states are live rather than static.
+## 全视图与重点区域对照
 
-**Focused comparison evidence**
+- 完整截图矩阵位于 `frontend/artifacts/ui-pilot/`，包含五个实现页面及三张方案 B 参考页。
+- 重点区域对照图：`compare-1280-*.png` 与 `compare-1440-*.png`；左侧为方案 B，右侧为实现。
+- 1440px 下学生 Hero/任务、教师指标/审核列表、平台指标/活跃度/系统状态的尺寸、列宽、间距与组件层级均与方案 B 对齐。
+- 1280px 下保持同一 PC 布局，不触发移动端重排；所有页面均无文档级横向滚动。
+- 控制台以平台端为管理视觉参照，沿用相同内容起点、四列指标和双列卡片，但保留项目、Docker/Colima、健康验收、E2E 与日志等独有业务密度。
 
-- Task sheet: implementation has warm-white paper, low-contrast rules, a moss completion stamp and notebook edge; an added botanical image mark supplies the source's hand-drawn plant accent.
-- Research journey: implementation uses five vertically connected markers with a green active stage and understated completion labels.
-- AI panel: implementation retains the botanical image and single question/answer action without a competing dashboard surface.
+## 视觉一致性检查
 
-**Required fidelity surfaces**
+- 几何：工作台统一使用 66px 顶栏、232px 侧栏、1120px 内容上限、12px 卡片圆角；公共入口独立全屏展示，不含侧栏和左下角提示。
+- 字体：品牌、标题、正文和按钮全部为系统无衬线字体，不再混用方案 A 的衬线标题。
+- 间距：页头、指标卡、双列内容、列表行与章节卡均来自共享基础样式，页面 scoped CSS 只保留业务专属布局。
+- 色彩：公共/学生/教师使用苔绿色；平台/控制台使用青灰色；底色、边框、阴影和状态色保持同一规则。
+- 按钮与状态：主按钮高度、圆角、字重、悬停规则一致；状态标签复用同一组件，控制台原有控制按钮和 DOM 标识未被破坏。
+- 素材：方案 B 本身没有外部图片素材；Hero 装饰、图表和头像均按参考的原生 CSS/组件语言移植，不存在低清或缺失图片。
+- 文案与数据：标题、说明和主要动作沿用方案 B；业务数字优先读取真实数据，教师空收件箱和不可稳定获取的展示数据使用确定性 fixture，不产生模拟写入。
 
-- Fonts and typography: editorial Songti/Noto Serif fallbacks distinguish display headings from small task labels. The source uses a similar Chinese serif/editorial feel. P3: installed font availability may substitute the exact serif across systems.
-- Spacing and layout rhythm: large outer margins, 34 px column gaps, 44–70 px paper padding, and a single central primary action reproduce the intended airy rhythm. No browser-visible horizontal overflow was measured (1265 px document width equals scroll width).
-- Colors and visual tokens: warm ivory canvas, white paper, moss green primary action, sage completion and muted rust revision state match the selected visual direction.
-- Image quality and asset fidelity: botanical sprig is generated raster art in `/Users/anzhi/Desktop/雷灵/星辰/kechuang-ai-workbench/frontend/public/assets/botanical-sprig.png`; it is used in the AI coach, platform navigation and student heading. Standard interface icons use Element Plus.
-- Copy and content: content is science-project specific and all primary text is Chinese; the student, teacher and platform screens have separate role-specific copy.
+## 问题与修复记录
 
-**Findings and iteration history**
+- [P1，已修复] 学生端旧横向导航与方案 B 工作台结构不一致；已恢复同构左侧导航。
+- [P1，已修复] 平台截图在异步加载完成后命中了 220ms 页面进入动画，导致对照图呈半透明；截图固定禁用动画后复验通过，产品最终状态无需改动。
+- [P1，已修复] 根节点最小宽度与竖向滚动条叠加产生横向溢出；现以 1280px 为 PC 设计基线，不再撑破视口。
+- [P2，已修复] 公共入口曾套用工作台侧栏并保留左下角提示；现为无侧栏全屏入口，提示已删除。
+- [P2，已修复] 登录用户访问 `/` 会自动跳转；现保持公共入口可访问，并显示“进入我的工作台”。
+- [P2，已修复] 控制台旧暖色样式和 1000px 内容宽度与管理端不一致；已迁移到青灰管理主题和 1120px 内容几何。
 
-- [P1, fixed] Initial full-page preview appeared to crop the AI panel. DOM measurement showed the page itself had no horizontal overflow (`scrollWidth: 1265`, `clientWidth: 1265`), with the three columns entirely inside the visible document. The issue was the screenshot-preview crop rather than app layout; no layout patch was required.
-- [P2, fixed] The task heading lacked the source's botanical accent. Added the generated botanical sprig to the student task heading via `StudentPortal.vue` and `design-tweaks.css`.
-- [P3] The locally available serif fallback cannot guarantee the generated reference's exact font rendering on every operating system. This is acceptable for the current front-end prototype.
+## 最终结论
 
-**Primary interactions tested**
+- 1280px 与 1440px 的结构、字体、间距、色彩、卡片、按钮、状态和主要交互均达到第一阶段样板验收要求。
+- 对照中剩余差异仅来自真实业务数据、学生当前章节文案，以及控制台必须保留的独立控制业务，不属于视觉偏差。
+- 未发现未解决的 P0、P1 或 P2 设计问题。
 
-- Student: entered a task response, submitted it, received the `已提交，等待审核` state, and opened the AI thought prompt.
-- Teacher: entered actionable feedback and received `已打回修订。`.
-- Platform: created a school space and the rendered table row count changed from 5 to 6.
-- Routing: `/student` rendered `问题定义`; `/teacher` rendered the teacher review queue; `/platform` rendered `学校授权`.
+final result: passed
 
-**Console errors**
+## 全站剩余页面扩展复核（2026-08-24）
 
-- No app console errors were observed during the three core route and interaction checks.
+- 新增独立平台登录页 `/platform/login`，使用管理端青灰主题；普通 `/login` 仅保留学生与教师账号入口。
+- 匿名访问 `/platform/*` 时保留原目标并进入独立平台登录；普通用户与平台管理员登录入口保持角色隔离。
+- 学生侧栏“更多页面”补齐主项目研究旅程、材料档案、研究报告、项目邀请和成果申请；教师侧栏补齐成员确认。
+- 在应用内浏览器 1280px 视口逐项打开新增入口，页面均正常渲染且无文档级横向溢出。
+- 方案 B 参考页与独立平台登录页使用同一轮截图输入进行视觉对照，顶栏、内容宽度、字体、卡片、表单和按钮规则一致。
+- 前端 46 个测试文件、176 项测试全部通过，TypeScript 检查与生产构建通过。
 
-**Implementation checklist**
+## 全站截图矩阵复核（2026-08-24）
 
-- [x] Separate student, teacher and platform pages.
-- [x] Implement the selected warm Nordic research-notebook visual language.
-- [x] Keep task, review and authorization interactions operable in the UI prototype.
-- [x] Verify route separation and core interactions in the browser.
+- 视觉真值：方案 B；实现证据：`frontend/artifacts/ui-full-site/` 中 35 个页面在 1280 × 900 与 1440 × 960 下的 70 张并排对照图。
+- 全部实现页通过无文档级横向滚动与系统无衬线字体检查；公共入口、普通登录、注册、平台独立登录以及学生、教师、平台全路由均已覆盖。
+- [P1，已修复] 学生项目书架、教师项目池与 AI 模板列表的数据密度不受控；现分别使用 5 条紧凑项目行、5 条项目池分页和 10 条模板表格分页。
+- [P1，已修复] 教师材料范本默认展开全部表单；现为五章手风琴，章节内只显示紧凑材料行，单项编辑进入独立弹窗。
+- [P1，已修复] 学生任务页三栏结构、研究旅程深色装饰 Hero 与案例库旧封面卡片；现分别迁移为主内容/右侧辅助两栏、方案 B 白色进度卡和三列紧凑内容卡。
+- [P1，已修复] 普通登录、注册和平台登录混用另一套深色 Hero；现使用方案 B 页面标题、双栏登录卡和三栏身份卡，所有演示账号与口令提示已删除。
+- [P2，已修复] 学校详情操作记录过长且缺少方案 B 指标层；现补齐四项真实指标并对治理记录分页。
+- [P1，已修复] 旧 `responsive.css` 在 1280px 覆盖学生任务页两栏定义；现使用更具体的两栏规则，并在浏览器中断言列数与正文宽度。
+- [P1，已修复] AI 模板编辑弹窗缺少原生输入控件布局；现统一为共享表单网格、输入态、开关行和底部按钮栏，并完成实际打开验证。
+- [P1，已修复] 顶栏仍残留学生、教师、平台“使用提示”；现已删除提示入口、文案、状态和对应样式。
+- [P2，已修复] 教师指导项目全量渲染、材料范本文件草稿残留、学校配置失败后错误重载；现分别加入每页 5 条分页、服务端刷新后清空待上传文件、区分“重新保存”与“重新加载”。
+- 真实数据数量、空状态和业务专属字段与静态演示不同，但壳层、信息层级、卡片、按钮、状态、表单、间距和强调色均使用同一套设计系统。
+- 47 个前端测试文件、182 项测试通过；TypeScript 与生产构建通过；增强后的全站 Playwright 矩阵 1 项通过，生成 70 张对照图并逐页检查可见元素越界。
+
+final result: passed
+
+## 灵思 AI 三模式与全站复核（2026-08-25）
+
+- 灵思 AI 首屏已改为三个同级入口：`开题与选题`、`AI 对话完善材料`、`科创 Agent`；不再把 Agent 藏在“更多工具”中。
+- 三个入口复用已有真实工作流：开题进入四步研究问题引导；材料对话绑定当前项目、任务和材料，并保留“保存到指定材料”；科创 Agent 直接展开真实 Agent 选择器。
+- 在应用内浏览器中实际打开科创 Agent 选择器，确认可读取当前 API 返回的开题申报与论文写作 Agent；实验/研究设计、检索查新、结果与数据解读分别由现有专项工作流承载。
+- 本轮在 1440px 下逐项打开公共 4 页、学生 13 页、教师 10 页、平台 8 页和独立控制台；全部页面均无文档级横向溢出。学生有效任务页使用真实任务 `70` 复核，避免把不存在任务的空状态误作实现页面。
+- AI 页面在 1280 × 900 和 1440 × 960 下重新截图，与方案 B 放入同一并排对照输入；三入口在 1280px 仍保持三列 PC 布局，顶栏、侧栏、内容起点、卡片、按钮和右侧边界卡与方案 B 一致。
+- 当前轮证据位于 `frontend/artifacts/ui-audit-current/`，其中包括全站 `matrix-*` 截图、`compare-student-ai-1280.png` 和 `compare-student-ai-1440.png`。
+- 前端 47 个测试文件、185 项测试全部通过；TypeScript 检查与生产构建通过；独立控制台 15 项测试通过。
 
 final result: passed

@@ -67,7 +67,7 @@ describe('AI workbench information architecture', () => {
     const draftActions = readFileSync(new URL('./components/ai/AIDraftActions.vue', import.meta.url), 'utf8')
     expect(modeTabs).toContain('开题')
     expect(modeTabs).toContain('研究')
-    expect(modeTabs).toContain('答辩')
+    expect(modeTabs).toContain('成果表达')
     expect(composer).toContain('引用项目材料')
     expect(composer).toContain('发送')
     expect(contextDrawer).toContain('读取材料数')

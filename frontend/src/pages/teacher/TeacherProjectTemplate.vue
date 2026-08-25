@@ -109,7 +109,7 @@ onMounted(load); watch(projectId, load)
     <PageHeader
       eyebrow="材料范本"
       title="配置材料范本"
-      description="范本只定义学生需要提交的材料，不重复呈现项目进度和审核列表。"
+       description="维护本项目的材料提交说明和参考范本，学生会在任务页看到更新。"
     >
       <template #actions>
         <RouterLink class="secondary-button" :to="`/teacher/projects/${project.id}`">返回指导项目</RouterLink>
@@ -134,7 +134,7 @@ onMounted(load); watch(projectId, load)
       </article>
       </div>
     </section>
-    </div><aside class="demo-template-status paper-card"><h2>范本状态</h2><div class="demo-template-status-row"><span>学生可见</span><StatusTag status="published" /></div><div class="demo-template-status-row"><span>最近更新</span><strong>今天</strong></div><button class="primary-button" type="button" :disabled="!isPrimary">保存范本</button></aside></div>
+     </div><aside class="demo-template-status paper-card"><h2>范本状态</h2><div class="demo-template-status-row"><span>学生可见</span><StatusTag status="published" /></div><div class="demo-template-status-row"><span>最近更新</span><strong>今天</strong></div><p class="form-hint">打开具体材料后，在编辑窗口保存修改。</p></aside></div>
 
     <el-dialog :model-value="Boolean(selectedTemplateEntry)" title="编辑材料参考范本" width="680px" @close="editingMaterialId = null">
       <template v-if="selectedTemplateEntry">

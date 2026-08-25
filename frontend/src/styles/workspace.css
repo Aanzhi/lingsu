@@ -263,7 +263,7 @@
 .risk-row small { color: var(--muted); }
 .risk-row > span { color: var(--moss); font-size: 11px; }
 .risk-row > span.danger { color: var(--clay); }
-.filter-bar { margin-bottom: 17px; padding: 9px; border: 1px solid var(--line); background: var(--paper-soft); border-radius: var(--radius-sm); display: flex; gap: 7px; align-items: center; }
+.filter-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-bottom: var(--space-5); }
 .filter-bar > span { margin-left: auto; color: var(--muted); font-size: 12px; }
 .filter-pill { min-height: 34px; padding: 0 13px; border: 0; background: transparent; border-radius: var(--radius-sm); cursor: pointer; color: var(--muted); font-size: 12px; }
 .filter-pill.active { color: var(--moss-dark); background: var(--sage-soft); font-weight: 700; }
@@ -454,11 +454,21 @@
 .auth-two-col { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, .75fr); align-items: start; gap: 18px; }
 .auth-two-col--form { margin-top: 18px; }
 .auth-register-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
-.auth-role-card { min-height: 220px; padding: 24px; border: 1px solid var(--line); background: var(--paper); text-align: left; cursor: pointer; }
-.auth-role-card:hover, .auth-role-card.active { border-color: var(--moss); box-shadow: var(--shadow-hover); }
-.auth-role-card h2 { margin: 5px 0 9px; font: 700 20px/1.35 var(--sans); }
-.auth-role-card > p:not(.eyebrow) { min-height: 50px; color: var(--muted); line-height: 1.65; }
-.auth-role-card .primary-button { width: fit-content; margin-top: 14px; }
+.role-badge { display: inline-flex; min-height: 24px; align-items: center; padding: 3px 9px; border: 1px solid transparent; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .03em; white-space: nowrap; }
+.role-badge--student { color: var(--moss-dark); background: var(--sage-soft); border-color: var(--sage-line); }
+.role-badge--teacher { color: var(--management-brand-deep); background: #e6efee; border-color: #bfd2d0; }
+.auth-role-card { position: relative; display: flex; min-height: 220px; padding: 24px; flex-direction: column; align-items: flex-start; border: 1px solid var(--line); border-inline-start: 4px solid var(--role-accent); background: var(--paper); text-align: left; cursor: pointer; transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease; }
+.auth-role-card--student { --role-accent: var(--moss); --role-dark: var(--moss-dark); --role-surface: var(--sage-soft); --role-line: var(--sage-line); }
+.auth-role-card--teacher { --role-accent: var(--management-brand); --role-dark: var(--management-brand-deep); --role-surface: #e6efee; --role-line: #bfd2d0; }
+.auth-role-card:hover { border-color: var(--role-accent); box-shadow: var(--shadow-hover); }
+.auth-role-card--student.active, .auth-role-card--teacher.active { border-color: var(--role-accent); background: var(--role-surface); box-shadow: var(--shadow-hover); }
+.auth-role-card__topline { width: 100%; min-height: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.auth-role-card__selected { color: var(--role-dark); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.auth-role-card h2 { margin: 14px 0 9px; font: 700 20px/1.35 var(--sans); }
+.auth-role-card__description { min-height: 50px; flex: 1; margin: 0; color: var(--muted); line-height: 1.65; }
+.auth-role-card .primary-button { width: fit-content; margin-top: 18px; }
+.auth-role-card__action { border-color: var(--role-accent); background: var(--role-accent); }
+.auth-role-card__action:hover { border-color: var(--role-dark); background: var(--role-dark); }
 .auth-panel { display: grid; gap: 16px; min-width: 0; padding: 0; }
 .auth-card, .auth-support { width: 100%; padding: 24px; }
 .auth-card h2, .auth-support h2 { margin: 5px 0 9px; color: var(--ink); font: 700 25px/1.3 var(--sans); }

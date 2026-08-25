@@ -4,8 +4,9 @@ import { ArrowRight, CircleCheck, Clock, Lock, Warning } from '@element-plus/ico
 import StatusTag from './StatusTag.vue'
 import type { ApiTask } from '../stores/studentApiModel'
 import { taskActionLabel } from '../stores/studentApiModel'
+import { studentTaskRoute } from '../stores/pageContracts'
 
-const props = defineProps<{ task: ApiTask | null; projectId: number }>()
+const props = defineProps<{ task: ApiTask | null; projectId: number; showAction?: boolean }>()
 </script>
 
 <template>
@@ -15,7 +16,7 @@ const props = defineProps<{ task: ApiTask | null; projectId: number }>()
     <h2>{{ props.task.title }}</h2>
     <p>{{ props.task.status === 'locked' ? '完成上一项任务并通过审核后，这项任务会自动解锁。' : props.task.description }}</p>
     <div class="task-card-meta"><span>第 {{ props.task.stage_order }} 章 · {{ props.task.stage_name }}</span><span v-if="props.task.due_at">截止 {{ props.task.due_at }}</span><span v-else>+{{ props.task.xp_reward }} XP</span></div>
-    <RouterLink class="primary-button full" :to="`/student/projects/${props.projectId}/tasks/${props.task.id}`"><el-icon><Warning v-if="props.task.status === 'revision_required'" /><Clock v-else-if="props.task.status === 'pending_review'" /><Lock v-else-if="props.task.status === 'locked'" /><CircleCheck v-else /><ArrowRight v-if="!['pending_review', 'locked', 'approved', 'completed'].includes(props.task.status)" /></el-icon>{{ taskActionLabel(props.task.status) }}</RouterLink>
+    <RouterLink v-if="props.showAction !== false" class="primary-button full" :to="studentTaskRoute(props.projectId, props.task.id)"><el-icon><Warning v-if="props.task.status === 'revision_required'" /><Clock v-else-if="props.task.status === 'pending_review'" /><Lock v-else-if="props.task.status === 'locked'" /><CircleCheck v-else /><ArrowRight v-if="!['pending_review', 'locked', 'approved', 'completed'].includes(props.task.status)" /></el-icon>{{ taskActionLabel(props.task.status) }}</RouterLink>
   </section>
   <section v-else class="next-task-card empty-task-card"><p class="eyebrow">项目状态</p><h2>当前没有待办任务</h2><p>任务完成后会在这里显示新的行动。</p></section>
 </template>

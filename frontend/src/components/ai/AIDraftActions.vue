@@ -47,4 +47,7 @@ function confirmAction() {
 .ai-draft-actions__confirm strong { color: var(--moss-dark); font-size: 12px; }
 .ai-draft-actions__confirm small { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .ai-draft-actions__confirm > div { display: flex; gap: 7px; justify-content: flex-end; }
+.save-draft { border: 1px solid var(--line-dark); border-radius: var(--radius-sm); background: var(--paper); color: var(--moss-dark); padding: 6px 9px; font: inherit; font-size: 11px; cursor: pointer; }
+.save-draft:hover, .save-draft:focus-visible { border-color: var(--moss); background: var(--sage-soft); }
+.save-draft:disabled { cursor: wait; opacity: .65; }
 </style>

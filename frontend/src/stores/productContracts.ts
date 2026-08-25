@@ -1,7 +1,7 @@
 export const AI_WORKSPACE_MODES = [
   { key: 'opening', label: '开题' },
   { key: 'research', label: '研究' },
-  { key: 'defense', label: '答辩' },
+  { key: 'defense', label: '成果表达' },
 ] as const
 
 export type AIWorkspaceMode = typeof AI_WORKSPACE_MODES[number]['key']

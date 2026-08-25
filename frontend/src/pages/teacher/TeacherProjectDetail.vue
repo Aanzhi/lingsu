@@ -3,12 +3,14 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { User } from '@element-plus/icons-vue'
 import { useRoute } from 'vue-router'
 
-import { errorMessage, type ProjectTask } from '../../api'
+import { createPublicCase, errorMessage, getPublicCases, teacherInvitePublicCase, type ProjectTask, type PublicCase } from '../../api'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 import EmptyState from '../../components/EmptyState.vue'
 import FeedbackBanner from '../../components/FeedbackBanner.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
 import { makeFeedback, type FeedbackState } from '../../stores/feedbackModel'
+import { teacherMembersRoute, teacherReviewRoute } from '../../stores/pageContracts'
 import { projectJourneySummary, type ApiTask } from '../../stores/studentApiModel'
 import { projectRiskLabel, projectTaskSummary } from '../../stores/teacherProjectModel'
 import { projectTypeLabel } from '../../stores/presentationModel'
@@ -34,6 +36,9 @@ const journey = computed(() => projectJourneySummary(legacyTasks.value, material
 const chapters = computed(() => journey.value.chapters)
 const currentChapter = computed(() => chapters.value.find((chapter) => chapter.containsCurrent) ?? chapters.value.find((chapter) => chapter.status === 'active') ?? chapters.value[0] ?? null)
 const expandedChapter = ref<number | null>(null)
+const publicCase = ref<PublicCase | null>(null)
+const inviteConfirm = ref(false)
+const inviting = ref(false)
 
 watch(currentChapter, (chapter) => {
   if (expandedChapter.value === null) expandedChapter.value = chapter?.index ?? null
@@ -61,7 +66,8 @@ function materialActionLabel(stepId: number) {
 async function load() {
   loading.value = true
   try {
-    await Promise.all([teacherStore.load(), teacherStore.loadArchived(), teacherStore.loadTrashed()])
+    const [, , , caseResponse] = await Promise.all([teacherStore.load(), teacherStore.loadArchived(), teacherStore.loadTrashed(), getPublicCases()])
+    publicCase.value = caseResponse.data.find((item) => item.project === projectId.value) ?? null
     await teacherStore.loadProjectDetail(projectId.value)
   } catch (reason) {
     feedback.value = makeFeedback('error', errorMessage(reason), '项目详情没有加载完成，可以重试。', '重试')
@@ -71,12 +77,39 @@ async function load() {
 }
 onMounted(load)
 watch(projectId, load)
+
+async function inviteToPlatform() {
+  if (!project.value) return
+  inviteConfirm.value = false
+  inviting.value = true
+  try {
+    const approvedMaterials = materials.value.filter((item) => item.status === 'approved').map((item) => item.id)
+    if (!approvedMaterials.length) throw new Error('项目还没有已通过材料，至少完成一项成果后才能发起公域展示。')
+    if (publicCase.value) {
+      publicCase.value = (await teacherInvitePublicCase(publicCase.value.id)).data
+    } else {
+      publicCase.value = (await createPublicCase({
+        project: project.value.id,
+        request_type: 'teacher_platform',
+        visibility_scope: 'platform',
+        public_summary: project.value.problem || project.value.title,
+        tags: [],
+        discipline: '',
+        application_scene: '',
+        outcome_form: '项目成果展示',
+        selected_materials: approvedMaterials,
+      })).data
+    }
+    feedback.value = makeFeedback('success', '全平台展示邀请已发出。', '学生同意后会进入平台审核，平台通过前不会公开。')
+  } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '邀请没有发出，项目资料未改变，可以重试。', '重试') }
+  finally { inviting.value = false }
+}
 </script>
 
 <template>
   <p v-if="loading" class="loading-state" role="status">正在读取指导项目详情…</p>
   <div v-if="project && !loading" class="page teacher-project-detail-page">
-    <PageHeader eyebrow="指导项目" :title="project.title" :description="`${project.members[0]?.username || '负责人待定'} · ${projectTypeLabel(project.project_type)} · ${project.members.length} 名成员`">
+    <PageHeader eyebrow="指导项目" :title="project.title" description="跟进项目研究章节、材料审核和成员状态。">
       <template #actions>
         <RouterLink class="secondary-button" :to="`/teacher/projects/${project.id}/template`">配置材料范本</RouterLink>
       </template>
@@ -87,14 +120,15 @@ watch(projectId, load)
       <div class="demo-teacher-detail-main">
         <section class="paper-card demo-project-summary"><p class="eyebrow">项目摘要</p><h2>{{ project.problem || '未填写研究问题' }}</h2><p class="muted">{{ project.plan || '学生尚未填写初步方案。' }}</p><div class="demo-summary-line"><span>负责人 <strong>{{ project.members[0]?.username || '待定' }}</strong></span><span>成员 <strong>{{ project.members.length }} 人</strong></span><span>完成度 <strong>{{ journey.summary.completed }} / {{ journey.summary.total }} 章</strong></span></div></section>
         <section class="demo-teacher-chapters paper-card"><div class="demo-section-head"><div><h2>研究章节</h2><p>在章节内处理任务与材料，避免重复列表</p></div><StatusTag :status="risk === '当前没有待处理风险' ? 'active' : 'pending_review'" /></div>
-          <div class="demo-chapter-list"><article v-for="chapter in chapters" :key="chapter.index" class="demo-chapter-row" :class="{ 'is-open': expandedChapter === chapter.index }"><button type="button" :aria-expanded="expandedChapter === chapter.index" :aria-controls="`teacher-chapter-${chapter.index}`" @click="toggleChapter(chapter.index)"><span class="demo-chapter-index">{{ chapter.index }}</span><strong>{{ chapter.name }}</strong><span>{{ chapter.total }} 项任务 · {{ chapter.done }} 项已通过</span><span>⌄</span></button><div v-if="expandedChapter === chapter.index" :id="`teacher-chapter-${chapter.index}`" class="demo-chapter-body"><div v-for="step in chapter.steps" :key="step.id" class="demo-task-mini"><span>{{ step.title }}</span><StatusTag :status="materialForStep(step.id)?.status || step.taskStatus" /><RouterLink v-if="latestSubmittedRevision(step.id)" class="text-link" :to="`/teacher/reviews/${latestSubmittedRevision(step.id)?.id}`">开始审核 →</RouterLink></div></div></article></div>
+          <div class="demo-chapter-list"><article v-for="chapter in chapters" :key="chapter.index" class="demo-chapter-row" :class="{ 'is-open': expandedChapter === chapter.index }"><button type="button" :aria-expanded="expandedChapter === chapter.index" :aria-controls="`teacher-chapter-${chapter.index}`" @click="toggleChapter(chapter.index)"><span class="demo-chapter-index">{{ chapter.index }}</span><strong>{{ chapter.name }}</strong><span>{{ chapter.total }} 项任务 · {{ chapter.done }} 项已通过</span><span>⌄</span></button><div v-if="expandedChapter === chapter.index" :id="`teacher-chapter-${chapter.index}`" class="demo-chapter-body"><div v-for="step in chapter.steps" :key="step.id" class="demo-task-mini"><span>{{ step.title }}</span><StatusTag :status="materialForStep(step.id)?.status || step.taskStatus" /><RouterLink v-if="latestSubmittedRevision(step.id)" class="text-link" :to="teacherReviewRoute(latestSubmittedRevision(step.id)?.id, project.id)">开始审核 →</RouterLink></div></div></article></div>
           <EmptyState v-if="!chapters.length" title="暂无研究任务" description="项目材料尚未生成，学生提交后会在这里形成指导章节。" compact />
         </section>
       </div>
-      <aside class="demo-teacher-detail-aside"><section class="paper-card"><h2>指导动作</h2><div class="demo-action-stack"><RouterLink class="primary-button" to="/teacher/reviews">AI 预审材料</RouterLink><RouterLink class="secondary-button" to="/teacher/reviews">审核待提交材料</RouterLink><RouterLink class="secondary-button" :to="`/teacher/projects/${project.id}/template`">配置材料范本</RouterLink><RouterLink class="secondary-button" to="/teacher/members">查看成员</RouterLink></div></section><section class="paper-card"><h2>指导提醒</h2><div class="callout"><strong>{{ risk }}</strong><span>{{ summary.needsReview ? `当前有 ${summary.needsReview} 项材料需要处理，建议优先查看最早提交的版本。` : '当前没有需要教师立即介入的风险。' }}</span></div></section></aside>
+      <aside class="demo-teacher-detail-aside"><section class="paper-card"><h2>指导动作</h2><div class="demo-action-stack"><RouterLink class="primary-button" :to="teacherReviewRoute(undefined, project.id)">查看待审核材料</RouterLink><RouterLink class="secondary-button" :to="`/teacher/projects/${project.id}/template`">配置材料范本</RouterLink><RouterLink class="secondary-button" :to="teacherMembersRoute(project.id)">成员与邀请</RouterLink><button v-if="project.status === 'completed' && (!publicCase || ['rejected', 'pending_teacher'].includes(publicCase.status))" class="secondary-button" type="button" :disabled="inviting" @click="inviteConfirm = true">{{ inviting ? '正在发出邀请…' : '邀请全平台展示' }}</button><div v-else-if="publicCase" class="case-invite-state"><StatusTag :status="publicCase.status" /><small>{{ publicCase.status === 'waiting_student' ? '等待项目负责人同意' : publicCase.status === 'pending_platform' ? '等待平台审核' : publicCase.status === 'published' ? '已进入全平台案例库' : '当前申请未进入可发起状态' }}</small></div></div></section><section class="paper-card"><h2>指导提醒</h2><div class="callout"><strong>{{ risk }}</strong><span>{{ summary.needsReview ? `当前有 ${summary.needsReview} 项材料需要处理，建议优先查看最早提交的版本。` : '当前没有需要教师立即介入的风险。' }}</span></div></section></aside>
     </div>
   </div>
   <EmptyState v-else-if="!loading" title="找不到指导项目" description="项目可能已经被移除，或不属于当前教师。"><RouterLink class="secondary-button" to="/teacher/projects">返回指导项目</RouterLink></EmptyState>
+  <ConfirmDialog v-if="inviteConfirm" :model-value="true" title="邀请项目进入全平台案例库？" description="学生需要先同意公开展示，之后还要经过平台审核；平台通过前不会对外公开。" confirm-text="确认发出邀请" @update:model-value="inviteConfirm = false" @confirm="inviteToPlatform" />
 </template>
 
 <style scoped>
@@ -118,6 +152,8 @@ watch(projectId, load)
 .demo-task-mini { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 12px; min-height: 38px; border-top: 1px dashed var(--line); font-size: 12px; }
 .demo-action-stack { display: grid; gap: 9px; margin-top: 16px; }
 .demo-action-stack > * { justify-content: center; width: 100%; box-sizing: border-box; }
+.case-invite-state { display: grid; gap: 7px; justify-items: start; padding-top: 4px; border-top: 1px solid var(--line); }
+.case-invite-state small { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .demo-teacher-detail-aside .callout { display: grid; gap: 7px; }
 .demo-teacher-detail-aside .callout span { color: var(--muted); font-size: 12px; line-height: 1.6; }
 .teacher-project-summary__copy { min-width: 0; }

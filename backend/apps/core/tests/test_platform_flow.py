@@ -110,6 +110,14 @@ class PlatformFlowTests(TestCase):
         self.assertEqual([item["username"] for item in response.data], ["member"])
         self.assertNotIn("school", response.data[0])
 
+    def test_guiding_teacher_can_search_same_school_students_for_direct_assignment(self):
+        client = APIClient(); client.force_authenticate(self.teacher)
+
+        response = client.get("/api/accounts/students/", {"q": "mem"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([item["username"] for item in response.data], ["member"])
+
     def test_invited_student_can_list_pending_invitations_and_reject_one(self):
         project = Project.objects.create(
             school=self.school, title="邀请响应", leader=self.leader,

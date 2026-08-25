@@ -4,7 +4,7 @@ import { CaretRight, CircleCheck, CircleClose, Clock, Lock, RefreshRight, Warnin
 
 import type { UnifiedStatus } from '../stores/status'
 
-const props = defineProps<{ status: UnifiedStatus | 'published' | 'offline' | 'risk' | 'waiting_student' | 'waiting_teacher' | 'joined' | 'rejected' | 'archived' | 'trashed' }>()
+const props = defineProps<{ status: UnifiedStatus | 'published' | 'offline' | 'risk' | 'waiting_student' | 'waiting_teacher' | 'pending_teacher' | 'pending_platform' | 'joined' | 'rejected' | 'archived' | 'trashed' }>()
 const values: Record<string, { label: string; tone: string; icon: unknown }> = {
   draft: { label: '草稿', tone: 'neutral', icon: Clock }, unclaimed: { label: '待认领', tone: 'neutral', icon: Clock },
   active: { label: '进行中', tone: 'success', icon: RefreshRight }, available: { label: '可开始', tone: 'current', icon: CaretRight },
@@ -15,7 +15,7 @@ const values: Record<string, { label: string; tone: string; icon: unknown }> = {
   archived: { label: '已归档', tone: 'muted', icon: CircleCheck }, trashed: { label: '回收站', tone: 'danger', icon: CircleClose },
   disabled: { label: '已停用', tone: 'muted', icon: CircleClose }, published: { label: '已发布', tone: 'success', icon: CircleCheck },
   offline: { label: '已下架', tone: 'muted', icon: CircleClose }, risk: { label: '风险标记', tone: 'danger', icon: Warning },
-  waiting_student: { label: '待学生确认', tone: 'warning', icon: Clock }, waiting_teacher: { label: '待教师确认', tone: 'warning', icon: Clock },
+  waiting_student: { label: '待学生确认', tone: 'warning', icon: Clock }, waiting_teacher: { label: '待教师确认', tone: 'warning', icon: Clock }, pending_teacher: { label: '待教师审核', tone: 'warning', icon: Clock }, pending_platform: { label: '待平台审核', tone: 'warning', icon: Clock },
   joined: { label: '已加入', tone: 'success', icon: CircleCheck }, rejected: { label: '已拒绝', tone: 'muted', icon: CircleClose },
 }
 const value = computed(() => values[props.status] ?? values.draft)

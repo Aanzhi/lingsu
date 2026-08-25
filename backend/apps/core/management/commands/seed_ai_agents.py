@@ -559,7 +559,7 @@ def _agent(key, name, workflow, category, description, direction, prompt, inputs
 # 科创共创中心学生端：开题/申报 5 个 + 论文写作 6 个。仅保留这 11 个全局种子，
 # 以免旧的宽泛模板干扰按工作流、阶段和快捷任务的匹配。
 AGENTS = [
-    _agent("proposal-topic", "课题名称与摘要", "proposal_topic", "开题申报", "把兴趣转为可研究、可验证的问题。", "澄清选题边界、研究对象和核心问题", "项目主题：{topic}\n已有观察：{observations}\n请输出可比较的选题、研究问题、变量/证据线索和待核验假设。", [{"key": "topic", "label": "项目主题", "placeholder": "你想研究的主题", "required": True, "type": "text"}, {"key": "observations", "label": "已有观察", "placeholder": "现象、痛点或灵感", "required": False, "type": "textarea"}], ["立项", "选题"], ["选题建议", "问题澄清"], {"format": "sections", "sections": ["候选选题", "研究问题", "待核验假设"]}),
+    _agent("proposal-topic", "研究问题助手", "proposal_topic", "开题申报", "把观察和兴趣收敛为可研究、可验证的问题。", "澄清选题边界、研究对象和核心问题", "项目主题：{topic}\n已有观察：{observations}\n请严格只输出 JSON，不要 Markdown。生成 project_title、project_type（research/invention/engineering）、project_plan，以及 3 个候选研究问题。每个候选包含 question、scope、why、evidence_plan、limitations，以及 scores（researchability、clarity、verifiability、resource_fit，均为 1-5）；同时返回 recommended_index 和 missing_information。不要编造数据、引用或实验结果。", [{"key": "topic", "label": "项目主题", "placeholder": "你想研究的主题", "required": True, "type": "text"}, {"key": "observations", "label": "已有观察", "placeholder": "现象、痛点或灵感", "required": False, "type": "textarea"}], ["立项", "选题"], ["选题建议", "问题澄清"], {"format": "research_question_candidates", "candidate_count": 3, "project_draft": ["project_title", "project_type", "project_plan"], "scores": ["researchability", "clarity", "verifiability", "resource_fit"]}),
     _agent("proposal-background", "研究背景与意义", "proposal_background", "开题申报", "梳理论证链条与开题结构。", "梳理论证链条并撰写开题报告", "项目题目：{project_title}\n研究问题：{research_question}\n初步设想：{initial_idea}\n请输出研究背景、目标、方法、技术路线、预期成果、风险与待核验事项。", [{"key": "project_title", "label": "项目题目", "placeholder": "例如：校园雨水回收", "required": True, "type": "text"}, {"key": "research_question", "label": "研究问题", "placeholder": "要解决什么", "required": True, "type": "text"}, {"key": "initial_idea", "label": "初步设想", "placeholder": "已有思路", "required": True, "type": "textarea"}], ["立项", "开题"], ["生成开题结构", "补充研究背景"], {"format": "sections", "sections": ["背景", "目标", "方法", "风险", "核验清单"]}),
     _agent("proposal-objectives", "研究目标与内容", "proposal_objectives", "开题申报", "把研究问题转成可执行的方案。", "设计可执行的实验、调查或工程验证方案", "研究问题：{research_question}\n已有条件：{resources}\n请输出变量/指标、步骤、样本或测试条件、数据记录方式、安全事项和待核验清单。", [{"key": "research_question", "label": "研究问题", "placeholder": "要回答的问题", "required": True, "type": "text"}, {"key": "resources", "label": "已有条件", "placeholder": "设备、材料、场地", "required": False, "type": "textarea"}], ["方案设计", "研究设计"], ["设计实验", "设计调查"], {"format": "checklist", "sections": ["变量与指标", "步骤", "数据记录", "安全与核验"]}),
     _agent("proposal-plan", "实施方案与进度", "proposal_plan", "开题申报", "识别资源、伦理、安全和进度风险。", "检查方案可行性并提出可执行的风险缓解措施", "方案摘要：{plan_summary}\n限制条件：{constraints}\n请输出风险矩阵、缓解措施、资源缺口与需要教师/学生核实的事项。", [{"key": "plan_summary", "label": "方案摘要", "placeholder": "简述你的方案", "required": True, "type": "textarea"}, {"key": "constraints", "label": "限制条件", "placeholder": "时间、设备或安全限制", "required": False, "type": "textarea"}], ["开题", "方案设计"], ["检查可行性", "评估风险"], {"format": "risk_matrix", "sections": ["风险", "影响", "缓解措施", "核验项"]}),
@@ -571,6 +571,14 @@ AGENTS = [
     _agent("paper-result-interpret", "结果解读助手", "paper_result_interpret", "论文写作", "把真实结果整理为谨慎的讨论。", "解读真实数据或观察并写作结果与讨论", "论文类型：{paper_type}\n真实结果/观察：{results}\n预期讨论角度：{discussion_focus}\n请区分事实、解释与推测，输出结果描述、讨论框架、局限和待核验项。", [{"key": "results", "label": "真实结果或观察", "placeholder": "粘贴已核对的数据或观察", "required": True, "type": "textarea"}, {"key": "discussion_focus", "label": "讨论角度", "placeholder": "想解释什么", "required": False, "type": "textarea"}], ["结果分析", "讨论"], ["解读结果", "起草讨论"], {"format": "sections", "sections": ["结果", "解释", "局限", "待核验"]}),
     _agent("paper-reviewer-response", "审稿意见回复助手", "paper_reviewer_response", "论文写作", "整理审稿意见并形成逐条、诚实的回复策略。", "回复审稿意见，不承诺不存在的证据或修改", "论文类型：{paper_type}\n审稿意见：{review_comments}\n当前修改：{revision_summary}\n请输出逐条回复草案、修改清单与待核验项。", [{"key": "review_comments", "label": "审稿意见", "placeholder": "粘贴审稿意见", "required": True, "type": "textarea"}, {"key": "revision_summary", "label": "当前修改", "placeholder": "已完成的修改", "required": False, "type": "textarea"}], ["修改", "投稿回复"], ["拆解审稿意见", "起草回复"], {"format": "table", "sections": ["审稿意见", "回复草案", "修改动作", "待核验"]}),
 ]
+
+# Keep the historical key for old conversations while exposing the third
+# student-facing workspace category as a dedicated defense Agent.
+for _spec in AGENTS:
+    if _spec["key"] == "paper-reviewer-response":
+        _spec["name"] = "答辩问答准备"
+        _spec["category"] = "答辩"
+        _spec["description"] = "模拟评委追问，整理诚实、可核验的答辩回应。"
 
 
 # Shared context is bounded to the current project in the generation task.  The

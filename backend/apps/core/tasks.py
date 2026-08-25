@@ -10,11 +10,12 @@ from openai import OpenAI
 from celery import shared_task
 from django.conf import settings
 from django.core.files.base import ContentFile
+from django.db import transaction
 from django.utils import timezone
 from docx import Document
 
 from .models import AgentTemplate, AIConversationMessage
-from .ai_agents import PAPER_AGENT_KEYS, render_agent_prompt
+from .ai_agents import PAPER_AGENT_KEYS, parse_research_question_output, render_agent_prompt
 from .workflows.ai import publish_conversation_event
 
 DEFAULT_AI_INSTRUCTION = (
@@ -37,8 +38,40 @@ def _ref_label(source: dict) -> str:
     return f"材料《{title}》"
 
 
+def _research_question_artifact(output):
+    structured = parse_research_question_output(output)
+    if not structured:
+        return None
+    readable = "\n\n".join(
+        f"候选 {index + 1}：{candidate['question']}\n研究边界：{candidate['scope']}\n为什么值得研究：{candidate['why']}\n证据或数据：{candidate['evidence_plan']}\n可能限制：{candidate['limitations']}"
+        for index, candidate in enumerate(structured["candidates"])
+    )
+    return {
+        "artifact_payload": {
+            "title": "研究问题候选",
+            "draft": readable,
+            "content": output,
+            "project_title": structured["project_title"],
+            "project_type": structured["project_type"],
+            "project_plan": structured["project_plan"],
+            "candidates": structured["candidates"],
+            "recommended_index": structured["recommended_index"],
+            "missing_information": structured["missing_information"],
+            "next_action": "请比较候选并结合真实可获得的证据核验后，再由你确认保存。",
+        },
+        "verification_items": [
+            {"item": "研究对象、边界与证据来源", "status": "needs_verification", "guidance": "确认每个候选都能在你的时间、设备和样本条件下验证。"},
+            {"item": "事实、数据与限制", "status": "needs_verification", "guidance": "AI 不会替你编造数据；保存前请检查限制是否准确。"},
+        ],
+    }
+
+
 def _artifact_fields(record, output):
     """Build an auditable, UI-friendly artifact without replacing the raw model output."""
+    if record.agent_key == "proposal-topic":
+        structured = _research_question_artifact(output)
+        if structured:
+            return structured
     title = record.material.title if record.material_id else (record.purpose or "AI 生成草稿")
     return {
         "artifact_payload": {
@@ -66,6 +99,39 @@ def _demo_ai_response(record, context_parts, referenced=None, agent_prompt=""):
     the frontend ConsistencyCheckCard parses.
     """
     project = record.project
+    if record.agent_key == "proposal-topic":
+        seed = (record.prompt or (project.problem if project else "") or (project.title if project else "") or "你的研究现象").strip()
+        payload = {
+            "candidates": [
+                {
+                    "question": f"在明确的研究对象与场景中，{seed}的主要表现和可能原因是什么？",
+                    "scope": "先限定一个具体对象、场景和观察时段",
+                    "why": "能够把兴趣转成可观察的现象，适合作为第一轮研究切口。",
+                    "evidence_plan": "现场观察、记录表、访谈或公开资料；具体选择需由学生核验。",
+                    "limitations": "样本量和观察周期可能有限，不能直接推断更大范围。",
+                    "scores": {"researchability": 4, "clarity": 4, "verifiability": 4, "resource_fit": 4},
+                },
+                {
+                    "question": f"哪些可观察条件与{seed}的差异相关？",
+                    "scope": "比较两个或多个可获得条件，保持其他条件尽量一致",
+                    "why": "便于形成对照，帮助区分相关现象与可能影响因素。",
+                    "evidence_plan": "对照观察、简单测量或小规模调查，并记录原始数据。",
+                    "limitations": "对照条件难以完全一致，结果只能支持有限范围的判断。",
+                    "scores": {"researchability": 4, "clarity": 3, "verifiability": 4, "resource_fit": 3},
+                },
+                {
+                    "question": f"在现有时间和资源下，如何验证{seed}的一种可行解释？",
+                    "scope": "只验证一个解释和一项可测指标，不扩展到完整解决方案",
+                    "why": "直接连接可执行的验证行动，适合资源有限的学生项目。",
+                    "evidence_plan": "制定一次小实验或连续观察，预先写明指标、步骤和停止条件。",
+                    "limitations": "一次验证不能证明普遍规律，需要明确结果的适用边界。",
+                    "scores": {"researchability": 5, "clarity": 4, "verifiability": 4, "resource_fit": 4},
+                },
+            ],
+            "recommended_index": 0,
+            "missing_information": ["还需要确认研究对象、观察时段和可用设备。"],
+        }
+        return json.dumps(payload, ensure_ascii=False, indent=2)
     if record.agent_key == "cross-consistency":
         materials = list(project.materials.all().order_by("report_order", "id"))
         if len(materials) < 2:
@@ -152,7 +218,8 @@ def _demo_ai_response(record, context_parts, referenced=None, agent_prompt=""):
     return "\n".join(lines)
 
 
-def _finish_conversation_message(message, output, artifact):
+def _finish_conversation_message(message, output, artifact=None):
+    artifact = artifact or {"artifact_payload": {}, "verification_items": []}
     for chunk in [output[i:i + 240] for i in range(0, len(output), 240)]:
         publish_conversation_event(message.id, "message.delta", {"delta": chunk})
     message.content = output
@@ -161,6 +228,51 @@ def _finish_conversation_message(message, output, artifact):
     message.save(update_fields=["content", "status", "artifact_payload", "updated_at"])
     publish_conversation_event(message.id, "message.artifact", artifact)
     publish_conversation_event(message.id, "message.done", {"message_id": message.id})
+
+
+@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
+def generate_general_ai_response(self, message_id):
+    """Generate a real response for project-free conversations when configured."""
+    message = AIConversationMessage.objects.select_related("conversation").get(pk=message_id)
+    if message.status in {AIConversationMessage.Status.COMPLETED, AIConversationMessage.Status.FAILED}:
+        return {"message_id": message.id, "status": message.status}
+    message.status = AIConversationMessage.Status.STREAMING
+    message.save(update_fields=["status", "updated_at"])
+    publish_conversation_event(message.id, "message.started", {"message_id": message.id})
+    try:
+        conversation = message.conversation
+        agent_key = conversation.current_agent or ""
+        history = conversation.messages.exclude(pk=message.id).order_by("-created_at", "-id")[:8]
+        transcript = "\n".join(
+            f"{item.role}: {item.content}" for item in reversed(list(history)) if item.content
+        )
+        latest_user_message = next((item.content for item in history if item.role == AIConversationMessage.Role.USER and item.content), message.content)
+        instructions = DEFAULT_AI_INSTRUCTION
+        if agent_key == "proposal-topic":
+            instructions = (
+                f"{DEFAULT_AI_INSTRUCTION} 你正在执行研究问题助手工作流。"
+                "只输出严格 JSON，不要 Markdown。JSON 必须包含 project_title、project_type、project_plan、"
+                "candidates、recommended_index、missing_information。project_type 只能是 research、invention、engineering；"
+                "candidates 必须正好 3 个，每个包含 question、scope、why、evidence_plan、limitations 和 scores，"
+                "scores 的 researchability、clarity、verifiability、resource_fit 均为 1-5。"
+            )
+        client_kwargs = {"api_key": settings.OPENAI_API_KEY}
+        if settings.OPENAI_BASE_URL:
+            client_kwargs["base_url"] = settings.OPENAI_BASE_URL
+        response = OpenAI(**client_kwargs).responses.create(
+            model=settings.OPENAI_MODEL,
+            instructions=instructions,
+            input=(f"对话历史：\n{transcript}\n\n" if transcript else "") + f"用户问题：\n{latest_user_message}",
+        )
+        artifact = _research_question_artifact(response.output_text) if agent_key == "proposal-topic" else None
+        _finish_conversation_message(message, response.output_text, artifact)
+        return {"message_id": message.id, "status": message.status}
+    except Exception as exc:
+        message.status = AIConversationMessage.Status.FAILED
+        message.error_message = str(exc)[:2000]
+        message.save(update_fields=["status", "error_message", "updated_at"])
+        publish_conversation_event(message.id, "message.error", {"error": message.error_message})
+        raise
 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=3)
@@ -301,6 +413,40 @@ def generate_ai_response(self, record_id):
         publish_conversation_event(conversation_message.id, "message.started", {"message_id": conversation_message.id})
     try:
         project = record.project
+        if project is None:
+            if record.workspace_mode != "opening":
+                raise ValueError("研究或答辩 AI 记录必须绑定当前项目。")
+            api_key = getattr(settings, "OPENAI_API_KEY", "")
+            if api_key:
+                client_kwargs = {"api_key": api_key}
+                base_url = getattr(settings, "OPENAI_BASE_URL", "")
+                if base_url:
+                    client_kwargs["base_url"] = base_url
+                response = OpenAI(**client_kwargs).responses.create(
+                    model=settings.OPENAI_MODEL,
+                    instructions=(
+                        f"{DEFAULT_AI_INSTRUCTION} 你正在执行开题工作流。只输出严格 JSON，必须包含 project_title、project_type、project_plan、"
+                        "candidates、recommended_index、missing_information；candidates 必须正好 3 个，并包含 question、scope、why、evidence_plan、limitations 和 scores。"
+                    ),
+                    input=f"用户开题想法：{record.prompt}",
+                )
+                output = response.output_text
+                model_name = settings.OPENAI_MODEL
+            else:
+                output = _demo_ai_response(record, [], [], record.prompt)
+                model_name = "演示模式（未接入真实模型）"
+            artifact = _artifact_fields(record, output)
+            record.output = output
+            record.artifact_payload = artifact["artifact_payload"]
+            record.verification_items = artifact["verification_items"]
+            record.model_name = model_name
+            record.status = AIGenerationLog.Status.COMPLETED
+            record.referenced_sources = []
+            record.completed_at = timezone.now()
+            record.save(update_fields=["output", "artifact_payload", "verification_items", "model_name", "status", "referenced_sources", "completed_at"])
+            if conversation_message:
+                _finish_conversation_message(conversation_message, output, artifact)
+            return {"record_id": record.id, "status": record.status, "mode": "opening"}
         context_parts = [f"项目题目：{project.title}", f"项目类型：{project.project_type}"]
         referenced = []
         scope = record.context_scope or {}
@@ -490,13 +636,50 @@ def generate_ai_response(self, record_id):
         raise
 
 
-@shared_task
-def purge_trashed_projects(retention_days: int = 30):
-    """Hard-delete projects that have been in the recycle bin for `retention_days` days."""
-    from .models import Project
+def purge_trashed_project_records(retention_days: int = 30, dry_run: bool = False):
+    """Delete expired trash records after removing private files and writing an audit summary."""
+    from .models import AuditEvent, MaterialAttachment, Project, ReportExport, UploadPart
 
     cutoff = timezone.now() - timedelta(days=retention_days)
-    queryset = Project.all_objects.filter(deleted_at__isnull=False, trashed_at__lte=cutoff)
-    deleted = list(queryset.values_list("id", flat=True))
-    queryset.delete()
-    return {"purged": len(deleted), "ids": deleted, "retention_days": retention_days}
+    projects = list(
+        Project.all_objects.filter(deleted_at__isnull=False, trashed_at__lte=cutoff)
+        .select_related("school", "leader", "primary_teacher")
+        .order_by("id")
+    )
+    ids = [project.id for project in projects]
+    if dry_run:
+        return {"purged": len(ids), "ids": ids, "retention_days": retention_days, "dry_run": True}
+
+    with transaction.atomic():
+        for project in projects:
+            # FileField.delete is best-effort and does not alter the immutable
+            # audit summary when an old object store key is already missing.
+            for attachment in MaterialAttachment.objects.filter(revision__material__project=project):
+                if attachment.file:
+                    attachment.file.delete(save=False)
+            for export in ReportExport.objects.filter(project=project):
+                if export.file:
+                    export.file.delete(save=False)
+            for part in UploadPart.objects.filter(session__revision__material__project=project):
+                if part.file:
+                    part.file.delete(save=False)
+            AuditEvent.objects.create(
+                school=project.school,
+                actor=project.leader,
+                action=AuditEvent.Action.PROJECT_PURGED,
+                changes={
+                    "project_id": project.id,
+                    "title": project.title,
+                    "school_id": project.school_id,
+                    "purged_at": timezone.now().isoformat(),
+                    "retention_days": retention_days,
+                },
+            )
+            project.delete()
+    return {"purged": len(ids), "ids": ids, "retention_days": retention_days, "dry_run": False}
+
+
+@shared_task
+def purge_trashed_projects(retention_days: int = 30, dry_run: bool = False):
+    """Celery entry point shared with the management command."""
+    return purge_trashed_project_records(retention_days=retention_days, dry_run=dry_run)

@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 
-import { isNavigationActive, navigationChildren, primaryNavigation, utilityNavigation } from './navigationRegistry'
+import { isNavigationActive, navigationChildren, primaryNavigation, studentTopNavigation, utilityNavigation } from './navigationRegistry'
 
 describe('primary navigation registry', () => {
   it('registers one primary entry per capability and role', () => {
     expect(primaryNavigation('student').map((item) => item.key))
-      .toEqual(['home', 'projects', 'ai', 'journey', 'materials', 'invitations', 'public-applications'])
+      .toEqual(['home', 'projects', 'ai', 'journey', 'materials', 'invitations', 'public-applications', 'notifications'])
     expect(primaryNavigation('teacher').map((item) => item.key))
       .toEqual(['home', 'pool', 'projects', 'reviews', 'content'])
     expect(primaryNavigation('platform_admin').map((item) => item.key))
@@ -17,7 +17,23 @@ describe('primary navigation registry', () => {
     expect(student.every((item) => !item.children?.length)).toBe(true)
     expect(student.map((item) => item.label)).toEqual([
       '首页', '我的项目', '灵思 AI', '研究旅程', '材料档案', '项目邀请', '成果申请',
+      '通知',
     ])
+  })
+
+  it('surfaces the notification center in the student top navigation', () => {
+    expect(studentTopNavigation(8).find((item) => item.key === 'notifications')).toEqual({
+      key: 'notifications', label: '通知', to: '/student/notifications', icon: 'bell',
+    })
+  })
+
+  it('keeps project-dependent student entries distinct before a project exists', () => {
+    const entries = studentTopNavigation(null)
+    expect(entries.find((item) => item.key === 'projects')?.to).toBe('/student/projects')
+    expect(entries.find((item) => item.key === 'journey')?.to).toBe('/student/projects?focus=journey')
+    expect(entries.find((item) => item.key === 'materials')?.to).toBe('/student/projects?focus=materials')
+    expect(entries.find((item) => item.key === 'public-applications')?.to).toBe('/student/projects?focus=apply')
+    expect(new Set(entries.map((item) => item.to)).size).toBe(entries.length)
   })
 
   it('exposes content child pages from the same sidebar section', () => {
@@ -65,6 +81,6 @@ describe('primary navigation registry', () => {
   it('exposes remaining contextual pages in the secondary sidebar section', () => {
     expect(utilityNavigation('student', 8)).toEqual([])
     expect(utilityNavigation('student', null)).toEqual([])
-    expect(utilityNavigation('teacher', null).map((item) => item.to)).toEqual(['/teacher/members'])
+    expect(utilityNavigation('teacher', null).map((item) => item.to)).toEqual(['/teacher/members', '/teacher/notifications'])
   })
 })

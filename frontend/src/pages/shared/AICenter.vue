@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { api, archiveAIConversation, createAIConversation, createAIConversationMessage, createProject, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, saveAIGenerationAsMaterial, streamAIConversationMessage, updateAIConversation, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
+import { api, archiveAIConversation, createAIConversation, createAIConversationMessage, createProjectFromOpening, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, retryAIConversationMessage, saveAIGenerationAsMaterial, streamAIConversationMessage, updateAIConversation, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
 import { auth } from '../../stores/auth'
 import { aiWorkspaceMode, buildResearchQuestionPrompt, filterConversations, groupAgentsByCategory, isNearBottom, isTerminalSSEEvent, normalizeResearchQuestionArtifact, optionalAgentInputs, researchProjectDraftFromArtifact, researchResponseNotice, type ResearchQuestionArtifact, type ResearchQuestionInputs } from '../../stores/aiConversationModel'
 import { normalizeAIWorkspaceMode, resolveAIContext, visibleAgents, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
 import { conversationDisplayTitle, groupConversationSummaries } from '../../stores/presentationModel'
+import { studentProjectRoute } from '../../stores/pageContracts'
 import AIModeTabs from '../../components/ai/AIModeTabs.vue'
 import AIContextChooser from '../../components/ai/AIContextChooser.vue'
 import AIContextDrawer from '../../components/ai/AIContextDrawer.vue'
@@ -112,21 +113,21 @@ const researchMode = computed(() => brainstormMode.value || (workbenchMode.value
 const aiContext = computed(() => resolveAIContext(workbenchMode.value, currentProject.value?.id ?? projectFilter.value))
 const workspaceContextLabel = computed(() => brainstormMode.value ? '无项目 · 开题引导' : currentProject.value?.title || (aiContext.value.projectId ? '当前项目 · 正在加载' : '未绑定项目 · 请选择项目'))
 const aiPageDescription = computed(() => {
-  if (workbenchMode.value === 'opening') return '从真实观察开始，AI 会逐步追问、比较和整理；确认前不会创建项目。'
-  if (workbenchMode.value === 'defense') return '围绕当前项目整理成果、模拟问答和表达重点；生成内容先由你检查。'
-  if (currentProject.value) return '围绕当前项目和当前任务提供帮助，生成内容先由你检查，再决定保存位置。'
-  return '研究模式默认绑定当前项目；请选择一个项目后，再让 AI 读取项目材料。'
+  if (workbenchMode.value === 'opening') return '用开题助手整理观察和研究问题，确认草稿后才会创建项目。'
+  if (workbenchMode.value === 'defense') return '围绕已完成成果练习表达和问答，生成内容需要你确认。'
+  if (currentProject.value) return '围绕当前项目和任务拆解问题，生成可以核对和修改的建议。'
+  return '请选择一个项目后，灵思 AI 才会读取项目材料并提供研究建议。'
 })
 const aiContextTitle = computed(() => {
-  if (workbenchMode.value === 'opening') return '从一个真实观察开始'
-  if (workbenchMode.value === 'defense') return '把成果讲清楚，准备好回答'
+  if (workbenchMode.value === 'opening') return '整理观察，形成研究问题'
+  if (workbenchMode.value === 'defense') return '准备成果表达和问答'
   if (currentProject.value) return '围绕当前项目继续研究'
   return '先选择一个研究场景'
 })
 const aiContextDescription = computed(() => {
-  if (workbenchMode.value === 'opening') return 'AI 不会直接替你命题，会先追问、比较和整理，最后由你确认项目草稿。'
-  if (workbenchMode.value === 'defense') return 'AI 默认读取当前项目的已确认材料，帮助你准备答辩提纲、演示和问答。'
-  if (currentProject.value) return 'AI 只读取当前项目和当前任务，不会替你创建新项目或直接提交材料。'
+  if (workbenchMode.value === 'opening') return 'AI 会先追问、比较和整理，最后由你确认项目草稿。'
+  if (workbenchMode.value === 'defense') return 'AI 读取当前项目的已确认材料，帮助你准备展示提纲和问答。'
+  if (currentProject.value) return 'AI 只读取当前项目和当前任务，不会替你直接提交材料。'
   return '先选择当前项目；未绑定项目时不会读取任何项目材料。'
 })
 const aiStepperLabels = computed(() => workbenchMode.value === 'defense' ? ['梳理成果', '模拟提问', '修正表达', '确认输出'] : currentProject.value ? ['选择目标', '补充背景', '得到建议', '确认保存'] : ['发现现象', '打开问题', '头脑风暴', '共同成题'])
@@ -243,7 +244,7 @@ async function selectConversation(item: AIConversation) {
 }
 async function newConversation() {
   if (sending.value) return
-  const item = (await createAIConversation({ project: projectFilter.value, current_agent: selectedAgent.value || null })).data
+  const item = (await createAIConversation({ project: workbenchMode.value === 'opening' ? null : projectFilter.value, workspace_mode: workbenchMode.value, current_agent: selectedAgent.value || null })).data
   conversations.value.unshift(item)
   await selectConversation(item)
 }
@@ -395,7 +396,7 @@ async function sendMessage(options: { content?: string; inputValues?: Record<str
   let assistantId: number | undefined
   try {
     const inputValues = optionalAgentInputs(options.inputValues || agentInputs.value)
-    const response = await createAIConversationMessage(conversationId, { content, agent_key: selectedAgent.value, paper_type: paperType.value || undefined, project: current.value?.project, task: taskId.value, ...(inputValues ? { input_values: inputValues } : {}) })
+    const response = await createAIConversationMessage(conversationId, { content, agent_key: selectedAgent.value, paper_type: paperType.value || undefined, project: current.value?.project, workspace_mode: workbenchMode.value, task: taskId.value, ...(inputValues ? { input_values: inputValues } : {}) })
     if (version !== requestVersion.value || controller.signal.aborted) return
     messages.value.push({ role: 'user', content, status: 'completed', created_at: new Date().toISOString(), id: -Date.now() })
     messages.value.push(response.data)
@@ -455,12 +456,22 @@ async function createProjectFromResearch() {
   }
   if (!payload.title) { researchSaveError.value = '请补充项目标题后再生成项目。'; return }
   if (!payload.problem) { researchSaveError.value = '请补充研究问题后再生成项目。'; return }
+  const sourceMessage = [...messages.value].reverse().find((item) => item.role === 'assistant' && item.status === 'completed' && normalizeResearchQuestionArtifact(item.artifact_payload))
+  if (!sourceMessage || !selectedId.value) {
+    researchSaveError.value = '开题草稿还没有完成，请先生成并核对候选研究问题。'
+    return
+  }
   creatingProject.value = true
   try {
-    const response = await createProject(payload)
+    const response = await createProjectFromOpening(selectedId.value, {
+      confirm: true,
+      message_id: sourceMessage.id,
+      candidate_index: researchSelectedIndex.value ?? researchArtifact.value?.recommended_index ?? 0,
+      ...payload,
+    })
     projects.value.unshift(response.data)
     projectCreated.value = true
-    await router.push({ path: `/student/projects/${response.data.id}/map` })
+    await router.push(studentProjectRoute(response.data.id, 'map'))
   } catch (reason) {
     researchSaveError.value = errorMessage(reason, '项目生成失败，当前草稿已保留，请重试。')
   } finally {
@@ -530,7 +541,7 @@ async function retryMessage(message: AIConversationMessage) {
   sending.value = true; error.value = ''; streamNotice.value = ''
   message.content = ''; message.error_message = undefined; message.status = 'queued'; message.artifact_payload = null
   try {
-    const response = await api.post<AIConversationMessage>(`ai-conversations/${conversationId}/messages/${message.id}/retry/`)
+    const response = await retryAIConversationMessage(conversationId, message.id)
     if (version !== requestVersion.value || controller.signal.aborted) return
     replaceMessage(response.data)
     maybeScrollLatest(true)
@@ -562,7 +573,7 @@ function chooseAgent(agent: AIAgent) {
   if (current.value) void updateAIConversation(current.value.id, { current_agent: agent.key })
 }
 async function changePaperType() { if (current.value && !sending.value) await updateAIConversation(current.value.id, { paper_type: paperType.value || null }) }
-async function saveArtifact(message: AIConversationMessage) { const material = materials.value.find((item) => item.id === targetMaterialId.value); const logId = Number(message.generation_log); const content = artifactDrafts.value[message.id] || message.artifact_payload?.draft || message.content; if (!material) { error.value = '请选择要保存到的目标材料。'; return } if (!logId || !content) { error.value = '这份草稿还没有可保存的内容。'; return } savingMessage.value = message.id; try { await saveAIGenerationAsMaterial(logId, { material: material.id, content, revision_note: '由全局 AI 对话保存为材料草稿' }); streamNotice.value = `草稿已提交到材料“${material.title}”，请在材料页面继续审核。` } catch (reason) { error.value = errorMessage(reason, '保存材料草稿失败。') } finally { savingMessage.value = null } }
+async function saveArtifact(message: AIConversationMessage) { const material = materials.value.find((item) => item.id === targetMaterialId.value); const logId = Number(message.generation_log); const content = artifactDrafts.value[message.id] || message.artifact_payload?.draft || message.content; if (!material) { error.value = '请选择要保存到的目标材料。'; return } if (!logId || !content) { error.value = '这份草稿还没有可保存的内容。'; return } savingMessage.value = message.id; try { await saveAIGenerationAsMaterial(logId, { material: material.id, content, workspace_mode: workbenchMode.value, revision_note: '由全局 AI 对话保存为材料草稿' }); streamNotice.value = `草稿已提交到材料“${material.title}”，请在材料页面继续审核。` } catch (reason) { error.value = errorMessage(reason, '保存材料草稿失败。') } finally { savingMessage.value = null } }
 function createProjectFromArtifact(message: AIConversationMessage) { const artifact = normalizeResearchQuestionArtifact(message.artifact_payload); if (!artifact) { error.value = '这份输出还不是结构化开题报告，请先继续对话整理。'; return } researchArtifact.value = artifact; researchSelectedIndex.value = artifact.recommended_index; researchDraft.value = artifact.candidates[artifact.recommended_index]?.question || ''; projectDraft.value = researchProjectDraftFromArtifact(artifact, artifact.recommended_index); researchStep.value = 4; streamNotice.value = '已将开题报告放入确认区，确认后才会创建项目。' }
 function onGlobalKeydown(event: KeyboardEvent) {
   if (event.key !== 'Escape') return
@@ -633,7 +644,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onGlobalKeydown); 
 
 <template>
   <div class="page ai-center-page">
-    <PageHeader eyebrow="AI 助手" :title="researchMode ? '一步一步把问题想清楚' : '灵思 AI'" :description="aiPageDescription" />
+    <PageHeader eyebrow="AI 助手" :title="researchMode ? '开题引导' : '灵思 AI'" :description="aiPageDescription" />
     <AIModeTabs :model-value="workbenchMode" :agents="modeAgents" :selected-agent="selectedAgent" :disabled="sending" @update:model-value="selectWorkbenchMode" @select-agent="chooseAgent" @more-agents="openScienceAgentPicker" />
     <div class="conversation-page">
     <AIConversationHistory v-if="historyOpen" :groups="visibleConversationGroups" :selected-id="selectedId" :sending="sending" :search="conversationSearch" :show-archived="showArchived" @update:search="conversationSearch = $event" @new="void newConversation()" @select="void selectConversation($event)" @toggle-archived="showArchived = !showArchived" @close="historyOpen = false" />
@@ -653,7 +664,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onGlobalKeydown); 
       <AIWorkbenchComposer v-if="(!researchMode && currentProject) || researchSaved" :draft="draft" :mode="workbenchMode" :agent-name="currentAgent?.name" :project-label="currentProject ? `项目：${currentProject.title}` : '已确认草稿'" :input-schema="!researchMode ? currentAgent?.input_schema : undefined" :input-values="agentInputs" :input-help="`${aiInputHelp}：${aiInputHelpDescription}`" :disabled="sending || Boolean(current?.is_archived)" :can-send="Boolean(draft.trim() && selectedId)" :referenced-count="referencedSources.length" :sending="sending" @update:draft="draft = $event" @update:input="updateAgentInput" @send="void sendMessage()" @cite-material="citeProjectMaterial" />
       </section>
 
-      <aside v-if="!researchMode" class="ai-scope-card"><p class="eyebrow">AI 的边界</p><h2>{{ currentProject ? '只帮助当前项目' : '先选择一个项目' }}</h2><ul><li>AI 会追问和整理，不直接替你下结论</li><li>{{ currentProject ? '不会切换到其他项目' : '未绑定项目时不会读取项目材料' }}</li><li>每次生成后都由你检查和确认</li></ul><div class="ai-scope-divider" /><p class="eyebrow">下一步</p><strong>{{ currentProject ? '确认建议是否可用' : '选择当前项目后开始研究' }}</strong><p class="ai-note">{{ currentProject ? '建议只作为研究过程中的辅助，保存前请核对事实和引用。' : '开题请切换到开题模式；研究和答辩只绑定当前项目。' }}</p><button class="scope-context-button" type="button" @click="contextOpen = !contextOpen">{{ contextOpen ? '收起上下文设置' : '查看上下文设置' }}</button></aside>
+      <aside v-if="!researchMode" class="ai-scope-card"><p class="eyebrow">AI 的边界</p><h2>{{ currentProject ? '只帮助当前项目' : '先选择一个项目' }}</h2><ul><li>AI 会追问和整理，不直接替你下结论</li><li>{{ currentProject ? '不会切换到其他项目' : '未绑定项目时不会读取项目材料' }}</li><li>每次生成后都由你检查和确认</li></ul><div class="ai-scope-divider" /><p class="eyebrow">下一步</p><strong>{{ currentProject ? '确认建议是否可用' : '选择当前项目后开始研究' }}</strong><p class="ai-note">{{ currentProject ? '建议只作为研究过程中的辅助，保存前请核对事实和引用。' : '开题请切换到开题模式；研究和成果表达只绑定当前项目。' }}</p><button class="scope-context-button" type="button" @click="contextOpen = !contextOpen">{{ contextOpen ? '收起上下文设置' : '查看上下文设置' }}</button></aside>
     </div>
     <AIContextDrawer :open="contextOpen" :mode="workbenchMode" :project="currentProject" :materials="materials" :agent="currentAgent" :paper-type="paperType" :paper-types="paperTypes" :referenced-sources="referencedSources" @close="contextOpen = false" @update-paper-type="paperType = $event; void changePaperType()" />
     </div>
@@ -934,8 +945,7 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onGlobalKeydown); 
   margin-top: 8px;
   color: #9b4d3e;
 }
-.retry-button,
-.save-draft {
+.retry-button {
   border: 1px solid var(--line-dark);
   border-radius: var(--radius-sm);
   background: var(--paper);
@@ -946,14 +956,11 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onGlobalKeydown); 
   cursor: pointer;
 }
 .retry-button:hover,
-.retry-button:focus-visible,
-.save-draft:hover,
-.save-draft:focus-visible {
+.retry-button:focus-visible {
   border-color: var(--moss);
   background: var(--sage-soft);
 }
-.retry-button:disabled,
-.save-draft:disabled {
+.retry-button:disabled {
   cursor: wait;
   opacity: .65;
 }

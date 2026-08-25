@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, type Component } from 'vue'
-import { Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick, Medal, Reading, Setting } from '@element-plus/icons-vue'
+import { Bell, Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick, Medal, Reading, Setting } from '@element-plus/icons-vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { isNavigationActive, navigationChildren, primaryNavigation, utilityNavigation, type NavigationIcon, type NavigationRole } from '../stores/navigationRegistry'
 import { auth } from '../stores/auth'
@@ -18,7 +18,7 @@ const utilityNav = computed(() => utilityNavigation(props.role, auth.user.value?
 const iconMap: Record<NavigationIcon, Component> = {
   home: House, projects: FolderOpened, journey: Collection, review: DocumentChecked,
   members: Briefcase, content: props.role === 'platform_admin' ? Medal : Reading,
-  schools: Collection, ai: MagicStick, settings: Setting,
+  schools: Collection, ai: MagicStick, settings: Setting, bell: Bell,
 }
 function isNavActive(item: (typeof nav)[number]) { return isNavigationActive(props.role, item, route.path) }
 function isUtilityActive(to: string) {

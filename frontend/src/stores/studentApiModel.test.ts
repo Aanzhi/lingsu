@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { selectHomeTask, selectPriorityTask, taskActionLabel, taskCompletion, validateTaskSubmission, type ApiTask } from './studentApiModel'
+import { buildChapters, buildStepModels, projectJourneySummary, selectHomeTask, selectPriorityTask, studentPrimaryAction, taskActionLabel, taskCompletion, validateTaskSubmission, type ApiTask } from './studentApiModel'
 
 const task = (id: number, status: ApiTask['status'], order: number): ApiTask => ({
   id,
@@ -42,5 +42,39 @@ describe('student API model', () => {
   it('keeps a waiting or locked task visible when there is no actionable task', () => {
     expect(selectHomeTask([task(1, 'pending_review', 1), task(2, 'locked', 2)])?.status).toBe('pending_review')
     expect(selectHomeTask([task(1, 'locked', 1)])?.status).toBe('locked')
+  })
+
+  it('groups the linear task chain into ordered research chapters with one active chapter', () => {
+    const phaseNames = ['立项与开题', '方案与设计', '调研与实验', '分析与写作', '答辩与展示']
+    const tasks = phaseNames.map((phase, index) => ({
+      ...task(index + 1, index < 2 ? 'approved' : 'available', index + 1),
+      stage_name: `${phase} · 一 · 阶段任务`,
+      stage_order: index + 1,
+    }))
+    const chapters = buildChapters(buildStepModels(tasks, [], 3))
+
+    expect(chapters.map((chapter) => chapter.name)).toEqual(phaseNames)
+    expect(chapters.map((chapter) => chapter.status)).toEqual(['done', 'done', 'active', 'todo', 'todo'])
+    expect(chapters[2].containsCurrent).toBe(true)
+  })
+
+  it('summarizes project progress by five chapters instead of exposing the raw task count', () => {
+    const phaseNames = ['问题提出', '资料查找', '方案设计', '实践验证', '成果表达']
+    const tasks = phaseNames.flatMap((phase, chapterIndex) => [
+      { ...task(chapterIndex * 2 + 1, chapterIndex < 2 ? 'completed' : 'available', chapterIndex * 2 + 1), stage_name: phase + ' · 章节任务一', stage_order: chapterIndex + 1 },
+      { ...task(chapterIndex * 2 + 2, chapterIndex < 1 ? 'approved' : 'locked', chapterIndex * 2 + 2), stage_name: phase + ' · 章节任务二', stage_order: chapterIndex + 1 },
+    ])
+
+    expect(projectJourneySummary(tasks, []).summary).toEqual({ completed: 1, total: 5, percent: 20 })
+    expect(projectJourneySummary(tasks, []).chapters).toHaveLength(5)
+  })
+
+  it('selects one primary student action from the current project state', () => {
+    expect(studentPrimaryAction({ currentTaskId: 8, projectId: 3, reportReady: false }))
+      .toEqual({ label: '开始当前任务', to: '/student/projects/3/tasks/8' })
+    expect(studentPrimaryAction({ currentTaskId: null, projectId: 3, reportReady: true }))
+      .toEqual({ label: '查看研究报告', to: '/student/projects/3/report' })
+    expect(studentPrimaryAction({ currentTaskId: null, projectId: 3, reportReady: false }))
+      .toEqual({ label: '查看研究进度', to: '/student/projects/3/map' })
   })
 })

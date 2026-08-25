@@ -1,21 +1,27 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-const styles = readFileSync(new URL('./lingsu-system.css', import.meta.url), 'utf8')
+const styles = [
+  'foundations.css',
+  'workspace.css',
+  'responsive.css',
+].map((file) => readFileSync(new URL(`./styles/${file}`, import.meta.url), 'utf8')).join('\n')
+const deliveryBoard = readFileSync(new URL('./components/JourneyDeliveryBoard.vue', import.meta.url), 'utf8')
 
-describe('journey map stage header styles', () => {
-  it('styles only the chapter-number badge, not the direct StatusTag span', () => {
-    expect(styles).toContain('.journey-stage > header > span:first-child')
-    expect(styles).not.toContain('.journey-stage > header > span { width: 38px;')
+describe('journey map chapter styles', () => {
+  it('uses the five-chapter delivery board as the only task list surface', () => {
+    expect(deliveryBoard).toContain('v-for="group in groups"')
+    expect(deliveryBoard).toContain('journey-delivery__chapter-toggle')
+    expect(styles).not.toContain('.journey-stage')
+    expect(styles).not.toContain('.map-task')
   })
 
-  it('uses a dedicated third column for status without narrowing the chapter title', () => {
-    expect(styles).toContain('.journey-stage > header { padding: 18px 24px; border-right: 0; border-bottom: 1px dashed var(--line-dark); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto;')
-    expect(styles).toContain('.journey-stage > header .status-tag { grid-column: 3; grid-row: 1; justify-self: end;')
+  it('keeps desktop task metadata in one aligned row', () => {
+    expect(deliveryBoard).toContain('.journey-delivery__columns, .journey-delivery__item { display: grid; grid-template-columns: minmax(220px, 1.7fr) minmax(130px, 1fr) minmax(120px, 1fr) 72px 86px;')
   })
 
-  it('uses one shared chapter header rather than a narrow side column beside each task', () => {
-    expect(styles).toContain('.journey-stage { display: block;')
-    expect(styles).toContain('.journey-stage > header { padding: 18px 24px; border-right: 0; border-bottom: 1px dashed var(--line-dark); display: grid; grid-template-columns: 42px minmax(0, 1fr) auto;')
+  it('switches the same board to stacked task rows on narrow screens', () => {
+    expect(deliveryBoard).toContain('@media (max-width: 768px)')
+    expect(deliveryBoard).toContain('.journey-delivery__field-label { display: inline;')
   })
 })

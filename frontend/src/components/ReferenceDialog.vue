@@ -51,26 +51,26 @@ function close() { emit('update:modelValue', false) }
 .reference-guidance {
   padding: 14px 16px;
   border: 1px solid var(--sage-line);
-  border-left: 3px solid var(--moss, #4c7245);
+  border-left: 3px solid var(--moss);
   background: var(--sage-soft);
-  border-radius: 10px;
+  border-radius: var(--radius-md);
 }
-.reference-guidance__text { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.7; color: var(--ink, #2c3327); font-size: 13.5px; }
-.reference-guidance--empty { border-left-color: var(--line, #d8d8cf); background: var(--paper-soft, #f7f6f1); }
-.reference-guidance--empty p { margin: 4px 0 0; color: var(--muted, #7a7d70); font-size: 13px; }
+.reference-guidance__text { margin: 6px 0 0; white-space: pre-wrap; line-height: 1.7; color: var(--ink); font-size: 13.5px; }
+.reference-guidance--empty { border-left-color: var(--line); background: var(--paper-soft); }
+.reference-guidance--empty p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
 .reference-download {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
   border: 1px dashed var(--sage-line);
-  border-radius: 10px;
-  background: var(--paper, #fff);
+  border-radius: var(--radius-md);
+  background: var(--paper);
 }
-.reference-download__icon { font-size: 22px; color: var(--moss, #4c7245); flex: 0 0 auto; }
+.reference-download__icon { font-size: 22px; color: var(--moss); flex: 0 0 auto; }
 .reference-download__meta { flex: 1 1 auto; min-width: 0; }
-.reference-download__meta strong { display: block; font-size: 13.5px; color: var(--ink, #2c3327); }
-.reference-download__meta small { display: block; color: var(--muted, #7a7d70); font-size: 12px; margin-top: 2px; }
+.reference-download__meta strong { display: block; font-size: 13.5px; color: var(--ink); }
+.reference-download__meta small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
 .reference-download .primary-button { flex: 0 0 auto; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
-.reference-hint { margin: 0; font-size: 12.5px; color: var(--muted, #7a7d70); }
+.reference-hint { margin: 0; font-size: 12.5px; color: var(--muted); }
 </style>

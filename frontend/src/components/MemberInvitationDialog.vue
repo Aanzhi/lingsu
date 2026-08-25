@@ -5,7 +5,14 @@ import { createMemberInvitation, errorMessage, searchStudents, type StudentDirec
 import { makeFeedback, type FeedbackState } from '../stores/feedbackModel'
 import FeedbackBanner from './FeedbackBanner.vue'
 
-const props = defineProps<{ projectId: number }>()
+const props = withDefaults(defineProps<{
+  projectId: number
+  buttonLabel?: string
+  buttonClass?: string
+}>(), {
+  buttonLabel: '邀请项目成员',
+  buttonClass: 'secondary-button',
+})
 const emit = defineEmits<{ invited: [] }>()
 const open = ref(false)
 const keyword = ref('')
@@ -46,7 +53,7 @@ async function invite(studentId: number) {
 
 <template>
   <FeedbackBanner v-model="feedback" @action="search" />
-  <button class="secondary-button" type="button" @click="open = true">邀请项目成员</button>
+  <button :class="props.buttonClass" type="button" @click="open = true">{{ props.buttonLabel }}</button>
   <el-dialog v-model="open" title="邀请本校学生" width="560px">
     <p class="dialog-hint">受邀学生先确认，再由主指导教师批准后正式加入项目。</p>
     <form class="member-search" @submit.prevent="search">

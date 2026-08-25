@@ -69,6 +69,7 @@ def _instantiate_template(project, template):
                     task=task,
                     template_material=source_material,
                     title=source_material.title,
+                    kind=source_material.kind,
                     required=source_material.required,
                     report_section=source_material.report_section,
                     report_order=source_material.order,

@@ -1,5 +1,6 @@
 import type { ApiTask } from './studentApiModel'
 import type { Material, Project } from '../api'
+import { projectTypeLabel } from './presentationModel'
 
 export function projectTaskSummary(tasks: ApiTask[]) {
   const total = tasks.length
@@ -18,4 +19,15 @@ export function projectRiskLabel(tasks: ApiTask[], materials: Material[]) {
 export function teacherProjectHeadline(project: Project, tasks: ApiTask[]) {
   const summary = projectTaskSummary(tasks)
   return `${project.title} · ${summary.approved}/${summary.total} 项任务已通过`
+}
+
+export function teacherProjectListMeta(project: Project) {
+  return {
+    title: project.title,
+    typeLabel: projectTypeLabel(project.project_type),
+    status: project.status,
+    leaderName: project.members.find((member) => member.role === 'leader')?.username || '未标注负责人',
+    memberCount: project.members.length,
+    createdDate: project.created_at.slice(0, 10),
+  }
 }

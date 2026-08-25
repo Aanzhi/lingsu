@@ -16,7 +16,17 @@ def create_member_invitation(serializer, inviter):
         raise ValidationError("项目需先由教师认领并启动，才能邀请成员。")
     if invitee.school_id != project.school_id or invitee.role != "student":
         raise ValidationError("只能邀请本校学生。")
-    return serializer.save(inviter=inviter)
+    invitation = serializer.save(inviter=inviter)
+    notify(
+        invitation.invitee,
+        kind=Notification.Kind.INVITATION_PENDING,
+        title=f"邀请你加入项目「{project.title}」",
+        body="接受后还需主指导教师确认，才能进入正式项目团队。",
+        actor=inviter,
+        project=project,
+        link="/student/invitations",
+    )
+    return invitation
 
 
 def respond_to_invitation(invitation, student, accept):

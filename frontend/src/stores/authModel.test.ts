@@ -20,14 +20,26 @@ describe('real session routing', () => {
     })
   })
 
+  it('sends anonymous platform traffic to the independent platform login', () => {
+    expect(resolveNavigation(null, '/platform/schools')).toEqual({
+      path: '/platform/login',
+      redirect: '/platform/schools',
+    })
+    expect(resolveNavigation(null, '/platform/login')).toBeNull()
+  })
+
+  it('keeps anonymous users on the branded public entry', () => {
+    expect(resolveNavigation(null, '/')).toBeNull()
+  })
+
   it('sends an authenticated user to only their own portal', () => {
     expect(resolveNavigation(teacher, '/student/home')).toEqual({ path: '/teacher/home' })
     expect(resolveNavigation(teacher, '/teacher/reviews')).toBeNull()
   })
 
-  it('routes authenticated visits to public entry pages into the role home', () => {
+  it('keeps the branded entry available after login while protecting auth pages', () => {
     expect(resolveNavigation(teacher, '/login')).toEqual({ path: '/teacher/home' })
-    expect(resolveNavigation(teacher, '/')).toEqual({ path: '/teacher/home' })
+    expect(resolveNavigation(teacher, '/')).toBeNull()
   })
 
 })

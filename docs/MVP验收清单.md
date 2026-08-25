@@ -6,8 +6,13 @@
 
 ```env
 ARK_API_KEY=替换为服务商密钥
-OPENAI_BASE_URL=https://openrouter.ai/api/v1
-OPENAI_MODEL=openrouter/free
+# 按服务商填写兼容 OpenAI Responses API 的地址和模型/Endpoint。
+# OpenRouter 示例：
+# OPENAI_BASE_URL=https://openrouter.ai/api/v1
+# OPENAI_MODEL=openrouter/free
+# 火山方舟标准 API 示例：
+# OPENAI_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+# OPENAI_MODEL=ep-你的EndpointID
 ```
 
 重启后端、Celery worker 和前端，确认 `/api/service-status/` 的 `ai` 为 `configured`。密钥不会返回前端。

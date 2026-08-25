@@ -15,11 +15,34 @@
 ## 本地启动
 
 1. 在项目根目录复制环境变量：`cp .env.example .env`，设置 `POSTGRES_PASSWORD`、`DJANGO_SECRET_KEY`，需要 AI 时再设置 `OPENAI_API_KEY`。
-2. 开发模式：`docker compose --profile dev up --build`。
+2. 启动独立项目控制台（这一步不会启动 Docker）：
+
+   ```bash
+   ./scripts/console.sh
+   ```
+
+   打开 <http://127.0.0.1:8800>，控制台自身运行在宿主机上；页面里的“启动项目”或 Docker/Colima 操作才会控制项目容器。
+3. 启动开发项目服务：可点击控制台的“启动项目”，也可以在另一个终端执行：
+
+   ```bash
+   docker compose --profile dev up --build -d
+   ```
+
    - Vue 开发站点：<http://localhost:5173>
    - Django API：<http://localhost:8000>
-3. 首次启动时 `backend` 会执行迁移。创建管理员：`docker compose exec backend python manage.py createsuperuser`。
-4. 生产部署：将 `DJANGO_DEBUG=0`，配置 HTTPS 域名、`DJANGO_ALLOWED_HOSTS`、`CSRF_TRUSTED_ORIGINS` 后执行 `docker compose --profile production up --build -d`。Nginx 只代理 `/api/` 与 `/admin/`；私有附件和报告必须通过鉴权下载接口访问。
+   - `docker compose up/down` 不会启动或停止 8800 控制台。
+4. 首次启动时 `backend` 会执行迁移。创建管理员：`docker compose exec backend python manage.py createsuperuser`。
+5. 生产部署：将 `DJANGO_DEBUG=0`，配置 HTTPS 域名、`DJANGO_ALLOWED_HOSTS`、`CSRF_TRUSTED_ORIGINS` 后执行 `docker compose --profile production up --build -d`。Nginx 只代理 `/api/` 与 `/admin/`；私有附件和报告必须通过鉴权下载接口访问。
+
+### 独立项目状态控制台
+
+开发时可单独启动本地项目状态控制台。它不是 Docker Compose 服务，不会被 Docker 自动拉起；但可以从页面控制 Docker/Colima、项目级或单服务级启停，并查看前端/API、AI/导出依赖、验收结果和日志：
+
+```bash
+./scripts/console.sh
+```
+
+访问 <http://127.0.0.1:8800>。控制台仅绑定本机地址；停止项目不会关闭控制台，停止/重启 Docker 或项目服务需要确认。
 
 ### 当前集成环境启动
 

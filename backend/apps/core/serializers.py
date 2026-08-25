@@ -7,7 +7,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 from rest_framework import serializers
 from .models import AIGenerationLog, AIConversation, AIConversationMessage, Account, AgentTemplate, Announcement, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, TemplateMaterial, UploadSession
-from .ai_agents import PAPER_AGENT_KEYS, PAPER_TYPES, validate_agent_inputs
+from .ai_agents import PAPER_AGENT_KEYS, PAPER_TYPES, normalize_workspace_mode, validate_agent_inputs
 from .tasks import process_uploaded_material
 
 
@@ -150,6 +150,7 @@ class MaterialRevisionSerializer(serializers.ModelSerializer):
     material_title = serializers.CharField(source="material.title", read_only=True)
     project_title = serializers.CharField(source="material.project.title", read_only=True)
     author_name = serializers.CharField(source="author.username", read_only=True)
+    primary_teacher_id = serializers.IntegerField(source="material.project.primary_teacher_id", read_only=True, allow_null=True)
     attachments = MaterialAttachmentSerializer(many=True, read_only=True)
     uploaded_files = serializers.ListField(child=serializers.FileField(), write_only=True, required=False)
     source_summary = serializers.SerializerMethodField()
@@ -157,7 +158,7 @@ class MaterialRevisionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MaterialRevision
-        fields = ["id", "material", "material_title", "project_title", "author", "author_name", "content", "truth_confirmed", "revision_note", "status", "reviewer", "review_comment", "created_at", "attachments", "uploaded_files", "source_summary", "verification_summary"]
+        fields = ["id", "material", "material_title", "project_title", "author", "author_name", "primary_teacher_id", "content", "truth_confirmed", "revision_note", "status", "reviewer", "review_comment", "created_at", "attachments", "uploaded_files", "source_summary", "verification_summary"]
         read_only_fields = ["author", "status", "reviewer", "review_comment", "truth_confirmed"]
 
     def validate_uploaded_files(self, uploads):
@@ -222,7 +223,7 @@ class MaterialSerializer(serializers.ModelSerializer):
     guidance = serializers.SerializerMethodField()
     reference = serializers.SerializerMethodField()
 
-    class Meta: model = Material; fields = ["id", "project", "task", "template_material", "title", "status", "required", "report_section", "report_order", "revisions", "guidance", "reference"]
+    class Meta: model = Material; fields = ["id", "project", "task", "template_material", "title", "kind", "status", "required", "report_section", "report_order", "revisions", "guidance", "reference"]
 
     def get_guidance(self, obj):
         return obj.effective_guidance
@@ -240,7 +241,7 @@ class MaterialSerializer(serializers.ModelSerializer):
 class TemplateMaterialSerializer(serializers.ModelSerializer):
     class Meta:
         model = TemplateMaterial
-        fields = ["id", "task", "title", "required", "submission_type", "report_section", "order", "guidance", "reference_file"]
+        fields = ["id", "task", "title", "kind", "required", "submission_type", "report_section", "order", "guidance", "reference_file"]
 
 class TemplateSerializer(serializers.ModelSerializer):
     class Meta: model = Template; fields = "__all__"; read_only_fields = ["school", "owner"]
@@ -251,8 +252,8 @@ class PublicCaseRequestSerializer(serializers.ModelSerializer):
     school_name = serializers.CharField(source="project.school.name", read_only=True)
     class Meta:
         model = PublicCaseRequest
-        fields = ["id", "project", "project_title", "school_name", "applicant", "public_summary", "tags", "discipline", "application_scene", "outcome_form", "cover", "selected_materials", "selected_material_summaries", "status", "teacher_reviewer", "review_comment", "admin_reviewer"]
-        read_only_fields = ["applicant", "teacher_reviewer", "review_comment", "admin_reviewer", "status", "selected_material_summaries"]
+        fields = ["id", "project", "project_title", "school_name", "applicant", "request_type", "visibility_scope", "public_summary", "tags", "discipline", "application_scene", "outcome_form", "cover", "selected_materials", "selected_material_summaries", "status", "teacher_reviewer", "review_comment", "admin_reviewer", "student_consent_at", "student_consent_by", "platform_reviewer"]
+        read_only_fields = ["applicant", "teacher_reviewer", "review_comment", "admin_reviewer", "student_consent_at", "student_consent_by", "platform_reviewer", "status", "selected_material_summaries"]
 
     def validate_selected_materials(self, materials):
         project = self.initial_data.get("project") or (self.instance.project_id if self.instance else None)
@@ -275,12 +276,18 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = AIGenerationLog
-        fields = ["id", "project", "conversation", "message", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "input_values", "context_scope", "referenced_sources", "output", "artifact_payload", "verification_items", "paper_type", "saved_material_revision", "model_name", "status", "error_message", "created_at", "completed_at"]
+        fields = ["id", "project", "workspace_mode", "conversation", "message", "actor", "actor_name", "purpose", "agent_key", "task", "material", "prompt", "input_values", "context_scope", "referenced_sources", "output", "artifact_payload", "verification_items", "paper_type", "saved_material_revision", "model_name", "status", "error_message", "created_at", "completed_at"]
         read_only_fields = ["actor", "conversation", "message", "output", "artifact_payload", "verification_items", "saved_material_revision", "model_name", "status", "error_message", "completed_at"]
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
         project = attrs.get("project") or getattr(self.instance, "project", None)
+        workspace_mode = normalize_workspace_mode(attrs.get("workspace_mode") or getattr(self.instance, "workspace_mode", "research"))
+        attrs["workspace_mode"] = workspace_mode
+        if project is None and workspace_mode != "opening" and attrs.get("agent_key"):
+            raise serializers.ValidationError({"project": "研究或答辩 AI 必须绑定当前项目。"})
+        if project is not None and workspace_mode == "opening" and "workspace_mode" in self.initial_data:
+            raise serializers.ValidationError({"project": "开题 AI 不读取项目上下文。"})
         task = attrs.get("task")
         material = attrs.get("material")
         if task and project and task.project_id != project.id:
@@ -318,7 +325,7 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
                 validated_inputs = validate_agent_inputs(tmpl, submitted_inputs)
             except serializers.ValidationError as exc:
                 raise serializers.ValidationError({"input_values": exc.detail})
-            if tmpl.project_types and project.project_type not in tmpl.project_types:
+            if tmpl.project_types and project and project.project_type not in tmpl.project_types:
                 raise serializers.ValidationError({
                     "agent_key": f"该 AI 模板不适用于“{project.project_type}”类型项目。"
                 })
@@ -374,16 +381,22 @@ class AIConversationMessageSerializer(serializers.ModelSerializer):
 
 
 class AIConversationSerializer(serializers.ModelSerializer):
+    current_agent = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     message_count = serializers.SerializerMethodField()
     project_title = serializers.CharField(source="project.title", read_only=True, allow_null=True)
 
     class Meta:
         model = AIConversation
-        fields = ["id", "project", "project_title", "title", "paper_type", "current_agent", "is_archived", "message_count", "created_at", "updated_at"]
-        read_only_fields = ["id", "project_title", "message_count", "created_at", "updated_at"]
+        fields = ["id", "project", "opening_project", "project_title", "title", "workspace_mode", "paper_type", "current_agent", "is_archived", "message_count", "created_at", "updated_at"]
+        read_only_fields = ["id", "opening_project", "project_title", "message_count", "created_at", "updated_at"]
 
     def get_message_count(self, obj):
         return obj.messages.count()
+
+    def validate_current_agent(self, value):
+        # The model stores an empty string for an unselected Agent, while the
+        # public API may receive null from a newly opened workbench.
+        return value or ""
 
     def validate_project(self, project):
         user = self.context["request"].user

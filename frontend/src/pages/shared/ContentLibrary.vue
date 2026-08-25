@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { Search } from '@element-plus/icons-vue'
+import { Collection, Search } from '@element-plus/icons-vue'
 import {
   approvePublicCase,
   errorMessage,
@@ -34,10 +34,10 @@ const rejectComment = ref('')
 const surface = computed(() => String(route.meta.surface ?? 'cases'))
 const isTeacher = computed(() => route.path.startsWith('/teacher'))
 const heading = computed(() => surface.value === 'cases'
-  ? ['案例库', '从真实路径中获得开题灵感', '只展示经过教师审核、明确选择公开的摘要和材料。']
+  ? ['案例库', '案例库', isTeacher.value ? '浏览已公开案例，为指导和选题提供参考。' : '浏览已公开的学生项目案例，按研究方向参考过程和成果。']
   : surface.value === 'competitions'
-    ? ['赛事信息', '把握适合项目的展示机会', '赛事信息由平台统一发布，教师与学生均为只读。']
-    : ['通知公告', '与你的研究相关的提醒', '同时查看平台系统公告与本校教师公告。'])
+    ? ['赛事信息', '赛事信息', isTeacher.value ? '查看平台赛事信息，为学生提供参赛建议。' : '查看平台发布的赛事和截止时间，判断当前项目是否适合参加。']
+    : ['通知公告', '通知公告', '查看平台公告和学校通知，优先处理与项目进度相关的消息。'])
 const filteredCases = computed(() => cases.value.filter((item) => (
   item.status === 'published' || (isTeacher.value && item.status === 'pending_teacher')
 ) && `${item.project_title}${item.tags.join('')}${item.discipline}${item.application_scene}`.toLowerCase().includes(appliedKeyword.value.toLowerCase())))
@@ -51,12 +51,21 @@ function runSearch() {
 async function load() {
   loading.value = true
   error.value = ''
+  feedback.value = null
   try {
-    if (surface.value === 'cases') cases.value = (await getPublicCases()).data
-    else if (surface.value === 'competitions') competitions.value = (await getCompetitions()).data
-    else notices.value = (await getAnnouncements()).data
+    if (surface.value === 'cases') {
+      cases.value = []
+      cases.value = (await getPublicCases()).data
+    } else if (surface.value === 'competitions') {
+      competitions.value = []
+      competitions.value = (await getCompetitions()).data
+    } else {
+      notices.value = []
+      notices.value = (await getAnnouncements()).data
+    }
   } catch (reason) {
     error.value = errorMessage(reason)
+    feedback.value = makeFeedback('error', error.value, '内容列表没有加载完成，可以重试。', '重试')
   } finally {
     loading.value = false
   }
@@ -103,50 +112,43 @@ async function reject() {
 }
 
 onMounted(load)
-watch(surface, load)
+watch(surface, () => {
+  keyword.value = ''
+  appliedKeyword.value = ''
+  feedback.value = null
+  rejecting.value = null
+  rejectComment.value = ''
+  void load()
+})
 </script>
 
 <template>
   <div class="page library-page">
     <PageHeader :eyebrow="heading[0]" :title="heading[1]" :description="heading[2]" />
     <FeedbackBanner v-model="feedback" @action="load" />
-    <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-    <div v-if="surface !== 'announcements'" class="library-search">
-      <el-icon><Search /></el-icon>
-      <input v-model="keyword" :placeholder="surface === 'cases' ? '搜索学科、项目类型、关键词或场景' : '搜索赛事名称'">
-      <button class="primary-button" type="button" @click="runSearch">搜索</button>
+    <p v-if="error && !feedback" class="form-error" role="alert">{{ error }}</p>
+    <div v-if="surface !== 'announcements'" class="filter-bar demo-content-filter">
+      <el-icon><Search /></el-icon><input v-model="keyword" class="input" type="search" aria-label="搜索内容" :placeholder="surface === 'cases' ? '搜索案例、学科或关键词' : '搜索赛事名称'" @keydown.enter="runSearch">
+      <button class="secondary-button" type="button" @click="runSearch">筛选</button>
     </div>
 
-    <div v-if="surface === 'cases'" class="case-grid">
-      <article v-for="item in filteredCases" :key="item.id" class="case-card">
-        <div class="case-cover"><span>{{ item.project_title.slice(0, 1) }}</span><i>❧</i></div>
-        <div>
-          <p>{{ item.discipline || '综合实践' }} · {{ item.outcome_form || '科创项目' }}</p>
-          <h2>{{ item.project_title }}</h2>
-          <p>{{ item.public_summary }}</p>
-          <div class="tag-row"><span v-for="tag in item.tags" :key="tag">{{ tag }}</span></div>
-          <footer>
-            <span>{{ item.school_name }} · {{ item.selected_material_summaries.length }} 项公开材料</span>
-            <div v-if="isTeacher && item.status === 'pending_teacher'" class="case-review-actions">
-              <button class="secondary-button" :disabled="loading" type="button" @click="rejecting = item">驳回修改</button>
-              <button class="primary-button" :disabled="loading" type="button" @click="approve(item)">审核通过并发布</button>
-            </div>
-            <StatusTag v-else status="published" />
-          </footer>
-        </div>
+    <p v-if="loading" class="loading-state" role="status">正在读取内容…</p>
+    <div v-else-if="surface === 'cases'" class="demo-content-grid">
+      <article v-for="item in filteredCases.slice(0, 3)" :key="item.id" class="demo-content-card paper-card">
+        <p class="eyebrow">{{ isTeacher ? '指导参考' : '与你的项目相关' }}</p><h3>{{ item.project_title }}</h3><p class="muted">{{ item.public_summary }}</p>
+        <div class="tag-row"><span v-for="tag in item.tags.slice(0, 3)" :key="tag">{{ tag }}</span></div>
+        <div v-if="isTeacher && item.status === 'pending_teacher'" class="case-review-actions"><button class="secondary-button" :disabled="loading" type="button" @click="rejecting = item">驳回修改</button><button class="primary-button" :disabled="loading" type="button" @click="approve(item)">审核通过</button></div>
       </article>
       <EmptyState v-if="!loading && !filteredCases.length" title="暂无公开案例" description="教师审核通过的项目会在这里展示。" />
     </div>
-    <div v-else-if="surface === 'competitions'" class="competition-list">
-      <article v-for="item in filteredCompetitions" :key="item.id" class="competition-card">
-        <div class="date-block"><strong>{{ item.registration_deadline?.slice(5, 10).replace('-', '/') ?? '--/--' }}</strong><small>截止日期</small></div>
-        <div><div><span>平台赛事</span><small>{{ item.starts_at?.slice(0, 10) ?? '时间待定' }}</small></div><h2>{{ item.title }}</h2><p>{{ item.description }}</p></div>
-        <StatusTag status="published" />
+    <div v-else-if="surface === 'competitions'" class="demo-content-grid">
+      <article v-for="item in filteredCompetitions.slice(0, 3)" :key="item.id" class="demo-content-card paper-card">
+        <p class="eyebrow">即将截止</p><h3>{{ item.title }}</h3><p class="muted">{{ item.description }}</p><p class="demo-content-meta">报名截止：{{ item.registration_deadline?.slice(0, 10) ?? '时间待定' }}</p>
       </article>
       <EmptyState v-if="!loading && !filteredCompetitions.length" title="暂无赛事" />
     </div>
-    <div v-else class="announcement-timeline">
-      <article v-for="item in notices" :key="item.id"><span class="timeline-dot" /><div><small>{{ item.audience === 'all' ? '平台系统公告' : '本校教师公告' }} · {{ item.published_at?.slice(0, 10) }}</small><h2>{{ item.title }}</h2><p>{{ item.body }}</p></div></article>
+    <div v-else class="demo-content-grid">
+      <article v-for="item in notices.slice(0, 3)" :key="item.id" class="demo-content-card paper-card"><p class="eyebrow">{{ item.audience === 'all' ? '平台公告' : '本校公告' }}</p><h3>{{ item.title }}</h3><p class="muted">{{ item.body }}</p><p class="demo-content-meta">{{ item.published_at?.slice(0, 10) }}</p></article>
       <EmptyState v-if="!loading && !notices.length" title="暂无通知" />
     </div>
 
@@ -162,3 +164,16 @@ watch(surface, load)
     </el-dialog>
   </div>
 </template>
+
+<style scoped>
+.demo-content-filter { position: relative; margin-bottom: 20px; }
+.demo-content-filter > .el-icon { position: absolute; z-index: 1; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+.demo-content-filter .input { padding-left: 36px; }
+.demo-content-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.demo-content-card { display: flex; min-height: 210px; flex-direction: column; align-items: flex-start; padding: 26px; }
+.demo-content-card h3 { margin: 7px 0 10px; font-size: 18px; line-height: 1.4; }
+.demo-content-card .muted { flex: 1; margin: 0 0 18px; line-height: 1.7; }
+.demo-content-card .secondary-button, .demo-content-card .case-review-actions { margin-top: auto; }
+.demo-content-meta { color: var(--muted); font-size: 12px; }
+.case-review-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+</style>

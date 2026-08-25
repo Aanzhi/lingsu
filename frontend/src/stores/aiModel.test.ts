@@ -123,7 +123,7 @@ it('derives at most three quick agents from backend metadata for the current tas
 })
 
 it('builds a task AI quick entry that preserves project type with project, task, workflow and agent', () => {
-  expect(aiQuickEntryLocation(7, 42, 'proposal_plan', 'proposal-plan', 'research')).toBe('/student/ai?projectId=7&taskId=42&workflow=proposal_plan&agent=proposal-plan&projectType=research')
+  expect(aiQuickEntryLocation(7, 42, 'proposal_plan', 'proposal-plan', 'research')).toBe('/student/ai?mode=research&projectId=7&taskId=42&agent=proposal-plan')
 })
 
 it('uses only a project from the quick-entry query that is available to the student', () => {

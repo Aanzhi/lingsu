@@ -81,6 +81,7 @@ MVP 的成功标准不是页面数量，而是一组试点账号能够连续完�
 
 ## 4. AI 测试接入方案
 
+API  KEY 在系统中的 $ARK_API_KEY
 MVP 使用现有 OpenAI Python SDK 和 Responses API 调用方式。新增 `OPENAI_BASE_URL` 配置，默认仍指向 OpenAI；本地测试设置为 `https://openrouter.ai/api/v1`，模型设置为 `openrouter/free`。
 
 仅允许修改 AI 客户端初始化和环境配置，不改变以下业务逻辑：

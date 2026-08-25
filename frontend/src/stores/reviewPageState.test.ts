@@ -3,8 +3,9 @@ import { describe, expect, it } from 'vitest'
 import { reviewPageState } from './reviewPageState'
 
 describe('review page state', () => {
-  it('shows a completion state instead of a blank review desk after the submission leaves the queue', () => {
-    expect(reviewPageState(undefined)).toBe('completed')
+  it('distinguishes a completed submission from an invalid review URL', () => {
+    expect(reviewPageState(undefined)).toBe('missing')
+    expect(reviewPageState(undefined, true)).toBe('completed')
     expect(reviewPageState({ id: 4 })).toBe('reviewing')
   })
 })

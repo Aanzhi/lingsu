@@ -15,8 +15,9 @@ from django.utils.decorators import method_decorator
 from django.db import transaction
 from django.db.models import Q
 from rest_framework import status, viewsets
+from rest_framework.renderers import BaseRenderer
 from rest_framework.views import APIView
-from rest_framework.decorators import action, api_view, permission_classes, throttle_classes
+from rest_framework.decorators import action, api_view, permission_classes, renderer_classes, throttle_classes
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.throttling import AnonRateThrottle
@@ -28,10 +29,11 @@ import secrets
 from pathlib import Path
 from io import BytesIO
 from .models import AIGenerationLog, AIConversation, AIConversationMessage, Account, AgentTemplate, Announcement, AnnouncementRead, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, UploadPart, UploadSession
+from .ai_agents import normalize_workspace_mode, workspace_mode_requires_project
 from .notifiers import notify
 from .serializers import AIGenerationLogSerializer, AIConversationMessageSerializer, AIConversationSerializer, AgentTemplateSerializer, AnnouncementSerializer, AuditEventSerializer, CompetitionSerializer, MaterialAttachmentSerializer, MaterialRevisionSerializer, MaterialSerializer, MemberInvitationSerializer, NotificationSerializer, ProjectMemberSerializer, ProjectSerializer, ProjectTaskSerializer, PublicCaseRequestSerializer, ReportExportSerializer, SchoolSerializer, TemplateSerializer, UploadSessionSerializer
-from .tasks import generate_ai_response, generate_report_export, process_uploaded_material
-from .workflows.cases import resubmit_public_case_request, validate_public_case_request
+from .tasks import generate_ai_response, generate_general_ai_response, generate_report_export, process_uploaded_material
+from .workflows.cases import consent_public_case_request, resubmit_public_case_request, review_platform_case_request, validate_public_case_request
 from .workflows.materials import create_material_draft, review_material_revision, save_ai_output_as_material, submit_material_revision
 from .workflows.memberships import assign_member, create_member_invitation, decide_member_invitation, respond_to_invitation
 from .workflows.projects import claim_project
@@ -96,6 +98,18 @@ class LoginThrottle(AnonRateThrottle):
 
 class RegisterThrottle(AnonRateThrottle):
     scope = "register"
+
+
+class ServerSentEventRenderer(BaseRenderer):
+    """Allow DRF content negotiation to pass through a native SSE response."""
+
+    media_type = "text/event-stream"
+    format = "event-stream"
+    charset = None
+    render_style = "binary"
+
+    def render(self, data, accepted_media_type=None, renderer_context=None):
+        return data
 
 def require_authorized_school(user):
     if not platform_admin(user) and (not user.school or not user.school.is_authorized):
@@ -177,7 +191,26 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("教师只能发布面向学生的公告。")
         if user.role not in ("teacher", "platform_admin"): raise PermissionDenied("仅教师或平台管理员可发布公告。")
         if not platform_admin(user): require_authorized_school(user)
-        serializer.save(school=None if platform_admin(user) else user.school, author=user, published_at=timezone.now() if serializer.validated_data.get("status") == "published" else None)
+        item = serializer.save(school=None if platform_admin(user) else user.school, author=user, published_at=timezone.now() if serializer.validated_data.get("status") == "published" else None)
+        self._broadcast_school_announcement(item)
+
+    @staticmethod
+    def _broadcast_school_announcement(item):
+        if not item.school_id or item.status != Announcement.Status.PUBLISHED:
+            return
+        roles = [Account.Role.STUDENT] if item.audience == Announcement.Audience.STUDENTS else [Account.Role.STUDENT, Account.Role.TEACHER]
+        kind = Notification.Kind.SCHOOL_ANNOUNCEMENT
+        for recipient in Account.objects.filter(school_id=item.school_id, role__in=roles):
+            if Notification.objects.filter(recipient=recipient, kind=kind, link="/student/announcements").exists():
+                continue
+            notify(
+                recipient,
+                kind=kind,
+                title=item.title,
+                body=item.body,
+                actor=item.author,
+                link="/student/announcements",
+            )
 
     def update(self, request, *args, **kwargs):
         item = self.get_object()
@@ -185,7 +218,10 @@ class AnnouncementViewSet(viewsets.ModelViewSet):
         if platform_admin(request.user) and item.school_id is None:
             return super().update(request, *args, **kwargs)
         if request.user.role == Account.Role.TEACHER and item.author_id == request.user.id:
-            return super().update(request, *args, **kwargs)
+            response = super().update(request, *args, **kwargs)
+            item.refresh_from_db()
+            self._broadcast_school_announcement(item)
+            return response
         raise PermissionDenied("无权修改该公告。")
 
     def destroy(self, request, *args, **kwargs):
@@ -399,7 +435,11 @@ class ProjectTaskViewSet(viewsets.ReadOnlyModelViewSet):
 
 @method_decorator(ensure_csrf_cookie, name="dispatch")
 class MeView(APIView):
+    permission_classes = [AllowAny]
+
     def get(self, request):
+        if not request.user.is_authenticated:
+            return Response({"authenticated": False})
         user = request.user
         primary = getattr(user, "primary_project", None)
         return Response({
@@ -418,8 +458,8 @@ class MeView(APIView):
 
 class StudentDirectoryView(APIView):
     def get(self, request):
-        if request.user.role != Account.Role.STUDENT:
-            raise PermissionDenied("仅学生可搜索本校项目成员。")
+        if request.user.role not in {Account.Role.STUDENT, Account.Role.TEACHER}:
+            raise PermissionDenied("仅学生或教师可搜索本校项目成员。")
         query = request.query_params.get("q", "").strip()
         if len(query) < 2:
             return Response([])
@@ -758,7 +798,7 @@ class MaterialRevisionViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def review(self, request, pk=None):
         require_authorized_school(request.user)
-        revision = self.get_queryset().select_for_update().get(pk=pk)
+        revision = MaterialRevision.objects.filter(material__project__school=request.user.school).select_for_update().select_related("material__project", "author").get(pk=pk)
         if not teacher(request.user):
             raise PermissionDenied("仅主指导教师可审核。")
         outcome = request.data.get("outcome")
@@ -997,7 +1037,7 @@ class PublicCaseRequestViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "head", "options"]
     def get_queryset(self):
         if platform_admin(self.request.user):
-            return PublicCaseRequest.objects.filter(status__in=[PublicCaseRequest.Status.PUBLISHED, PublicCaseRequest.Status.OFFLINE]).select_related("project__school").prefetch_related("selected_materials__revisions")
+            return PublicCaseRequest.objects.all().select_related("project__school").prefetch_related("selected_materials__revisions")
         if self.request.user.role == Account.Role.STUDENT:
             owned = Q(project__in=accessible_projects(self.request.user))
             return PublicCaseRequest.objects.filter(owned | Q(status=PublicCaseRequest.Status.PUBLISHED)).distinct().select_related("project__school").prefetch_related("selected_materials__revisions")
@@ -1007,12 +1047,28 @@ class PublicCaseRequestViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         require_authorized_school(self.request.user)
         project = serializer.validated_data["project"]
-        validate_public_case_request(project, self.request.user, serializer.validated_data.get("selected_materials", []))
-        item = serializer.save(applicant=self.request.user)
+        request_type = serializer.validated_data.get("request_type", PublicCaseRequest.RequestType.STUDENT_SCHOOL)
+        visibility_scope = serializer.validated_data.get(
+            "visibility_scope",
+            PublicCaseRequest.VisibilityScope.PLATFORM if request_type == PublicCaseRequest.RequestType.TEACHER_PLATFORM else PublicCaseRequest.VisibilityScope.SCHOOL,
+        )
+        validate_public_case_request(project, self.request.user, serializer.validated_data.get("selected_materials", []), request_type, visibility_scope)
+        initial_status = PublicCaseRequest.Status.WAITING_STUDENT if request_type == PublicCaseRequest.RequestType.TEACHER_PLATFORM else PublicCaseRequest.Status.PENDING_TEACHER
+        item = serializer.save(applicant=self.request.user, request_type=request_type, visibility_scope=visibility_scope, status=initial_status)
         AuditEvent.objects.create(
             school=project.school, actor=self.request.user, action=AuditEvent.Action.CASE_SUBMITTED,
             changes={"project_id": project.id, "case_id": item.id, "selected_material_count": item.selected_materials.count()},
         )
+        if request_type == PublicCaseRequest.RequestType.TEACHER_PLATFORM:
+            notify(
+                project.leader,
+                kind=Notification.Kind.CASE_CONSENT_REQUIRED,
+                title=f"教师邀请项目「{project.title}」公开展示",
+                body="请确认是否同意将项目成果提交到全平台案例库。",
+                actor=self.request.user,
+                project=project,
+                link=f"/student/public-applications?projectId={project.id}",
+            )
     @action(detail=True, methods=["post"])
     def resubmit(self, request, pk=None):
         require_authorized_school(request.user)
@@ -1030,9 +1086,11 @@ class PublicCaseRequestViewSet(viewsets.ModelViewSet):
         require_authorized_school(request.user)
         item = self.get_object()
         if item.project.primary_teacher_id != request.user.id: raise PermissionDenied("仅指导教师可审核。")
+        if item.request_type != PublicCaseRequest.RequestType.STUDENT_SCHOOL:
+            raise ValidationError("教师发起的公域邀请需要学生同意后进入平台审核。")
         if item.status != PublicCaseRequest.Status.PENDING_TEACHER: raise ValidationError("该申请已处理。")
-        item.status, item.teacher_reviewer, item.review_comment = PublicCaseRequest.Status.PUBLISHED, request.user, ""
-        item.save(update_fields=["status", "teacher_reviewer", "review_comment"])
+        item.status, item.visibility_scope, item.teacher_reviewer, item.review_comment = PublicCaseRequest.Status.PUBLISHED, PublicCaseRequest.VisibilityScope.SCHOOL, request.user, ""
+        item.save(update_fields=["status", "visibility_scope", "teacher_reviewer", "review_comment"])
         AuditEvent.objects.create(
             school=item.project.school, actor=request.user, action=AuditEvent.Action.CASE_REVIEWED,
             changes={"project_id": item.project_id, "case_id": item.id, "outcome": "published"},
@@ -1061,6 +1119,67 @@ class PublicCaseRequestViewSet(viewsets.ModelViewSet):
                body=comment, actor=request.user, project=item.project,
                link="/student/public-applications")
         return Response(self.get_serializer(item).data)
+
+    @action(detail=True, methods=["post"])
+    def teacher_invite(self, request, pk=None):
+        require_authorized_school(request.user)
+        item = self.get_object()
+        if item.project.primary_teacher_id != request.user.id:
+            raise PermissionDenied("仅指导教师可发起全平台展示邀请。")
+        if item.project.status != Project.Status.COMPLETED:
+            raise ValidationError("项目完成后才能发起全平台展示邀请。")
+        if item.status not in {PublicCaseRequest.Status.REJECTED, PublicCaseRequest.Status.PENDING_TEACHER}:
+            raise ValidationError("该成果当前不能重新发起教师公域邀请。")
+        item.request_type = PublicCaseRequest.RequestType.TEACHER_PLATFORM
+        item.visibility_scope = PublicCaseRequest.VisibilityScope.PLATFORM
+        item.applicant = request.user
+        item.status = PublicCaseRequest.Status.WAITING_STUDENT
+        item.student_consent_at = None
+        item.student_consent_by = None
+        item.teacher_reviewer = request.user
+        item.review_comment = ""
+        item.save(update_fields=["request_type", "visibility_scope", "applicant", "status", "student_consent_at", "student_consent_by", "teacher_reviewer", "review_comment"])
+        notify(
+            item.project.leader,
+            kind=Notification.Kind.CASE_CONSENT_REQUIRED,
+            title=f"教师邀请项目「{item.project.title}」公开展示",
+            body="请确认是否同意将项目成果提交到全平台案例库。",
+            actor=request.user,
+            project=item.project,
+            link=f"/student/public-applications?projectId={item.project.id}",
+        )
+        return Response(self.get_serializer(item).data)
+
+    @action(detail=True, methods=["post"])
+    def student_consent(self, request, pk=None):
+        require_authorized_school(request.user)
+        item = self.get_object()
+        consent_public_case_request(item, request.user)
+        AuditEvent.objects.create(
+            school=item.project.school,
+            actor=request.user,
+            action=AuditEvent.Action.STUDENT_CONSENT_GIVEN,
+            changes={"project_id": item.project_id, "case_id": item.id, "visibility_scope": item.visibility_scope},
+        )
+        return Response(self.get_serializer(item).data)
+
+    @action(detail=True, methods=["post"])
+    def platform_review(self, request, pk=None):
+        if not platform_admin(request.user):
+            raise PermissionDenied("仅平台管理员可审核全平台展示申请。")
+        approved = request.data.get("approved")
+        if not isinstance(approved, bool):
+            raise ValidationError({"approved": "请提供 true 或 false 布尔值。"})
+        item = self.get_object()
+        review_platform_case_request(item, request.user, approved, str(request.data.get("comment", "")))
+        AuditEvent.objects.create(
+            school=item.project.school,
+            actor=request.user,
+            action=AuditEvent.Action.CASE_REVIEWED,
+            changes={"project_id": item.project_id, "case_id": item.id, "outcome": "published" if approved else "rejected", "scope": "platform"},
+        )
+        return Response(self.get_serializer(item).data)
+
     @action(detail=True, methods=["post"])
     def set_visibility(self, request, pk=None):
         if not platform_admin(request.user): raise PermissionDenied("仅平台管理员可治理公开案例。")
@@ -1068,6 +1187,11 @@ class PublicCaseRequestViewSet(viewsets.ModelViewSet):
         if not isinstance(visible, bool):
             raise ValidationError({"visible": "请提供 true 或 false 布尔值。"})
         item = self.get_object()
+        if visible and item.request_type == PublicCaseRequest.RequestType.TEACHER_PLATFORM:
+            if not item.student_consent_at:
+                raise ValidationError("学生尚未同意公域展示，平台不能直接发布。")
+            if item.status not in {PublicCaseRequest.Status.PUBLISHED, PublicCaseRequest.Status.OFFLINE}:
+                raise ValidationError("该成果尚未完成平台审核，不能直接发布。")
         item.status = PublicCaseRequest.Status.PUBLISHED if visible else PublicCaseRequest.Status.OFFLINE; item.admin_reviewer = request.user; item.save()
         AuditEvent.objects.create(
             school=item.project.school, actor=request.user, action=AuditEvent.Action.CASE_VISIBILITY_CHANGED,
@@ -1090,12 +1214,20 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.role != Account.Role.STUDENT:
             raise PermissionDenied("只有学生可以创建 AI 对话。")
-        serializer.save(owner=user)
+        mode = normalize_workspace_mode(serializer.validated_data.get("workspace_mode", AIConversation.WorkspaceMode.RESEARCH))
+        project = serializer.validated_data.get("project")
+        if mode == AIConversation.WorkspaceMode.OPENING and project is not None:
+            raise ValidationError({"project": "开题工作台不绑定项目，请从无项目会话开始。"})
+        serializer.save(owner=user, workspace_mode=mode)
 
     def perform_update(self, serializer):
         conversation = self.get_object()
         if "project" in serializer.validated_data and serializer.validated_data["project"] != conversation.project:
             raise ValidationError({"project": "对话创建后不能切换项目，请新建对话。"})
+        mode = normalize_workspace_mode(serializer.validated_data.get("workspace_mode", conversation.workspace_mode))
+        project = serializer.validated_data.get("project", conversation.project)
+        if mode == AIConversation.WorkspaceMode.OPENING and project is not None:
+            raise ValidationError({"project": "开题工作台不绑定项目，请从无项目会话开始。"})
         serializer.save()
 
     @action(detail=True, methods=["post"])
@@ -1105,12 +1237,98 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         conversation.save(update_fields=["is_archived", "updated_at"])
         return Response(self.get_serializer(conversation).data)
 
-    @action(detail=True, methods=["get"], url_path="messages")
+    @action(detail=True, methods=["get", "post"], url_path="messages")
     def messages(self, request, pk=None):
         conversation = self.get_object()
-        return Response(AIConversationMessageSerializer(conversation.messages.all(), many=True).data)
+        if request.method == "GET":
+            return Response(AIConversationMessageSerializer(conversation.messages.all(), many=True).data)
+        return self.create_message(request, pk=pk)
 
-    @action(detail=True, methods=["post"], url_path="messages")
+    @action(detail=True, methods=["post"], url_path=r"messages/(?P<message_id>[^/.]+)/retry")
+    @transaction.atomic
+    def retry_message(self, request, pk=None, message_id=None):
+        """Requeue one failed assistant message without duplicating its user prompt."""
+        conversation = self.get_object()
+        if conversation.is_archived:
+            raise ValidationError("已归档对话不能重试消息。")
+        message = get_object_or_404(conversation.messages, pk=message_id)
+        if message.role != AIConversationMessage.Role.ASSISTANT:
+            raise ValidationError("只有助手消息可以重试。")
+        if message.status != AIConversationMessage.Status.FAILED:
+            raise ValidationError("只有生成失败的消息可以重试。")
+        original_user_message = conversation.messages.filter(
+            role=AIConversationMessage.Role.USER, created_at__lte=message.created_at,
+        ).order_by("-created_at", "-id").first()
+        if original_user_message is None:
+            raise ValidationError("找不到可重试的原始用户问题。")
+
+        stream_key = conversation_stream_key(message.id)
+        try:
+            redis.Redis.from_url(
+                getattr(settings, "CELERY_BROKER_URL", "redis://localhost:6379/0"),
+                decode_responses=True,
+            ).delete(stream_key)
+        except Exception:
+            # Redis cleanup is best effort; the next stream starts from the new event id.
+            pass
+
+        message.content = ""
+        message.status = AIConversationMessage.Status.QUEUED
+        message.error_message = ""
+        message.artifact_payload = {}
+
+        retry_agent_key = conversation.current_agent or (message.generation_log.agent_key if message.generation_log else None)
+        if not settings.OPENAI_API_KEY and not conversation.project_id:
+            message.content = (
+                "研究问题助手需要配置真实 AI 服务后才能生成候选。"
+                if retry_agent_key == "proposal-topic"
+                else f"这是通用咨询：你问的是“{original_user_message.content}”。我可以先帮你梳理概念、拆解问题和制定下一步；如果需要结合项目材料，请新建一个绑定项目的对话。"
+            )
+            message.status = AIConversationMessage.Status.COMPLETED
+            message.save(update_fields=["content", "status", "error_message", "artifact_payload", "updated_at"])
+            publish_conversation_event(message.id, "message.started", {})
+            publish_conversation_event(message.id, "message.delta", {"delta": message.content})
+            publish_conversation_event(message.id, "message.done", {"message_id": message.id})
+            conversation.updated_at = timezone.now()
+            conversation.save(update_fields=["updated_at"])
+            return Response(AIConversationMessageSerializer(message).data, status=status.HTTP_200_OK)
+
+        if conversation.project_id:
+            old_log = message.generation_log
+            if old_log is None:
+                raise ValidationError("项目消息缺少生成记录，无法重试。")
+            payload = {
+                "project": old_log.project_id,
+                "workspace_mode": old_log.workspace_mode,
+                "purpose": old_log.purpose,
+                "agent_key": old_log.agent_key if not old_log.agent_key or AgentTemplate.resolve(old_log.agent_key, request.user.school, request.user.role) else None,
+                "task": old_log.task_id,
+                "material": old_log.material_id,
+                "prompt": old_log.prompt,
+                "paper_type": old_log.paper_type,
+                "context_scope": old_log.context_scope or {},
+            }
+            log_serializer = AIGenerationLogSerializer(data=payload, context={"request": request})
+            log_serializer.is_valid(raise_exception=True)
+            values = log_serializer.validated_data
+            values.pop("input_values", None)
+            new_log = create_ai_request(log_serializer, request.user, settings.OPENAI_MODEL)
+            new_log.conversation = conversation
+            new_log.message = message
+            new_log.status = AIGenerationLog.Status.QUEUED
+            new_log.save(update_fields=["conversation", "message", "status"])
+            message.generation_log = new_log
+            message.save(update_fields=["content", "status", "error_message", "artifact_payload", "generation_log", "updated_at"])
+            transaction.on_commit(lambda: generate_ai_response.delay(new_log.id))
+        else:
+            message.generation_log = None
+            message.save(update_fields=["content", "status", "error_message", "artifact_payload", "generation_log", "updated_at"])
+            transaction.on_commit(lambda: generate_general_ai_response.delay(message.id))
+
+        conversation.updated_at = timezone.now()
+        conversation.save(update_fields=["updated_at"])
+        return Response(AIConversationMessageSerializer(message).data, status=status.HTTP_200_OK)
+
     @transaction.atomic
     def create_message(self, request, pk=None):
         conversation = self.get_object()
@@ -1119,6 +1337,19 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         content = str(request.data.get("content", "")).strip()
         if not content:
             raise ValidationError({"content": "消息不能为空。"})
+        project = conversation.project
+        mode_supplied = "workspace_mode" in request.data
+        workspace_mode = normalize_workspace_mode(request.data.get("workspace_mode") or conversation.workspace_mode)
+        if workspace_mode == AIConversation.WorkspaceMode.OPENING and project is not None:
+            raise ValidationError({"workspace_mode": "开题工作台不能读取当前项目，请新建无项目开题会话。"})
+        if mode_supplied and workspace_mode_requires_project(workspace_mode) and project is None:
+            raise ValidationError({"project": "研究或答辩工作台需要先选择当前项目。"})
+        agent_key = request.data.get("agent_key") or conversation.current_agent or None
+        if project is None and agent_key == "proposal-topic" and not settings.OPENAI_API_KEY:
+            return Response(
+                {"detail": "研究问题助手需要配置真实 AI 服务后才能生成候选。"},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         user_message = AIConversationMessage.objects.create(
             conversation=conversation, role=AIConversationMessage.Role.USER, content=content,
         )
@@ -1126,19 +1357,21 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             conversation=conversation, role=AIConversationMessage.Role.ASSISTANT,
             content="", status=AIConversationMessage.Status.QUEUED,
         )
-        project = conversation.project
         if project is None:
-            # General consultation is intentionally project-free and never creates a material-bearing AI log.
-            assistant.content = f"这是通用咨询：你问的是“{content}”。我可以先帮你梳理概念、拆解问题和制定下一步；如果需要结合项目材料，请新建一个绑定项目的对话。"
-            assistant.status = AIConversationMessage.Status.COMPLETED
-            assistant.save(update_fields=["content", "status", "updated_at"])
-            publish_conversation_event(assistant.id, "message.started", {})
-            publish_conversation_event(assistant.id, "message.delta", {"delta": assistant.content})
-            publish_conversation_event(assistant.id, "message.done", {"message_id": assistant.id})
+            # General consultation remains project-free and never creates a material-bearing AI log.
+            if settings.OPENAI_API_KEY:
+                transaction.on_commit(lambda: generate_general_ai_response.delay(assistant.id))
+            else:
+                assistant.content = f"这是通用咨询：你问的是“{content}”。我可以先帮你梳理概念、拆解问题和制定下一步；如果需要结合项目材料，请新建一个绑定项目的对话。"
+                assistant.status = AIConversationMessage.Status.COMPLETED
+                assistant.save(update_fields=["content", "status", "updated_at"])
+                publish_conversation_event(assistant.id, "message.started", {})
+                publish_conversation_event(assistant.id, "message.delta", {"delta": assistant.content})
+                publish_conversation_event(assistant.id, "message.done", {"message_id": assistant.id})
+            conversation.current_agent = agent_key or ""
         else:
             if not project_member(project, request.user):
                 raise PermissionDenied("无项目权限。")
-            agent_key = request.data.get("agent_key") or conversation.current_agent or None
             # Conversations created before the global seed may carry a retired
             # agent key; keep those legacy messages usable while explicit new
             # selections still go through strict serializer validation.
@@ -1151,6 +1384,7 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             context_scope = request.data.get("context_scope")
             payload = {
                 "project": project.id,
+                "workspace_mode": workspace_mode,
                 "purpose": agent_key or "对话咨询",
                 "agent_key": agent_key,
                 "task": task,
@@ -1175,11 +1409,71 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             assistant.generation_log = log
             assistant.save(update_fields=["generation_log", "updated_at"])
             transaction.on_commit(lambda: generate_ai_response.delay(log.id))
+        conversation.workspace_mode = workspace_mode
         conversation.updated_at = timezone.now()
-        conversation.save(update_fields=["updated_at", "current_agent", "paper_type"])
+        conversation.save(update_fields=["updated_at", "current_agent", "paper_type", "workspace_mode"])
         return Response(AIConversationMessageSerializer(assistant).data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=["get"], url_path=r"messages/(?P<message_id>[^/.]+)/stream")
+    @action(detail=True, methods=["post"], url_path="create_from_opening")
+    @transaction.atomic
+    def create_from_opening(self, request, pk=None):
+        """Create one unclaimed project only after the student confirms an opening artifact."""
+        require_authorized_school(request.user)
+        conversation = self.get_object()
+        if conversation.workspace_mode != AIConversation.WorkspaceMode.OPENING or conversation.project_id:
+            raise ValidationError("只有无项目的开题工作台可以创建项目。")
+        if conversation.opening_project_id:
+            return Response(ProjectSerializer(conversation.opening_project, context={"request": request}).data, status=status.HTTP_200_OK)
+        if request.data.get("confirm") is not True:
+            raise ValidationError({"confirm": "请明确确认后再创建项目。"})
+
+        message_id = request.data.get("message_id")
+        messages = conversation.messages.filter(role=AIConversationMessage.Role.ASSISTANT, status=AIConversationMessage.Status.COMPLETED)
+        message = messages.filter(pk=message_id).first() if message_id else messages.order_by("-created_at", "-id").first()
+        if message is None:
+            raise ValidationError("请先完成一次开题对话，再创建项目。")
+        artifact = message.artifact_payload or {}
+        title = str(request.data.get("title") or artifact.get("project_title") or "").strip()
+        plan = str(request.data.get("plan") or artifact.get("project_plan") or "").strip()
+        candidates = artifact.get("candidates") or []
+        if not title or not isinstance(candidates, list) or not candidates:
+            raise ValidationError("开题草稿缺少项目标题或研究问题候选。")
+        try:
+            candidate_index = int(request.data.get("candidate_index", artifact.get("recommended_index", 0)))
+        except (TypeError, ValueError):
+            raise ValidationError({"candidate_index": "研究问题候选编号无效。"})
+        if candidate_index < 0 or candidate_index >= len(candidates) or not isinstance(candidates[candidate_index], dict):
+            raise ValidationError({"candidate_index": "研究问题候选不存在。"})
+        problem = str(request.data.get("problem") or candidates[candidate_index].get("question") or "").strip()
+        if not problem:
+            raise ValidationError("请选择一个完整的研究问题。")
+        project_type = str(request.data.get("project_type") or artifact.get("project_type") or "research").strip()
+        if project_type not in {"research", "invention", "engineering"}:
+            project_type = "research"
+        project = Project.objects.create(
+            school=request.user.school,
+            title=title,
+            problem=problem,
+            plan=plan,
+            project_type=project_type,
+            leader=request.user,
+            status=Project.Status.UNCLAIMED,
+        )
+        project.members.create(account=request.user, role="leader")
+        conversation.opening_project = project
+        conversation.save(update_fields=["opening_project", "updated_at"])
+        if not request.user.primary_project_id:
+            request.user.primary_project = project
+            request.user.save(update_fields=["primary_project"])
+        AuditEvent.objects.create(
+            school=project.school,
+            actor=request.user,
+            action=AuditEvent.Action.PROJECT_UPDATED,
+            changes={"project_id": project.id, "created_from_opening": conversation.id, "title": project.title},
+        )
+        return Response(ProjectSerializer(project, context={"request": request}).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"], url_path=r"messages/(?P<message_id>[^/.]+)/stream", renderer_classes=[ServerSentEventRenderer])
     def stream(self, request, pk=None, message_id=None):
         conversation = self.get_object()
         message = get_object_or_404(conversation.messages, pk=message_id)
@@ -1226,8 +1520,13 @@ class AIGenerationLogViewSet(viewsets.ModelViewSet):
         return queryset.filter(project_id=project_id) if project_id else queryset
     def perform_create(self, serializer):
         require_authorized_school(self.request.user)
-        project = serializer.validated_data["project"]
-        if not project_member(project, self.request.user): raise PermissionDenied("无项目权限。")
+        project = serializer.validated_data.get("project")
+        workspace_mode = serializer.validated_data.get("workspace_mode", "research")
+        if project is None:
+            if self.request.user.role != Account.Role.STUDENT or workspace_mode != "opening":
+                raise ValidationError({"project": "研究或答辩 AI 必须绑定当前项目。"})
+        elif not project_member(project, self.request.user):
+            raise PermissionDenied("无项目权限。")
         record = create_ai_request(serializer, self.request.user, settings.OPENAI_MODEL)
         transaction.on_commit(lambda: generate_ai_response.delay(record.id))
 
@@ -1235,7 +1534,11 @@ class AIGenerationLogViewSet(viewsets.ModelViewSet):
     @transaction.atomic
     def save_as_material(self, request, pk=None):
         require_authorized_school(request.user)
-        log = self.get_queryset().select_for_update().get(pk=pk)
+        # Check visibility before locking.  A nullable project relation makes
+        # PostgreSQL reject FOR UPDATE on the outer join produced by the
+        # student opening-log queryset.
+        get_object_or_404(self.get_queryset().filter(pk=pk), pk=pk)
+        log = AIGenerationLog.objects.select_for_update().get(pk=pk)
         material_id = request.data.get("material") or log.material_id
         if not material_id:
             raise ValidationError({"material": "请选择要保存到的项目材料。"})

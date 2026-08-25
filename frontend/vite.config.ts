@@ -1,6 +1,8 @@
 import { defineConfig, type UserConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-export function createViteConfig(apiTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8000'): UserConfig {
+// Host development uses the project's loopback mapping. Docker supplies an
+// explicit VITE_API_PROXY_TARGET=http://backend:8000 in docker-compose.yml.
+export function createViteConfig(apiTarget = process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:18001'): UserConfig {
   return {
     plugins: [vue()],
     server: { proxy: { '/api': apiTarget }, allowedHosts: true },

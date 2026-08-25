@@ -12,8 +12,9 @@ from apps.core.models import (
     School,
 )
 from apps.core.notifiers import notify
+from apps.core.serializers import MemberInvitationSerializer
 from apps.core.workflows.materials import review_material_revision
-from apps.core.workflows.memberships import respond_to_invitation
+from apps.core.workflows.memberships import create_member_invitation, respond_to_invitation
 
 
 class NotificationTests(TestCase):
@@ -53,6 +54,20 @@ class NotificationTests(TestCase):
         ).first()
         self.assertIsNotNone(note)
         self.assertIn(self.invitee.username, note.title)
+
+    def test_new_student_invitation_creates_a_notification_for_the_invitee(self):
+        serializer = MemberInvitationSerializer(data={
+            'project': self.project.id,
+            'invitee': self.invitee.id,
+        })
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        create_member_invitation(serializer, self.leader)
+        note = Notification.objects.filter(
+            recipient=self.invitee, kind=Notification.Kind.INVITATION_PENDING,
+        ).first()
+        self.assertIsNotNone(note)
+        self.assertEqual(note.link, '/student/invitations')
+        self.assertIn(self.project.title, note.title)
 
     def test_material_approval_notifies_leader(self):
         task = ProjectTask.objects.create(
@@ -108,3 +123,13 @@ class NotificationTests(TestCase):
         self.assertEqual(len(invitee_client.get("/api/notifications/").data), 1)
         invitee_client.post("/api/notifications/mark_all_read/")
         self.assertEqual(Notification.objects.filter(recipient=self.invitee, is_read=False).count(), 0)
+
+    def test_published_school_announcement_notifies_only_its_school_audience(self):
+        response = self._client(self.teacher).post(
+            "/api/announcements/",
+            {"title": "校内通知", "body": "请在周五前提交实验日志。", "audience": "students", "status": "published"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(Notification.objects.filter(recipient=self.leader, kind=Notification.Kind.SCHOOL_ANNOUNCEMENT).exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.teacher, kind=Notification.Kind.SCHOOL_ANNOUNCEMENT).exists())

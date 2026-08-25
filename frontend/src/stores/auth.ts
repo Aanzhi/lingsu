@@ -18,7 +18,11 @@ function mapUser(data: MeResponse): AuthUser {
 
 async function restore() {
   if (initialized.value) return user.value
-  try { user.value = mapUser((await getMe()).data) } catch { user.value = null }
+  try {
+    const session = (await getMe()).data
+    if ('authenticated' in session && session.authenticated === false) user.value = null
+    else user.value = mapUser(session as MeResponse)
+  } catch { user.value = null }
   initialized.value = true
   return user.value
 }

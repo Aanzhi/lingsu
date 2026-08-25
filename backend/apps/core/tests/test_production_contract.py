@@ -71,7 +71,14 @@ class ProductionContractTests(TestCase):
         self.assertEqual(response.data["role"], "student")
         self.assertEqual(client.get("/api/me/").status_code, 200)
         self.assertEqual(client.post("/api/logout/").status_code, 204)
-        self.assertEqual(client.get("/api/me/").status_code, 403)
+        anonymous = client.get("/api/me/")
+        self.assertEqual(anonymous.status_code, 200)
+        self.assertEqual(anonymous.data, {"authenticated": False})
+
+    def test_anonymous_me_bootstrap_returns_a_success_response_without_user_data(self):
+        response = APIClient().get("/api/me/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, {"authenticated": False})
 
     def test_restored_session_receives_csrf_cookie_and_can_logout(self):
         client = APIClient(enforce_csrf_checks=True)

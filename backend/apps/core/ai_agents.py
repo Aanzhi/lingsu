@@ -1,6 +1,8 @@
-"""Agent-template input validation and prompt rendering."""
+"""Agent-template input validation, prompt rendering and structured outputs."""
 
 from collections import defaultdict
+import json
+import re
 from string import Formatter
 
 from rest_framework import serializers
@@ -14,6 +16,7 @@ RESERVED_TEMPLATE_VARIABLES = {
 # Keep the persisted value concise and stable so prompts, audits and the UI can
 # share it without translating free-form labels.
 PAPER_TYPES = {"empirical", "case", "literature-review", "theoretical"}
+PROJECT_TYPES = {"research", "invention", "engineering"}
 PAPER_AGENT_KEYS = {
     "paper-title-abstract",
     "paper-framework",
@@ -22,6 +25,94 @@ PAPER_AGENT_KEYS = {
     "paper-result-interpret",
     "paper-reviewer-response",
 }
+
+WORKSPACE_MODES = {"opening", "research", "defense"}
+
+
+def normalize_workspace_mode(value, default="research"):
+    mode = str(value or default).strip().lower()
+    if mode not in WORKSPACE_MODES:
+        raise serializers.ValidationError({"workspace_mode": "AI 工作台模式仅支持 opening、research 或 defense。"})
+    return mode
+
+
+def workspace_mode_requires_project(mode):
+    return normalize_workspace_mode(mode) in {"research", "defense"}
+
+
+def infer_agent_workspace_mode(template):
+    """Map legacy category/workflow metadata to one of the three workspace tabs."""
+    workflow = str(getattr(template, "workflow", "") or "").lower()
+    category = str(getattr(template, "category", "") or "")
+    if workflow.startswith("proposal") or "开题" in category or "选题" in category:
+        return "opening"
+    if workflow.startswith("defense") or "答辩" in category or "展示" in category:
+        return "defense"
+    return "research"
+
+
+def parse_research_question_output(output):
+    """Parse the proposal-topic contract without trusting arbitrary model text.
+
+    A malformed model response deliberately returns ``None`` so callers can
+    keep the original text as an editable fallback instead of blocking a
+    student's workflow.
+    """
+    if isinstance(output, dict):
+        payload = output
+    else:
+        text = str(output or "").strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.I)
+            text = re.sub(r"\s*```$", "", text).strip()
+        try:
+            payload = json.loads(text)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return None
+    if not isinstance(payload, dict) or not isinstance(payload.get("candidates"), list) or len(payload["candidates"]) != 3:
+        return None
+    required_scores = ("researchability", "clarity", "verifiability", "resource_fit")
+    candidates = []
+    for candidate in payload["candidates"]:
+        if not isinstance(candidate, dict) or not str(candidate.get("question") or "").strip():
+            return None
+        raw_scores = candidate.get("scores")
+        if not isinstance(raw_scores, dict):
+            return None
+        scores = {}
+        for key in required_scores:
+            try:
+                value = int(round(float(raw_scores[key])))
+            except (KeyError, TypeError, ValueError):
+                return None
+            scores[key] = max(1, min(5, value))
+        candidates.append({
+            "question": str(candidate["question"]).strip(),
+            "scope": str(candidate.get("scope") or "").strip(),
+            "why": str(candidate.get("why") or "").strip(),
+            "evidence_plan": str(candidate.get("evidence_plan") or "").strip(),
+            "limitations": str(candidate.get("limitations") or "").strip(),
+            "scores": scores,
+        })
+    try:
+        recommended_index = int(payload.get("recommended_index", 0))
+    except (TypeError, ValueError):
+        recommended_index = 0
+    recommended_index = recommended_index if 0 <= recommended_index < 3 else 0
+    missing = payload.get("missing_information") or []
+    if not isinstance(missing, list):
+        missing = []
+    project_type = str(payload.get("project_type") or "research").strip()
+    if project_type not in PROJECT_TYPES:
+        project_type = "research"
+    return {
+        "project_title": str(payload.get("project_title") or "").strip(),
+        "project_type": project_type,
+        "project_plan": str(payload.get("project_plan") or "").strip(),
+        "candidates": candidates,
+        "recommended_index": recommended_index,
+        "missing_information": [str(item).strip() for item in missing if str(item).strip()],
+    }
 
 
 def template_variable_names(template):

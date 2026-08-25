@@ -106,6 +106,19 @@ class AIServiceTests(TestCase):
         self.assertEqual(record.artifact_payload["content"], record.output)
         self.assertTrue(record.verification_items)
 
+    @override_settings(OPENAI_API_KEY="")
+    def test_demo_proposal_topic_returns_three_editable_candidates(self):
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, agent_key="proposal-topic",
+            purpose="研究问题助手", prompt="雨天操场积水",
+            context_scope={"project_basics": True}, status=AIGenerationLog.Status.QUEUED,
+        )
+        generate_ai_response(record.id)
+        record.refresh_from_db()
+        self.assertEqual(len(record.artifact_payload["candidates"]), 3)
+        self.assertEqual(record.artifact_payload["title"], "研究问题候选")
+        self.assertEqual(record.artifact_payload["recommended_index"], 0)
+
     @override_settings(OPENAI_API_KEY="configured")
     def test_non_member_cannot_use_or_read_project_ai_records(self):
         create = self.client_for(self.other).post("/api/ai-logs/", {

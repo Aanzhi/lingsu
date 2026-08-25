@@ -5,6 +5,7 @@ from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
 from apps.core.models import Account, AgentTemplate, AIGenerationLog, AuditEvent, Project, ProjectTask, Material, MaterialRevision, School
+from apps.core.ai_agents import parse_research_question_output
 from apps.core.tasks import DEFAULT_AI_INSTRUCTION, generate_ai_response
 
 
@@ -343,7 +344,7 @@ class SeedAIAgentsCommandTests(TestCase):
         AgentTemplate.objects.filter(key="proposal-topic", school=None).update(name="旧名")
         call_command("seed_ai_agents", "--reset")
         self.assertEqual(
-            AgentTemplate.objects.get(key="proposal-topic", school=None).name, "课题名称与摘要"
+            AgentTemplate.objects.get(key="proposal-topic", school=None).name, "研究问题助手"
         )
 
     def test_seeded_student_agents_include_workflow_metadata_and_safety_guardrails(self):
@@ -639,3 +640,16 @@ class AIGenerationContextAssemblyTests(TestCase):
         self.assertIn("同项目的既有 AI 草稿", inp)
         self.assertIn("请补充滤网孔径的实测数据", inp)
         self.assertNotIn("绝不能泄露", inp)
+
+
+class ResearchQuestionOutputTests(TestCase):
+    def test_research_question_output_accepts_fenced_json_and_limits_scores(self):
+        payload = parse_research_question_output('```json\n{"project_title":"校园积水观察","project_type":"engineering","project_plan":"连续记录积水变化并比较排水条件。","candidates": [\n'
+            '{"question":"问题一","scope":"校园","why":"价值","evidence_plan":"观察","limitations":"时间","scores":{"researchability":9,"clarity":0,"verifiability":4,"resource_fit":3}},'
+            '{"question":"问题二","scores":{"researchability":3,"clarity":4,"verifiability":5,"resource_fit":2}},'
+            '{"question":"问题三","scores":{"researchability":1,"clarity":2,"verifiability":3,"resource_fit":4}}],"recommended_index":1}\n```')
+        self.assertEqual(len(payload["candidates"]), 3)
+        self.assertEqual(payload["candidates"][0]["scores"], {"researchability": 5, "clarity": 1, "verifiability": 4, "resource_fit": 3})
+
+    def test_research_question_output_returns_none_for_non_structured_text(self):
+        self.assertIsNone(parse_research_question_output("先聊聊你的兴趣，再逐步缩小范围。"))
