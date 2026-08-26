@@ -4,7 +4,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.core.models import Account, AgentTemplate, AIGenerationLog, AuditEvent, Project, ProjectTask, Material, MaterialRevision, School
+from apps.core.models import Account, AgentTemplate, AIGenerationLog, AuditEvent, Project, ProjectTask, Material, MaterialAttachment, MaterialRevision, School
 from apps.core.ai_agents import parse_research_question_output
 from apps.core.tasks import DEFAULT_AI_INSTRUCTION, generate_ai_response
 
@@ -319,6 +319,26 @@ class AIGenerationAgentInstructionTests(TestCase):
         delay.assert_called_once()
 
     @override_settings(OPENAI_API_KEY="configured")
+    def test_agent_request_rejects_cross_project_or_unscanned_selected_materials(self):
+        self.agent.context_scope_default = {"allowed_selections": ["selected_materials"]}
+        self.agent.save(update_fields=["context_scope_default"])
+        other = Project.objects.create(school=self.school, leader=self.student, title="另一项目")
+        foreign_material = Material.objects.create(project=other, title="外部材料")
+        cross_project = self.client_for(self.student).post("/api/ai-logs/", {
+            "project": self.project.id, "agent_key": "opening-report", "prompt": "校园雨水",
+            "context_scope": {"selected_materials": [foreign_material.id]},
+        }, format="json")
+        self.assertEqual(cross_project.status_code, 400)
+        selected_material = Material.objects.create(project=self.project, title="待扫描材料")
+        revision = MaterialRevision.objects.create(material=selected_material, author=self.student, content="待扫描附件")
+        MaterialAttachment.objects.create(revision=revision, original_name="pending.pdf", scan_status=MaterialAttachment.ScanStatus.PENDING)
+        unsafe = self.client_for(self.student).post("/api/ai-logs/", {
+            "project": self.project.id, "agent_key": "opening-report", "prompt": "校园雨水",
+            "context_scope": {"selected_materials": [selected_material.id]},
+        }, format="json")
+        self.assertEqual(unsafe.status_code, 400)
+
+    @override_settings(OPENAI_API_KEY="configured")
     def test_agent_request_rejects_incompatible_project_type(self):
         self.agent.project_types = ["engineering"]
         self.agent.save(update_fields=["project_types"])
@@ -371,6 +391,11 @@ class SeedAIAgentsCommandTests(TestCase):
         consistency = agents.get(key="proposal-consistency")
         self.assertTrue(consistency.context_scope_default["consistency"])
         self.assertTrue(consistency.context_scope_default["teacher_feedback"])
+        self.assertEqual(
+            agents.get(key="paper-expand-polish").context_scope_default["allowed_selections"],
+            ["selected_materials"],
+        )
+        self.assertNotIn("allowed_selections", agents.get(key="proposal-topic").context_scope_default)
         self.assertFalse(
             agents.exclude(key="proposal-consistency").filter(
                 context_scope_default__approved_materials=True

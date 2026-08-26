@@ -13,7 +13,7 @@ describe('page copy and entry contracts', () => {
 
     expect(home).toContain('继续当前研究')
     expect(home).toContain('从当前项目的待办开始，查看进度、材料状态和下一项可完成任务。')
-    expect(projects).toContain('查看项目进度，进入研究旅程，管理已归档和回收站项目。')
+    expect(projects).toContain('查看项目进度，进入研究进程，管理已归档和回收站项目。')
     expect(invitations).toContain('处理同学或教师发来的项目邀请；新邀请从具体项目的成员区域发起。')
     expect(home).not.toContain('研究不是一次完成的答案，而是从一个好问题开始。这里会告诉你今天最重要的下一步。')
     expect(projects).not.toContain('一个项目就是一条研究旅程。进入项目后，只保留与你当前阶段有关的信息。')

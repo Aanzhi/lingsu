@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { RouterView, useRoute } from 'vue-router'
 
 import HeroHomeShell from '../components/HeroHomeShell.vue'
 import WorkspaceShell from '../components/WorkspaceShell.vue'

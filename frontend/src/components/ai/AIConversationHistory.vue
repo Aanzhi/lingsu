@@ -30,7 +30,8 @@ function itemTitle(item: AIConversation, index: number) {
 </script>
 
 <template>
-  <aside id="conversation-history" class="conversation-history-drawer" aria-label="历史对话">
+  <Teleport to="body">
+  <aside id="conversation-history" class="conversation-history-drawer" role="dialog" aria-modal="true" aria-label="历史对话">
     <div class="history-heading"><strong>历史对话</strong><button type="button" aria-label="关闭历史对话" @click="emit('close')">×</button></div>
     <button class="new-conversation" type="button" :disabled="sending" @click="emit('new')">＋ 新建对话</button>
     <label class="conversation-search"><span class="sr-only">搜索历史对话</span><input :value="search" :disabled="sending" type="search" placeholder="搜索对话或项目" @input="emit('update:search', ($event.target as HTMLInputElement).value)" /></label>
@@ -48,10 +49,11 @@ function itemTitle(item: AIConversation, index: number) {
     </div>
     <button class="archive-toggle" type="button" :disabled="sending" @click="emit('toggle-archived')">{{ showArchived ? '隐藏已归档' : '查看已归档' }}</button>
   </aside>
+  </Teleport>
 </template>
 
 <style scoped>
-.conversation-history-drawer { position: fixed; top: 112px; right: 24px; bottom: 24px; z-index: 80; display: flex; flex-direction: column; gap: 12px; width: min(320px, calc(100vw - 48px)); padding: 16px; border: 1px solid var(--line-dark); border-radius: var(--radius-md); background: var(--paper); box-shadow: 0 16px 42px rgba(35,51,31,.16); }
+.conversation-history-drawer { position: fixed; top: calc(var(--topbar-height) + 18px); right: 24px; bottom: 24px; z-index: 100; display: flex; flex-direction: column; gap: 12px; width: min(340px, calc(100vw - 48px)); padding: 18px; border: 1px solid var(--line-dark); border-radius: var(--radius-md); background: var(--paper); box-shadow: 0 18px 48px rgba(35,51,31,.18); }
 .history-heading { display: flex; align-items: center; justify-content: space-between; color: var(--moss-dark); font: 700 16px var(--sans); }
 .history-heading button { border: 0; background: transparent; color: var(--muted); font-size: 20px; cursor: pointer; }
 .new-conversation { min-height: 40px; border: 1px solid var(--moss-dark); border-radius: var(--radius-sm); background: var(--moss); color: #fff; cursor: pointer; }
@@ -70,6 +72,6 @@ function itemTitle(item: AIConversation, index: number) {
 .archive-toggle { border: 0; background: transparent; color: var(--moss-dark); padding: 6px; cursor: pointer; }
 .empty-small, .muted { color: var(--muted); font-size: 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
-@media (max-width: 900px) { .conversation-history-drawer { top: 94px; right: 16px; bottom: 16px; } }
+@media (max-width: 900px) { .conversation-history-drawer { top: calc(var(--topbar-height) + 12px); right: 16px; bottom: 16px; } }
 @media (max-width: 620px) { .conversation-history-drawer { left: 12px; right: 12px; width: auto; } }
 </style>

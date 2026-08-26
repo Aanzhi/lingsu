@@ -5,6 +5,8 @@ const source = readFileSync(new URL('./pages/shared/AICenter.vue', import.meta.u
 const history = readFileSync(new URL('./components/ai/AIConversationHistory.vue', import.meta.url), 'utf8')
 const contextChooser = readFileSync(new URL('./components/ai/AIContextChooser.vue', import.meta.url), 'utf8')
 const researchWizard = readFileSync(new URL('./components/ai/AIResearchWizard.vue', import.meta.url), 'utf8')
+const modeTabs = readFileSync(new URL('./components/ai/AIModeTabs.vue', import.meta.url), 'utf8')
+const toolPicker = readFileSync(new URL('./components/ai/AIToolPicker.vue', import.meta.url), 'utf8')
 const surface = [source, history, contextChooser, researchWizard].join('\n')
 
 describe('AI workbench information architecture', () => {
@@ -13,7 +15,7 @@ describe('AI workbench information architecture', () => {
   })
 
   it('labels the agent picker in language students can understand', () => {
-    expect(source).toContain('科创 Agent')
+    expect(modeTabs).toContain('当前模式的 Agent')
     expect(source).not.toContain('>Agent（')
   })
 
@@ -22,20 +24,17 @@ describe('AI workbench information architecture', () => {
   })
 
   it('uses a real accessible label for the dynamic tool count', () => {
-    expect(source).not.toContain('aria-label="Agent（{{ agents.length }}）"')
-    expect(source).toContain(':aria-label="`选择 AI 工具（${agents.length} 个）${currentAgent ? ` · ${currentAgent.name}` : \'\'}`"')
+    expect(toolPicker).not.toContain('aria-label="Agent（{{ agents.length }}）"')
+    expect(toolPicker).toContain('aria-label="选择 AI 工具（平台模板）"')
   })
 
   it('puts the three student AI modes before the conversation', () => {
-    expect(surface).toContain('ai-context-switch')
-    expect(surface).toContain('开题与选题')
-    expect(surface).toContain('AI 对话完善材料')
-    expect(surface).toContain('科创 Agent')
-    expect(contextChooser).toContain("(event: 'agent'): void")
-    expect(source).toContain('goToBrainstorm')
-    expect(source).toContain('goToExistingProject')
+    expect(source).toContain('ai-workbench-mode-region')
+    expect(modeTabs).toContain('开题')
+    expect(modeTabs).toContain('研究')
+    expect(modeTabs).toContain('成果表达')
+    expect(modeTabs).toContain('当前模式的 Agent')
     expect(source).toContain('openScienceAgentPicker')
-    expect(source).toContain('@agent="openScienceAgentPicker"')
   })
 
   it('keeps the no-topic path as a guided four-step flow', () => {
@@ -48,16 +47,26 @@ describe('AI workbench information architecture', () => {
     expect(researchWizard).toContain('确认并生成项目')
   })
 
-  it('does not expose a freeform composer before a project context is chosen', () => {
-    expect(source).toContain('v-if="(!researchMode && currentProject) || researchSaved"')
+  it('uses one direct composer for all three modes and shows the selected agent', () => {
+    expect(source.match(/<AIWorkbenchComposer/g) ?? []).toHaveLength(1)
+    expect(source).toContain('agent-name="currentAgent?.name"')
+    expect(source).toContain('selected-material-ids="selectedMaterialIds"')
+    expect(source).toContain("workbenchMode.value === 'opening'")
+    expect(source).toContain("workbenchMode.value === 'research'")
+    expect(source).toContain("workbenchMode.value === 'defense'")
+    expect(source).not.toContain('缺少信息时灵思会在对话中追问')
+    expect(source).not.toContain('补充信息（可选）')
   })
 
-  it('uses the Demo B layered workspace structure for the production page', () => {
-    expect(source).toContain('<PageHeader')
-    expect(source).toContain('ai-simple-layout')
-    expect(source).toContain('ai-context-summary')
-    expect(source).toContain('ai-guide-card')
-    expect(source).toContain('ai-stepper-simple')
+  it('uses the project workspace layout while retaining the focused AI conversation surface', () => {
+    expect(source).toContain('class="page ai-center-page ai-workbench-frame"')
+    expect(source).toContain('ai-workbench-frame')
+    expect(source).toContain('ai-workbench-conversation')
+    expect(source).toContain('ai-conversation-stream')
+    expect(source).toContain('selectedMaterialIds')
+    expect(source).not.toContain('<PageHeader')
+    expect(source).not.toContain('class="ai-scope-card"')
+    expect(source).not.toContain('v-if="false"')
   })
 
   it('keeps the WorkBuddy composition explicit and confirmation-first', () => {
@@ -68,9 +77,15 @@ describe('AI workbench information architecture', () => {
     expect(modeTabs).toContain('开题')
     expect(modeTabs).toContain('研究')
     expect(modeTabs).toContain('成果表达')
-    expect(composer).toContain('引用项目材料')
+    expect(modeTabs).toContain('<strong>{{ agent.name }}</strong>')
+    expect(composer).toContain('引用材料')
+    expect(composer).toContain('当前 Agent')
+    expect(composer).not.toContain('补充信息（可选）')
+    expect(composer).not.toContain('inputSchema')
+    expect(composer).toContain('selected-material')
     expect(composer).toContain('发送')
-    expect(contextDrawer).toContain('读取材料数')
+    expect(contextDrawer).toContain('已选材料')
+    expect(contextDrawer).toContain('selectedMaterialIds')
     expect(contextDrawer).toContain('只读草稿')
     expect(draftActions).toContain('保存为材料')
     expect(draftActions).toContain('用此报告创建项目')

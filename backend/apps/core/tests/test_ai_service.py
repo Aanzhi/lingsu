@@ -127,7 +127,7 @@ class AIServiceTests(TestCase):
         self.assertEqual(create.status_code, 403)
         self.assertEqual(self.client_for(self.other).get("/api/ai-logs/").data, [])
 
-    def test_guiding_teacher_can_read_student_ai_history_for_their_project(self):
+    def test_guiding_teacher_cannot_read_private_student_ai_history_for_their_project(self):
         record = AIGenerationLog.objects.create(
             project=self.project,
             actor=self.student,
@@ -141,5 +141,4 @@ class AIServiceTests(TestCase):
         response = self.client_for(self.teacher).get("/api/ai-logs/", {"project": self.project.id})
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual([item["id"] for item in response.data], [record.id])
-        self.assertEqual(response.data[0]["actor"], self.student.id)
+        self.assertEqual(response.data, [])

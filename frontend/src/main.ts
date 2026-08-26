@@ -7,4 +7,4 @@ import { router } from './router'
 const app = createApp(App)
   .use(ElementPlus)
   .use(router)
-router.isReady().then(() => app.mount('#app'))
+app.mount('#app')

@@ -17,7 +17,12 @@ def accessible_ai_logs(actor):
     if actor.role == Account.Role.STUDENT:
         return base.filter(Q(project__school=actor.school) | Q(project__isnull=True), actor=actor)
     if actor.role == Account.Role.TEACHER:
-        return base.filter(project__school=actor.school, project__primary_teacher=actor)
+        return base.filter(
+            project__school=actor.school,
+            project__primary_teacher=actor,
+        ).filter(
+            Q(actor=actor) | Q(saved_material_revision__isnull=False)
+        ).distinct()
     raise PermissionDenied("平台管理员不能查看学校项目 AI 记录。")
 
 

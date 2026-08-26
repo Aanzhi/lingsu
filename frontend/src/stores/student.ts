@@ -17,7 +17,30 @@ const state = reactive({
   competitions: [] as Competition[],
   announcements: [] as Announcement[],
 })
-const loading = ref(false); const loaded = ref(false)
+type StudentResource = 'projects' | 'tasks' | 'materials' | 'competitions' | 'announcements' | 'archived' | 'trashed'
+const resourceLoading = reactive<Record<StudentResource, boolean>>({
+  projects: false,
+  tasks: false,
+  materials: false,
+  competitions: false,
+  announcements: false,
+  archived: false,
+  trashed: false,
+})
+const resourceErrors = reactive<Record<StudentResource, string | null>>({
+  projects: null,
+  tasks: null,
+  materials: null,
+  competitions: null,
+  announcements: null,
+  archived: null,
+  trashed: null,
+})
+const loading = computed(() => Object.values(resourceLoading).some(Boolean))
+const loaded = ref(false)
+const backgroundLoaded = ref(false)
+let projectsPromise: Promise<void> | null = null
+let backgroundPromise: Promise<void> | null = null
 
 function compatTaskStatus(task: ProjectTask): ApiTask['status'] {
   if (task.legacy_status === 'locked') return 'locked'
@@ -28,35 +51,97 @@ function asStudentTask(task: ProjectTask): ApiTask {
   return { ...task, status: compatTaskStatus(task) }
 }
 
-async function load() {
-  loading.value = true
+function readableError(reason: unknown) {
+  return reason instanceof Error && reason.message ? reason.message : '这部分内容暂时没有加载完成。'
+}
+
+async function loadProjects(force = false) {
+  if (!force && loaded.value) return
+  if (projectsPromise) return projectsPromise
+  resourceLoading.projects = true
+  resourceErrors.projects = null
+  const request = (async () => {
+    const response = await getProjects()
+    state.projects = response.data
+    loaded.value = true
+  })()
+  projectsPromise = request.finally(() => {
+    resourceLoading.projects = false
+    projectsPromise = null
+  })
+  return projectsPromise
+}
+
+async function loadResource<T>(key: StudentResource, request: Promise<{ data: T }>, commit: (data: T) => void) {
+  resourceLoading[key] = true
+  resourceErrors[key] = null
   try {
-    const [projects, tasks, materials, competitions, announcements] = await Promise.all([
-      getProjects(), getProjectTasks(), getMaterials(), getCompetitions(), getAnnouncements(),
-    ])
-    state.projects = projects.data; state.tasks = tasks.data.map(asStudentTask); state.materials = materials.data
-    state.competitions = competitions.data; state.announcements = announcements.data; loaded.value = true
-  } finally { loading.value = false }
+    const response = await request
+    commit(response.data)
+  } catch (reason) {
+    resourceErrors[key] = readableError(reason)
+    throw reason
+  } finally {
+    resourceLoading[key] = false
+  }
+}
+
+async function loadBackgroundResources() {
+  if (backgroundLoaded.value) return
+  if (backgroundPromise) return backgroundPromise
+  const requests = [
+    loadResource('tasks', getProjectTasks(), (data) => { state.tasks = data.map(asStudentTask) }),
+    loadResource('materials', getMaterials(), (data) => { state.materials = data }),
+    loadResource('competitions', getCompetitions(), (data) => { state.competitions = data }),
+    loadResource('announcements', getAnnouncements(), (data) => { state.announcements = data }),
+  ]
+  backgroundPromise = Promise.allSettled(requests).then((results) => {
+    backgroundLoaded.value = results.every((result) => result.status === 'fulfilled')
+  }).finally(() => { backgroundPromise = null })
+  return backgroundPromise
+}
+
+async function loadProjectShell() {
+  // The project list is enough to paint the page header and project shell.
+  // Tasks and materials are deliberately loaded by the page afterwards so
+  // the first meaningful frame is not held up by secondary resources.
+  await loadProjects()
+}
+
+async function loadProjectResources(projectId: number) {
+  const tasksRequest = loadResource('tasks', getProjectTasks(projectId), (data) => {
+    state.tasks = [...state.tasks.filter((item) => item.project !== projectId), ...data.map(asStudentTask)]
+  })
+  const materialsRequest = loadResource('materials', getMaterials(projectId), (data) => {
+    state.materials = [...state.materials.filter((item) => item.project !== projectId), ...data]
+  })
+  await Promise.all([tasksRequest, materialsRequest])
+}
+
+async function load() {
+  await loadProjects()
+  void loadBackgroundResources()
 }
 
 export const student = {
-  state, loading: computed(() => loading.value), loaded: computed(() => loaded.value), load,
+  state, loading, loaded: computed(() => loaded.value), load,
+  resourceLoading, resourceErrors, loadProjects, loadProjectShell, loadProjectResources,
   async createProject(payload: { title: string; problem: string; plan: string; project_type: Project['project_type'] }) {
     const project = (await createProject(payload)).data; state.projects.unshift(project); return project
   },
   async refreshProject(projectId: number) {
-    const [projects, tasks, materials] = await Promise.all([getProjects(), getProjectTasks(projectId), getMaterials(projectId)])
-    state.projects = projects.data
-    state.tasks = [...state.tasks.filter((item) => item.project !== projectId), ...tasks.data.map(asStudentTask)]
-    state.materials = [...state.materials.filter((item) => item.project !== projectId), ...materials.data]
+    await loadProjects(true)
+    await loadProjectResources(projectId)
   },
   async loadArchived() {
-    const response = await getProjects({ include_archived: true })
-    state.archivedProjects = response.data.filter((item) => item.is_archived)
+    await loadResource('archived', getProjects({ include_archived: true }), (data) => {
+      state.archivedProjects = data.filter((item) => item.is_archived)
+    })
   },
   async loadTrashed() {
-    const response = await getTrashedProjects()
-    state.trashedProjects = response.data
+    await loadResource('trashed', getTrashedProjects(), (data) => {
+      state.trashedProjects = data
+    })
   },
   async archive(projectId: number) {
     const project = (await archiveProject(projectId)).data

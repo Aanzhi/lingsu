@@ -128,9 +128,35 @@ class Command(BaseCommand):
             if project.leader_id != student.id:
                 project.leader = student
                 project.save(update_fields=["leader"])
+            project.problem = "如何通过连续观察改善校园雨后积水？"
+            project.plan = "记录不同位置的积水变化，整理证据并提出改进建议。"
+            project.summary = "从真实观察开始，形成可以复核的研究问题和证据。"
+            project.save(update_fields=["problem", "plan", "summary"])
             student.primary_project = project
             student.save(update_fields=["primary_project"])
             project.members.get_or_create(account=student, defaults={"role": "leader"})
+            for index in range(1, 5):
+                self._seed_project(
+                    school,
+                    student,
+                    title=f"核心项目池验收 {index:02d}",
+                    status=Project.Status.UNCLAIMED,
+                    primary_teacher=None,
+                    problem=f"如何验证校园观察问题 {index} 的关键变量？",
+                    plan=f"为项目池预览准备第 {index} 组观察、记录和比较方案。",
+                    summary=f"项目池确定性样本 {index}，用于验证教师认领前的开题信息。",
+                )
+            for index in range(1, 5):
+                self._seed_project(
+                    school,
+                    student,
+                    title=f"核心指导项目验收 {index:02d}",
+                    status=Project.Status.ACTIVE,
+                    primary_teacher=teacher,
+                    problem=f"如何持续跟进指导项目 {index} 的研究问题？",
+                    plan=f"按章节检查材料状态，围绕项目 {index} 给出下一步建议。",
+                    summary=f"指导项目确定性样本 {index}，用于验证教师工作台的完整列表。",
+                )
             self._completed_project(school, student, teacher)
 
         self.stdout.write(
@@ -231,6 +257,35 @@ class Command(BaseCommand):
                 guidance=guidance,
             )
         return template
+
+    @staticmethod
+    def _seed_project(school, student, *, title, status, primary_teacher, problem, plan, summary):
+        project, _ = Project.objects.get_or_create(
+            school=school,
+            title=title,
+            defaults={
+                "leader": student,
+                "primary_teacher": primary_teacher,
+                "status": status,
+                "project_type": "research",
+                "problem": problem,
+                "plan": plan,
+                "summary": summary,
+            },
+        )
+        project.leader = student
+        project.primary_teacher = primary_teacher
+        project.status = status
+        project.project_type = "research"
+        project.problem = problem
+        project.plan = plan
+        project.summary = summary
+        project.save(update_fields=[
+            "leader", "primary_teacher", "status", "project_type",
+            "problem", "plan", "summary",
+        ])
+        project.members.get_or_create(account=student, defaults={"role": "leader"})
+        return project
 
     @staticmethod
     def _completed_project(school, student, teacher):

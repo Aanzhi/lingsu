@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AIAgent } from '../api'
-import { AI_WORKBENCH_MODES, draftActions, resolveAIContext, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
+import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
 
 const agent = (overrides: Partial<AIAgent>): AIAgent => ({
   id: 1,
@@ -35,16 +35,17 @@ describe('AI workbench model', () => {
     expect(resolveAIContext('opening', null)).toEqual({ projectId: null, scope: 'none' })
   })
 
-  it('filters agents by mode without mutating the API list', () => {
+  it('assigns every student Agent to exactly one workbench mode', () => {
     const agents = [
       agent({ id: 1, key: 'opening-agent', category: '开题', workflow: 'opening' }),
       agent({ id: 2, key: 'research-agent', category: '研究', workflow: 'research' }),
       agent({ id: 3, key: 'defense-agent', category: '答辩', workflow: 'defense' }),
-      agent({ id: 4, key: 'shared-agent', category: '科创 Agent', workflow: 'research,defense' }),
+      agent({ id: 4, key: 'proposal-background', category: '开题申报', workflow: 'proposal_background' }),
+      agent({ id: 5, key: 'report-agent', category: '论文写作', workflow: 'paper_expand_polish' }),
     ]
-    expect(visibleAgents('opening', agents).map((item) => item.key)).toEqual(['opening-agent'])
-    expect(visibleAgents('research', agents).map((item) => item.key)).toEqual(['research-agent', 'shared-agent'])
-    expect(visibleAgents('defense', agents).map((item) => item.key)).toEqual(['defense-agent', 'shared-agent'])
+    expect(visibleAgents('opening', agents).map((item) => item.key)).toEqual(['opening-agent', 'proposal-background'])
+    expect(visibleAgents('research', agents).map((item) => item.key)).toEqual(['research-agent', 'report-agent'])
+    expect(visibleAgents('defense', agents).map((item) => item.key)).toEqual(['defense-agent'])
   })
 
   it('requires an explicit action for completed drafts', () => {
@@ -55,5 +56,11 @@ describe('AI workbench model', () => {
   it('keeps mode input narrow and deterministic', () => {
     const modes: AIWorkspaceMode[] = ['opening', 'research', 'defense']
     expect(modes).toHaveLength(3)
+  })
+
+  it('only sends explicitly selected materials for a project-capable Agent', () => {
+    expect(materialSelectionScope('opening', [4], ['selected_materials'])).toEqual({})
+    expect(materialSelectionScope('research', [4, 4, 9], [])).toEqual({})
+    expect(materialSelectionScope('research', [4, 4, 9], ['selected_materials'])).toEqual({ selected_materials: [4, 9] })
   })
 })

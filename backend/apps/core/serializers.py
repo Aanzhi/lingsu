@@ -19,9 +19,14 @@ class ProjectSerializer(serializers.ModelSerializer):
     members = ProjectMemberSerializer(many=True, read_only=True)
     growth = serializers.SerializerMethodField()
     school_name = serializers.CharField(source="school.name", read_only=True)
+    primary_teacher_name = serializers.SerializerMethodField()
     is_primary = serializers.SerializerMethodField()
     days_until_purge = serializers.SerializerMethodField()
-    class Meta: model = Project; fields = ["id", "school", "school_name", "title", "problem", "plan", "summary", "leader", "primary_teacher", "template_snapshot", "project_type", "status", "members", "growth", "is_archived", "archived_at", "deleted_at", "trashed_at", "days_until_purge", "is_primary", "created_at"]; read_only_fields = ["school", "leader", "template_snapshot", "primary_teacher", "status", "is_archived", "archived_at", "deleted_at", "trashed_at", "days_until_purge"]
+    class Meta: model = Project; fields = ["id", "school", "school_name", "title", "problem", "plan", "summary", "leader", "primary_teacher", "primary_teacher_name", "template_snapshot", "project_type", "status", "members", "growth", "is_archived", "archived_at", "deleted_at", "trashed_at", "days_until_purge", "is_primary", "created_at"]; read_only_fields = ["school", "leader", "template_snapshot", "primary_teacher", "primary_teacher_name", "status", "is_archived", "archived_at", "deleted_at", "trashed_at", "days_until_purge"]
+    def get_primary_teacher_name(self, obj):
+        if not obj.primary_teacher:
+            return None
+        return obj.primary_teacher.get_full_name() or obj.primary_teacher.username
     def get_growth(self, obj):
         growth, _ = ProjectGrowth.objects.get_or_create(project=obj)
         return {"experience": growth.experience, "level": growth.level, "streak_days": growth.streak_days, "achievements": growth.achievements, "title": growth.title}
@@ -330,6 +335,7 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
                     "agent_key": f"该 AI 模板不适用于“{project.project_type}”类型项目。"
                 })
             context_scope = self._template_context_scope(tmpl, attrs.get("context_scope"))
+            self._validate_selected_context(project, workspace_mode, context_scope)
             context_scope["agent_inputs"] = validated_inputs
             attrs["context_scope"] = context_scope
             if not attrs.get("purpose"):
@@ -367,6 +373,28 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
             context_scope[key] = [int(value) for value in values]
         return context_scope
 
+    @staticmethod
+    def _validate_selected_context(project, workspace_mode, context_scope):
+        """Selections are IDs, never client-trusted titles, and stay inside one safe project."""
+        selected_ids = context_scope.get("selected_materials", [])
+        if workspace_mode == "opening" and selected_ids:
+            raise serializers.ValidationError({"context_scope": "开题模式不能引用项目材料。"})
+        if not selected_ids:
+            return
+        if project is None:
+            raise serializers.ValidationError({"project": "引用材料前必须选择当前项目。"})
+        materials = list(Material.objects.filter(project=project, id__in=selected_ids).prefetch_related("revisions__attachments"))
+        if len(materials) != len(set(selected_ids)):
+            raise serializers.ValidationError({"context_scope": "只能引用当前项目中的材料。"})
+        unsafe = []
+        for material in materials:
+            for revision in material.revisions.all():
+                if revision.attachments.exclude(scan_status=MaterialAttachment.ScanStatus.CLEAN).exists():
+                    unsafe.append(material.title)
+                    break
+        if unsafe:
+            raise serializers.ValidationError({"context_scope": f"材料附件尚未通过安全检查：{', '.join(unsafe)}。"})
+
 
 class AIConversationMessageSerializer(serializers.ModelSerializer):
     verification_items = serializers.SerializerMethodField()
@@ -400,7 +428,13 @@ class AIConversationSerializer(serializers.ModelSerializer):
 
     def validate_project(self, project):
         user = self.context["request"].user
-        if project is not None and not (project.leader_id == user.id or project.members.filter(account=user).exists()):
+        if project is None:
+            return project
+        if user.role == Account.Role.TEACHER:
+            if project.primary_teacher_id != user.id:
+                raise serializers.ValidationError("只能选择本人负责的指导项目。")
+            return project
+        if not (project.leader_id == user.id or project.members.filter(account=user).exists()):
             raise serializers.ValidationError("无项目权限。")
         return project
 

@@ -48,8 +48,8 @@ test('未登录用户先看到品牌入口', async ({ page }) => {
   await page.getByRole('link', { name: '登录工作台', exact: true }).click()
   await expect(page).toHaveURL(/\/login$/)
   await page.goto('/register')
-  const studentRole = page.getByRole('button', { name: /以学生身份注册/ })
-  const teacherRole = page.getByRole('button', { name: /以教师身份注册/ })
+  const studentRole = page.locator('button.auth-role-card--student')
+  const teacherRole = page.locator('button.auth-role-card--teacher')
   await expect(studentRole).toHaveAttribute('aria-pressed', 'true')
   await teacherRole.click()
   await expect(teacherRole).toHaveAttribute('aria-pressed', 'true')
@@ -121,12 +121,10 @@ test('所有生产角色路由都有可达页面与明确入口', async ({ page 
   const teacherProject = await findProjectWithTasks(page)
   const teacherRoutes = [
     '/teacher/home', '/teacher/pool', '/teacher/projects', '/teacher/reviews',
-    '/teacher/members', '/teacher/cases', '/teacher/competitions', '/teacher/announcements',
+    '/teacher/members', '/teacher/ai', '/teacher/cases', '/teacher/competitions', '/teacher/announcements',
     '/teacher/notifications',
   ]
   for (const path of teacherRoutes) await assertProductionRoute(page, path)
-  await page.goto('/teacher/ai')
-  await expect(page).toHaveURL(/\/teacher\/reviews$/)
   if (teacherProject) {
     await assertProductionRoute(page, `/teacher/projects/${teacherProject.id}`)
     await assertProductionRoute(page, `/teacher/projects/${teacherProject.id}/template`)
@@ -230,7 +228,9 @@ test('学生可以进入项目和 AI 工作台', async ({ page }) => {
   await login(page, 'student', '/student/projects')
   await expect(page.getByRole('heading', { name: '我的项目', exact: true })).toBeVisible()
   await page.goto('/student/ai')
-  await expect(page.getByText('灵思 AI · 研究伙伴')).toBeVisible()
+  await expect(page.locator('aside.workspace-sidebar')).toHaveCount(1)
+  await expect(page.locator('.workspace-sidebar a[aria-current="page"]')).toContainText('灵思 AI')
+  await expect(page.getByText('你的研究工作台')).toBeVisible()
   await expect(page.getByRole('heading', { name: '灵思 AI', exact: true })).toBeVisible()
   await page.getByRole('button', { name: '历史对话' }).click()
   await expect(page.getByRole('button', { name: '＋ 新建对话' })).toBeVisible()
@@ -247,46 +247,20 @@ test('已有课题可以直接创建项目', async ({ page }) => {
   await dialog.getByRole('button', { name: '创建项目', exact: true }).click()
   await expect(page.locator('aside.feedback-banner[role="status"]')).toContainText('项目已创建')
   await page.getByRole('button', { name: '查看项目' }).click()
-  await expect(page).toHaveURL(/\/student\/projects\/\d+$/)
+  await expect(page).toHaveURL(/\/student\/projects\/\d+\/map$/)
   await expect(page.getByRole('heading', { name: title })).toBeVisible()
 })
 
-test('无课题可以进入 AI 引导，并对模型阻塞给出明确提示', async ({ page }) => {
-  test.setTimeout(45_000)
+test('无课题可以进入 AI 对话工作台，不需要先填写补充表单', async ({ page }) => {
   await login(page, 'student', '/student/projects?create=1')
-  await page.getByRole('dialog').getByRole('button', { name: /用 AI 一步步梳理/ }).click()
+  await page.getByRole('dialog').getByRole('tab', { name: /AI 开题/ }).click()
   await expect(page).toHaveURL(/\/student\/ai\?mode=brainstorm/)
 
-  const workbench = page.getByLabel('研究问题工作台')
-  await expect(workbench.getByRole('heading', { name: '从一个真实观察开始' })).toBeVisible()
-  await workbench.locator('textarea').first().fill('雨天后操场东侧积水很久，影响学生通行。')
-  await workbench.getByRole('button', { name: '记录观察，继续追问 →' }).click()
-  await workbench.locator('input').fill('本校操场东侧，连续两周的降雨后两小时内')
-  await workbench.locator('textarea').first().fill('比较坡度、排水口距离和积水持续时间的关系。')
-  await workbench.getByRole('button', { name: '进入头脑风暴 →' }).click()
-
-  const availability = await page.evaluate(async () => (await (await fetch('/api/ai-availability/', { credentials: 'include' })).json()) as { status: string })
-  if (availability.status === 'configured') {
-    await expect.poll(async () => {
-      const candidateCount = await workbench.locator('.candidate-card').count()
-      const noticeCount = await workbench.locator('.research-error').count()
-      return candidateCount === 3 || noticeCount > 0
-    }, { timeout: 35_000 }).toBeTruthy()
-    if (await workbench.locator('.candidate-card').count() === 3) {
-      await workbench.locator('input[type="radio"]').first().check()
-      await workbench.getByRole('button', { name: '继续形成项目草稿 →' }).click()
-      await workbench.locator('.research-project-draft input').first().fill(`E2E AI 选题 ${Date.now()}`)
-      await workbench.locator('.research-project-draft textarea').first().fill('比较坡度、排水口距离和积水持续时间的关系。')
-      await expect(workbench.getByRole('button', { name: '确认并生成项目' })).toBeEnabled()
-      await workbench.getByRole('button', { name: '确认并生成项目' }).click()
-      await expect(page).toHaveURL(/\/student\/projects\/\d+\/map/)
-    } else {
-      await expect(workbench.locator('.research-error')).toContainText(/暂时无法生成候选|响应超时|返回内容不完整/)
-    }
-  } else {
-    await expect(workbench.locator('.research-error')).toContainText('研究问题助手需要配置真实 AI 服务')
-    await expect(workbench.locator('.candidate-card')).toHaveCount(0)
-  }
+  await expect(page.getByRole('heading', { name: '灵思 AI', exact: true })).toBeVisible()
+  await expect(page.getByText('当前 Agent · 研究问题助手')).toBeVisible()
+  await expect(page.getByPlaceholder('先写下一个观察，或继续追问研究问题…')).toBeVisible()
+  await expect(page.getByText('补充信息（可选）')).toHaveCount(0)
+  await expect(page.getByLabel('研究问题工作台')).toHaveCount(0)
 })
 
 test('研究旅程以五个章节呈现，当前章节默认展开', async ({ page }) => {
@@ -295,6 +269,7 @@ test('研究旅程以五个章节呈现，当前章节默认展开', async ({ pa
   test.skip(!project, '当前演示账号没有可检查任务的项目')
   await page.goto(`/student/projects/${project!.id}/map`)
   await expect(page.getByRole('heading', { name: '研究章节', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '研究报告', exact: true })).toBeVisible()
   await expect(page.locator('.demo-accordion-row').first()).toBeVisible()
   await expect(page.locator('.demo-accordion-row.is-open')).toHaveCount(1)
   await expect(page.locator('.demo-accordion-row.is-open .demo-task-mini').first()).toBeVisible()
@@ -304,7 +279,7 @@ test('研究旅程以五个章节呈现，当前章节默认展开', async ({ pa
   }
 })
 
-test('学生项目从研究旅程可以进入任务、材料档案和报告装配', async ({ page }) => {
+test('学生项目从研究进程可以进入任务和报告装配，材料旧入口回到研究进程', async ({ page }) => {
   await login(page, 'student', '/student/projects')
   const project = await findProjectWithTasks(page)
   test.skip(!project, '当前演示账号没有可检查任务的项目')
@@ -318,23 +293,23 @@ test('学生项目从研究旅程可以进入任务、材料档案和报告装�
   await expect(page.locator('.demo-task-aside')).toContainText('需要一点思路？')
 
   await page.goto(`/student/projects/${project!.id}/materials`)
-  await expect(page.getByRole('heading', { name: '材料档案', exact: true })).toBeVisible()
-  await expect(page.getByRole('searchbox', { name: '搜索材料' })).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`/student/projects/${project!.id}/map$`))
+  await expect(page.locator('.page-header .eyebrow')).toHaveText('研究进程')
+  await expect(page.getByText('材料记录', { exact: true })).toHaveCount(0)
 
   await page.goto(`/student/projects/${project!.id}/report`)
   await expect(page.locator('.demo-report-grid')).toBeVisible()
   await expect(page.getByRole('heading', { name: '导出报告', exact: true })).toBeVisible()
 })
 
-test('教师指导项目列表使用紧凑项目行并保留唯一详情入口', async ({ page }) => {
+test('教师指导项目列表使用项目卡片并保留唯一详情入口', async ({ page }) => {
   await login(page, 'teacher', '/teacher/projects')
   await expect(page.getByRole('heading', { name: '指导项目', exact: true })).toBeVisible()
   await expect(page.getByRole('tab', { name: /指导中/ })).toHaveAttribute('aria-selected', 'true')
-  const rows = page.locator('.project-row')
-  if (await rows.count()) {
-    await expect(rows.locator('p')).toHaveCount(0)
-    await expect(rows.locator('.project-row__detail')).toHaveCount(await rows.count())
-    await expect(rows.locator('.lifecycle-menu__trigger')).toHaveCount(await rows.count())
+  const cards = page.locator('#teacher-project-list .project-card')
+  if (await cards.count()) {
+    await expect(cards.locator('.project-card__summary')).toHaveCount(await cards.count())
+    await expect(cards.locator('.project-card__actions')).toHaveCount(await cards.count())
   }
 })
 
@@ -445,7 +420,7 @@ test('关键页面没有本轮引入的浏览器控制台错误', async ({ page 
   await login(page, 'student', '/student/projects')
   await expect(page.getByRole('heading', { name: '我的项目', exact: true })).toBeVisible()
   await page.goto('/student/ai?mode=brainstorm&agent=proposal-topic')
-  await expect(page.getByLabel('研究问题工作台')).toBeVisible()
+  await expect(page.locator('.ai-workbench-composer__textarea')).toBeVisible()
   await page.context().clearCookies()
   await login(page, 'teacher', '/teacher/projects')
   await expect(page.getByRole('heading', { name: '指导项目', exact: true })).toBeVisible()

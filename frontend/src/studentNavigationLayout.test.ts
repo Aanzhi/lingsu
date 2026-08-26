@@ -48,10 +48,13 @@ describe('shared Demo B workspace layout contract', () => {
   })
 
   it('keeps the shared navigation registry complete for the student workspace sidebar', () => {
-    for (const label of ['首页', '我的项目', '灵思 AI', '研究旅程', '材料档案', '项目邀请', '成果申请', '通知']) {
+    for (const label of ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请', '消息中心']) {
       expect(navigationRegistry).toContain(`label: '${label}'`)
     }
-    expect(workspaceShell).toContain('primaryNavigation(props.role)')
+    expect(navigationRegistry).not.toContain("label: '材料档案'")
+    expect(workspaceShell).toContain('primaryNavigation(props.role, auth.user.value?.primaryProject)')
+    expect(workspaceShell).toContain('active-class="workspace-router-active"')
+    expect(foundations).toContain('.workspace-sidebar > a.workspace-router-active')
   })
 
   it('keeps shared secondary navigation inside the workspace sidebar', () => {

@@ -59,6 +59,31 @@ class AIWorkspaceContractTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_guiding_teacher_can_create_and_list_a_private_project_guidance_conversation(self):
+        student_conversation = AIConversation.objects.create(
+            owner=self.student,
+            project=self.project,
+            workspace_mode=AIConversation.WorkspaceMode.RESEARCH,
+            title="学生私密研究对话",
+        )
+
+        client = self.client_for(self.teacher)
+        created = client.post(
+            "/api/ai-conversations/",
+            {
+                "project": self.project.id,
+                "workspace_mode": "research",
+                "title": "下次指导准备",
+            },
+            format="json",
+        )
+
+        self.assertEqual(created.status_code, 201)
+        listed = client.get("/api/ai-conversations/")
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual([item["id"] for item in listed.data], [created.data["id"]])
+        self.assertNotIn(student_conversation.id, [item["id"] for item in listed.data])
+
     def test_opening_draft_requires_explicit_confirmation_before_creating_project(self):
         conversation = AIConversation.objects.create(owner=self.student, workspace_mode="opening")
         assistant = AIConversationMessage.objects.create(

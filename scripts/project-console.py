@@ -37,6 +37,10 @@ ALL_PROJECT_SERVICES = COMPOSE_SERVICES + list(PROFILE_SERVICES)
 SERVICE_TARGETS = set(ALL_PROJECT_SERVICES + ["all", "colima", "demo"])
 LOG_SERVICES = set(ALL_PROJECT_SERVICES + ["action"])
 FRONTEND_MODE = os.environ.get("FRONTEND_MODE", "docker").lower()
+COMPOSE_PROFILE = os.environ.get("COMPOSE_PROFILE", "dev").lower()
+ACTIVE_FRONTEND_SERVICE = "nginx" if COMPOSE_PROFILE == "production" else "frontend"
+if COMPOSE_PROFILE == "production":
+    FRONTEND_PORT = int(os.environ.get("FRONTEND_PORT", "80"))
 
 # 从 .env 解析后端宿主端口（BACKEND_BIND=127.0.0.1:18001）
 BACKEND_PORT = 18001
@@ -346,7 +350,7 @@ def frontend_status():
         state = "stopped"
     if compose_state == "running":
         mode = "docker"
-        source = "Docker Compose frontend 容器"
+        source = "Docker Compose %s 容器" % ACTIVE_FRONTEND_SERVICE
     elif managed_pid:
         mode = "host"
         source = "宿主机 Vite（由控制台启动）"
@@ -376,7 +380,7 @@ def frontend_status():
 def compose_frontend_state():
     if not docker_ready():
         return "unavailable"
-    rc, out, _ = compose(*compose_service_args("frontend", "ps", "--format", "json"), timeout=20)
+    rc, out, _ = compose(*compose_service_args(ACTIVE_FRONTEND_SERVICE, "ps", "--format", "json"), timeout=20)
     if rc != 0:
         return "unavailable"
     for line in out.splitlines():
@@ -384,7 +388,7 @@ def compose_frontend_state():
             obj = json.loads(line)
         except Exception:
             continue
-        if obj.get("Service") == "frontend":
+        if obj.get("Service") == ACTIVE_FRONTEND_SERVICE:
             return obj.get("State") or "unknown"
     return "not_created"
 
@@ -613,17 +617,21 @@ def frontend_start():
     if FRONTEND_MODE == "docker":
         if not ensure_docker():
             return False
-        _log("启动前端容器：docker compose --profile dev up -d frontend")
-        rc, out, err = compose(*compose_service_args("frontend", "up", "-d", "frontend"), timeout=240)
+        profile = PROFILE_SERVICES[ACTIVE_FRONTEND_SERVICE]
+        _log("启动前端容器：docker compose --profile %s up -d %s" % (profile, ACTIVE_FRONTEND_SERVICE))
+        rc, out, err = compose(*compose_service_args(ACTIVE_FRONTEND_SERVICE, "up", "-d", ACTIVE_FRONTEND_SERVICE), timeout=240)
         _log(out.strip() or err.strip() or "done (rc=%d)" % rc)
         if rc != 0:
             return False
         for _ in range(60):
             if http_ok("http://127.0.0.1:%d/" % FRONTEND_PORT, timeout=2):
-                _log("Docker 前端已就绪 (5173)")
+                _log("Docker %s 已就绪 (%d)" % (ACTIVE_FRONTEND_SERVICE, FRONTEND_PORT))
                 return True
             time.sleep(2)
-        _log("Docker 前端启动超时，请查看 frontend 日志")
+        _log("Docker %s 启动超时，请查看 %s 日志" % (ACTIVE_FRONTEND_SERVICE, ACTIVE_FRONTEND_SERVICE))
+        return False
+    if COMPOSE_PROFILE == "production":
+        _log("生产模式只支持 Docker Compose nginx，不能启动宿主机 Vite")
         return False
     script = os.path.join(ROOT, "scripts", "dev-frontend.sh")
     _log("启动前端：bash scripts/dev-frontend.sh")
@@ -644,10 +652,14 @@ def frontend_start():
 
 def frontend_stop():
     if compose_frontend_state() == "running":
-        _log("停止前端容器：docker compose --profile dev stop frontend")
-        rc, out, err = compose(*compose_service_args("frontend", "stop", "frontend"), timeout=120)
+        profile = PROFILE_SERVICES[ACTIVE_FRONTEND_SERVICE]
+        _log("停止前端容器：docker compose --profile %s stop %s" % (profile, ACTIVE_FRONTEND_SERVICE))
+        rc, out, err = compose(*compose_service_args(ACTIVE_FRONTEND_SERVICE, "stop", ACTIVE_FRONTEND_SERVICE), timeout=120)
         _log(out.strip() or err.strip() or "done (rc=%d)" % rc)
         return rc == 0
+    if COMPOSE_PROFILE == "production":
+        _log("生产前端 nginx 当前未运行；不清理宿主机 80 端口")
+        return True
     pid = read_pidfile()
     if pid:
         _log("停止前端进程 pid=%s" % pid)

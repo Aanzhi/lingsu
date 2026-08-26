@@ -25,7 +25,7 @@ export type SessionMeResponse = MeResponse | AnonymousMeResponse
 export interface ProjectMember { id: number; account: number; username: string; role: 'leader' | 'member' }
 export interface Project {
   id: number; school: number; school_name: string; title: string; problem: string; plan: string; summary: string
-  leader: number; primary_teacher: number | null
+  leader: number; primary_teacher: number | null; primary_teacher_name: string | null
   project_type: 'research' | 'invention' | 'engineering'; status: ProjectLifecycleState
   members: ProjectMember[]
   growth: { experience: number; level: number; streak_days: number; achievements: string[]; title: string }
@@ -84,7 +84,7 @@ export interface AIAgent {
   system_instruction: string
   prompt_template: string
   input_schema: AIAgentInputField[]
-  context_scope_default: Record<string, boolean | string>
+  context_scope_default: Record<string, boolean | string | string[] | number[]>
   is_active: boolean
   school: number | null
   order: number
@@ -219,7 +219,7 @@ export const getProjectTasks = (project?: number) => api.get<ProjectTaskApiRespo
 export const createAIGeneration = (payload: { project?: number | null; workspace_mode?: AIWorkspaceMode; purpose?: string; prompt: string; input_values?: Record<string, string>; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' }) => api.post<AIGeneration>('ai-logs/', payload)
 export interface AIConversation { id: number; title: string; project: Project['id'] | null; opening_project?: Project['id'] | null; project_title: string | null; paper_type: string | null; current_agent: string | null; workspace_mode?: AIWorkspaceMode | null; current_project?: CurrentProjectContext | null; is_archived: boolean; updated_at: string; created_at: string }
 export interface AIConversationMessage { id: number; role: 'user' | 'assistant' | 'system'; content: string; status: 'queued' | 'streaming' | 'completed' | 'failed'; generation_log?: number | null; artifact_payload?: AIArtifactOutput | null; verification_items?: Array<VerificationItem | string>; error_message?: string; created_at: string }
-export interface AIConversationMessageInput { content: string; agent_key?: string; project?: number | null; workspace_mode?: AIWorkspaceMode; task?: number; paper_type?: string; input_values?: Record<string, string>; context_scope?: AIContextScope }
+export interface AIConversationMessageInput { content: string; agent_key?: string; project?: number | null; workspace_mode?: AIWorkspaceMode; task?: number; paper_type?: string; input_values?: Record<string, string>; context_scope?: AIContextScope & { selected_materials?: number[] } }
 export const getAIConversations = (params?: { project?: number; include_archived?: boolean }) => api.get<AIConversation[]>('ai-conversations/', { params })
 export const createAIConversation = (payload: { title?: string; project?: number | null; workspace_mode?: AIWorkspaceMode; paper_type?: string | null; current_agent?: string | null }) => api.post<AIConversation>('ai-conversations/', payload)
 export const updateAIConversation = (id: number, payload: Partial<Pick<AIConversation, 'title' | 'paper_type' | 'current_agent' | 'workspace_mode'>>) => api.patch<AIConversation>(`ai-conversations/${id}/`, payload)

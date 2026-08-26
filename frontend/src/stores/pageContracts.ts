@@ -35,11 +35,9 @@ export const PAGE_CONTRACTS: PageContract[] = [
   { key: 'public.platform-login', role: 'public', path: '/platform/login', title: '进入平台管理工作台', description: '平台管理员在这里管理学校空间、AI 模板、赛事公告和公开案例。', primaryAction: { label: '登录平台工作台', kind: 'submit' } },
 
   { key: 'student.home', role: 'student', path: '/student/home', title: '继续当前研究', description: '从当前项目的待办开始，查看进度、材料状态和下一项可完成任务。', primaryAction: { label: '开始任务', kind: 'route' } },
-  { key: 'student.projects', role: 'student', path: '/student/projects', title: '我的项目', description: '查看项目进度，进入研究旅程，管理已归档和回收站项目。', primaryAction: { label: '新建项目', kind: 'event' }, allowedQuery: studentProjectQuery },
-  { key: 'student.project.overview', role: 'student', path: '/student/projects/:id', title: '项目概览', description: '查看项目问题、成员和当前进度，选择下一步进入研究旅程。', primaryAction: { label: '进入研究旅程', kind: 'route' } },
-  { key: 'student.project.map', role: 'student', path: '/student/projects/:id/map', title: '研究旅程', description: '按章节查看任务状态，打开具体任务后提交材料或查看审核意见。', primaryAction: { label: '继续当前任务', kind: 'route' } },
+  { key: 'student.projects', role: 'student', path: '/student/projects', title: '我的项目', description: '查看项目进度，进入研究进程，管理已归档和回收站项目。', primaryAction: { label: '新建项目', kind: 'event' }, allowedQuery: studentProjectQuery },
+  { key: 'student.project.map', role: 'student', path: '/student/projects/:id/map', title: '研究进程', description: '按章节推进任务，在具体任务中提交材料并查看审核意见。', primaryAction: { label: '继续当前任务', kind: 'route' } },
   { key: 'student.project.task', role: 'student', path: '/student/projects/:id/tasks/:taskId', title: '任务处理', description: '完成当前任务要求，补充证据后提交给指导教师审核。', primaryAction: { label: '提交材料', kind: 'submit' } },
-  { key: 'student.project.materials', role: 'student', path: '/student/projects/:id/materials', title: '材料档案', description: '按章节和状态查找已提交材料，需修订的内容可直接回到对应任务。' },
   { key: 'student.project.report', role: 'student', path: '/student/projects/:id/report', title: '研究报告', description: '根据已通过材料查看报告结构，满足条件后导出 Word 或 PDF。' },
   { key: 'student.ai', role: 'student', path: '/student/ai', title: '灵思 AI', description: '围绕开题、研究推进和成果表达提供可核对的辅助建议。', primaryAction: { label: '发送问题', kind: 'submit' }, allowedQuery: ['mode', 'projectId', 'taskId', 'agent', 'researchQuestion'] },
   { key: 'student.notifications', role: 'student', path: '/student/notifications', title: '通知中心', description: '查看系统、学校、教师反馈和项目状态变化；需要处理的邀请进入项目邀请。' },
@@ -50,8 +48,9 @@ export const PAGE_CONTRACTS: PageContract[] = [
   { key: 'student.announcements', role: 'student', path: '/student/announcements', title: '通知公告', description: '查看平台公告和学校通知，优先处理与项目进度相关的消息。' },
 
   { key: 'teacher.home', role: 'teacher', path: '/teacher/home', title: '指导工作台', description: '查看本校项目、待审核材料和成员事项，优先处理需要你决定的记录。', primaryAction: { label: '查看待审核材料', target: '/teacher/reviews', kind: 'route' } },
-  { key: 'teacher.pool', role: 'teacher', path: '/teacher/pool', title: '项目池', description: '浏览本校尚未认领的项目，确认研究方向后认领为指导项目。', primaryAction: { label: '查看并认领', kind: 'event' } },
+  { key: 'teacher.pool', role: 'teacher', path: '/teacher/pool', title: '项目池', description: '浏览本校尚未认领的项目，先查看开题内容，再确认是否认领为指导项目。', primaryAction: { label: '查看开题报告', kind: 'event' } },
   { key: 'teacher.projects', role: 'teacher', path: '/teacher/projects', title: '指导项目', description: '查看已认领、已归档和回收站项目，进入详情继续指导。' },
+  { key: 'teacher.ai', role: 'teacher', path: '/teacher/ai', title: '灵思 AI 指导室', description: '围绕本人负责项目诊断风险、准备指导问题，并形成需要人工确认的指导建议。', primaryAction: { label: '发送指导问题', kind: 'submit' }, allowedQuery: ['mode', 'projectId', 'agent'] },
   { key: 'teacher.project', role: 'teacher', path: '/teacher/projects/:id', title: '指导项目详情', description: '跟进项目研究章节、材料审核和成员状态。', primaryAction: { label: '查看待审核材料', kind: 'route' } },
   { key: 'teacher.project-template', role: 'teacher', path: '/teacher/projects/:id/template', title: '配置材料范本', description: '维护本项目的材料提交说明和参考范本，学生会在任务页看到更新。' },
   { key: 'teacher.reviews', role: 'teacher', path: '/teacher/reviews', title: '材料审核', description: '按提交顺序处理负责项目的材料，给出通过或明确的修改建议。', primaryAction: { label: '打开审核详情', kind: 'route' }, allowedQuery: ['projectId'] },
@@ -87,24 +86,23 @@ export function pageDescription(key: string, context?: unknown) {
   return typeof contract.description === 'function' ? contract.description(context) : contract.description
 }
 
-export function studentProjectRoute(id: number | string, surface: StudentProjectSurface = 'overview') {
+export function studentProjectRoute(id: number | string, surface: StudentProjectSurface = 'map') {
   const base = `/student/projects/${id}`
-  if (surface === 'map') return `${base}/map`
-  if (surface === 'materials') return `${base}/materials`
+  if (surface === 'overview' || surface === 'map' || surface === 'materials') return `${base}/map`
   if (surface === 'report') return `${base}/report`
-  return base
+  return `${base}/map`
 }
 
 export function studentTaskRoute(projectId: number | string, taskId: number | string) {
-  return `${studentProjectRoute(projectId)}/tasks/${taskId}`
+  return `/student/projects/${projectId}/tasks/${taskId}`
 }
 
 export function studentProjectsLocation(focus?: StudentProjectFocus): RouteLocationTarget {
-  return focus ? { path: '/student/projects', query: { focus } } : { path: '/student/projects' }
+  return focus ? { path: '/student/projects', query: { focus: focus === 'materials' ? 'journey' : focus } } : { path: '/student/projects' }
 }
 
 export function studentProjectsPath(focus?: StudentProjectFocus) {
-  return focus ? `/student/projects?focus=${focus}` : '/student/projects'
+  return focus ? `/student/projects?focus=${focus === 'materials' ? 'journey' : focus}` : '/student/projects'
 }
 
 export function teacherReviewRoute(submissionId?: number | string, projectId?: number | string): string | RouteLocationTarget {

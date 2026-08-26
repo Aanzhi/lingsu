@@ -10,7 +10,7 @@ import AppTopbar from './AppTopbar.vue'
 
 const route = useRoute()
 const router = useRouter()
-const studentTopNavigationLabels = ['首页', '我的项目', '灵思 AI', '研究旅程', '材料档案', '项目邀请', '成果申请', '通知']
+const studentTopNavigationLabels = ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请', '消息中心']
 const navItems = computed(() => studentTopNavigation(auth.user.value?.primaryProject)
   .filter((item) => studentTopNavigationLabels.includes(item.label)))
 const projectTarget = computed(() => auth.user.value?.primaryProject ? studentProjectRoute(auth.user.value.primaryProject) : '/student/projects')

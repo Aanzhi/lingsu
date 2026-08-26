@@ -82,6 +82,21 @@ async function projectByTitle(page: Page, title: string) {
   return project as Project
 }
 
+async function previewAndClaimPoolProject(page: Page, title: string, opening?: { problem?: string; plan?: string; summary?: string }) {
+  const projectCard = page.locator('.project-card--pool').filter({ hasText: title })
+  await expect(projectCard).toHaveCount(1)
+  await projectCard.getByRole('button', { name: '查看开题报告', exact: true }).click()
+  const preview = page.locator('.el-dialog:visible')
+  await expect(preview).toContainText(title)
+  if (opening?.problem) await expect(preview).toContainText(opening.problem)
+  if (opening?.plan) await expect(preview).toContainText(opening.plan)
+  if (opening?.summary) await expect(preview).toContainText(opening.summary)
+  const poolBeforeClaim = await getJson<Project[]>(page, 'projects/pool/')
+  expect(poolBeforeClaim.find((item) => item.title === title)?.status).toBe('unclaimed')
+  await preview.getByRole('button', { name: '认领为指导项目', exact: true }).click()
+  await expect(page.locator('.feedback-banner')).toContainText('项目已认领，研究任务地图已生成。')
+}
+
 async function taskList(page: Page, projectId: number) {
   return getJson<Task[]>(page, `project-tasks/?project=${projectId}`)
 }
@@ -124,6 +139,41 @@ test.describe('核心项目跨角色闭环', () => {
     await seedCoreFlow()
   })
 
+  test('学生项目列表显示完整数据，研究进程视图导航互斥', async ({ page }) => {
+    await login(page, studentUsername, '/student/projects')
+    const projects = await getJson<Project[]>(page, 'projects/')
+    await expect(page.locator('#student-project-list .current-project-panel')).toHaveCount(projects.length ? 1 : 0)
+    await expect(page.locator('#student-project-list .student-project-card')).toHaveCount(Math.min(6, Math.max(projects.length - 1, 0)))
+    await expect(page.locator('.project-pagination')).toHaveCount(Math.max(projects.length - 1, 0) > 6 ? 1 : 0)
+
+    const projectId = projects[0].id
+    await page.goto(`/student/projects/${projectId}/map`)
+    await expect(page.locator('.workspace-sidebar a[aria-current="page"]')).toHaveCount(1)
+    await expect(page.locator('.workspace-sidebar a[aria-current="page"]')).toContainText('研究进程')
+    await page.goto(`/student/projects/${projectId}/materials`)
+    await expect(page).toHaveURL(new RegExp(`/student/projects/${projectId}/map$`))
+    await expect(page.locator('.workspace-sidebar a[aria-current="page"]')).toHaveCount(1)
+    await expect(page.locator('.workspace-sidebar a[aria-current="page"]')).toContainText('研究进程')
+    await expect(page.locator('.page-header .eyebrow')).toHaveText('研究进程')
+    await expect(page.getByText('材料记录', { exact: true })).toHaveCount(0)
+  })
+
+  test('教师项目池与指导项目显示全部项目并支持认领前预览', async ({ page }) => {
+    await login(page, teacherUsername, '/teacher/pool')
+    const poolProjects = await getJson<Project[]>(page, 'projects/pool/')
+    await expect(page.locator('.project-card--pool')).toHaveCount(poolProjects.length)
+    await previewAndClaimPoolProject(page, '核心项目池验收 01', {
+      problem: '如何验证校园观察问题 1 的关键变量？',
+      plan: '为项目池预览准备第 1 组观察、记录和比较方案。',
+      summary: '项目池确定性样本 1，用于验证教师认领前的开题信息。',
+    })
+
+    await page.goto('/teacher/projects')
+    const guidedProjects = await getJson<Project[]>(page, 'projects/guided/')
+    await expect(page.locator('#teacher-project-list .project-card')).toHaveCount(guidedProjects.length)
+    await expect(page.locator('#teacher-project-list .project-card-grid__toolbar')).toHaveCount(1)
+  })
+
   test('学生创建、教师审核、报告导出和校内成果申请保持真实状态', async ({ page }) => {
     test.setTimeout(180_000)
     const title = `E2E 核心闭环 ${Date.now()}`
@@ -140,10 +190,10 @@ test.describe('核心项目跨角色闭环', () => {
     const createdProject = await projectByTitle(page, title)
 
     await login(page, teacherUsername, '/teacher/pool')
-    const projectCard = page.locator('.pool-card').filter({ hasText: title })
-    await expect(projectCard).toHaveCount(1)
-    await projectCard.getByRole('button', { name: '查看并认领', exact: true }).click()
-    await expect(page.locator('.feedback-banner')).toContainText('项目已认领，研究任务地图已生成。')
+    await previewAndClaimPoolProject(page, title, {
+      problem: '如何通过连续观察改善校园雨后积水？',
+      plan: '记录不同位置的积水变化，整理证据并提出改进建议。',
+    })
     const tasks = (await taskList(page, createdProject.id)).sort((left, right) => left.order - right.order)
     expect(tasks).toHaveLength(2)
 
@@ -228,10 +278,7 @@ test.describe('核心项目跨角色闭环', () => {
     const invitedProject = await projectByTitle(page, '核心闭环验收项目')
 
     await login(page, teacherUsername, '/teacher/pool')
-    const poolCard = page.locator('.pool-card').filter({ hasText: invitedProject.title })
-    await expect(poolCard).toHaveCount(1)
-    await poolCard.getByRole('button', { name: '查看并认领', exact: true }).click()
-    await expect(page.locator('.feedback-banner')).toContainText('项目已认领，研究任务地图已生成。')
+    await previewAndClaimPoolProject(page, invitedProject.title)
 
     const invitedTasks = (await taskList(page, invitedProject.id)).sort((left, right) => left.order - right.order)
     expect(invitedTasks.length).toBeGreaterThanOrEqual(1)
@@ -262,7 +309,7 @@ test.describe('核心项目跨角色闭环', () => {
     const acceptedNotice = page.getByRole('button', { name: /接受了项目「核心闭环验收项目」/ }).first()
     await expect(acceptedNotice).toBeVisible()
     await acceptedNotice.click()
-    await expect(page).toHaveURL(new RegExp(`/student/projects/${invitedProject.id}$`))
+    await expect(page).toHaveURL(new RegExp(`/student/projects/${invitedProject.id}/map$`))
     await page.goto('/student/notifications')
     await page.getByRole('button', { name: /全部已读/ }).click()
     await expect(page.getByRole('button', { name: /^未读/ })).toContainText('0')
@@ -276,7 +323,7 @@ test.describe('核心项目跨角色闭环', () => {
     await expect(page.locator('.feedback-banner')).toContainText('成员已加入项目团队。')
 
     await login(page, memberUsername, `/student/projects/${invitedProject.id}`)
-    await expect(page.getByText(memberUsername)).toBeVisible()
+    await expect(page.locator('.journey-overview')).toContainText('研究小组')
     const memberProject = await getJson<Project>(page, `projects/${invitedProject.id}/`)
     expect(memberProject.members.some((item) => item.username === memberUsername)).toBeTruthy()
 
@@ -290,7 +337,7 @@ test.describe('核心项目跨角色闭环', () => {
     await expect(page.locator('.feedback-banner')).toContainText('已将该同学加入项目。')
 
     await login(page, directMemberUsername, `/student/projects/${invitedProject.id}`)
-    await expect(page.getByText(directMemberUsername)).toBeVisible()
+    await expect(page.locator('.journey-overview')).toContainText('研究小组')
     const directProject = await getJson<Project>(page, `projects/${invitedProject.id}/`)
     expect(directProject.members.some((item) => item.username === directMemberUsername)).toBeTruthy()
     await page.goto('/student/notifications')
@@ -417,10 +464,7 @@ test.describe('核心项目跨角色闭环', () => {
     const project = await projectByTitle(page, '核心闭环验收项目')
     if (project.primary_teacher === null) {
       await login(page, teacherUsername, '/teacher/pool')
-      const poolCard = page.locator('.pool-card').filter({ hasText: project.title })
-      await expect(poolCard).toHaveCount(1)
-      await poolCard.getByRole('button', { name: '查看并认领', exact: true }).click()
-      await expect(page.locator('.feedback-banner')).toContainText('项目已认领，研究任务地图已生成。')
+      await previewAndClaimPoolProject(page, project.title)
     }
 
     await login(page, studentUsername, `/student/ai?mode=research&projectId=${project.id}`)

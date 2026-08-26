@@ -182,7 +182,72 @@
   .console-card{border:1px solid var(--line);border-radius:12px;background:var(--paper-card);box-shadow:var(--shadow)}
   .console-control-card{min-height:118px;margin:0;padding:20px;align-content:flex-start}
   .console-control-card .title{width:100%;margin:0 0 14px}
+  .startup-order-note{display:flex;align-items:flex-start;gap:10px;margin:0 0 16px;padding:12px 14px;border:1px solid #cfe0d0;border-radius:8px;background:#edf4ed;color:#365440;font-size:12.5px;line-height:1.55}
+  .startup-order-note strong{display:block;margin-bottom:2px;color:#285250;font-size:13px}
+  .startup-order-note>span{flex:0 0 auto;font-weight:700;color:#3d6c6a}
+  .startup-step{font-weight:700}
+  .startup-step small{display:block;color:var(--muted);font-weight:400}
+  .startup-flow{margin:0 0 20px;padding:22px;background:var(--paper-card);border:1px solid var(--line);border-radius:12px;box-shadow:var(--shadow)}
+  .startup-flow__head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:18px}
+  .startup-flow__head .console-eyebrow{margin-bottom:4px}
+  .startup-flow__head h2{margin:0;font-size:18px;line-height:1.35;font-weight:650}
+  .startup-flow__head p:not(.console-eyebrow){margin:5px 0 0;color:var(--muted);font-size:12px}
+  .startup-flow__status{flex:0 0 auto;padding:6px 10px;border:1px solid var(--line);border-radius:99px;color:var(--muted);font-size:12px;line-height:1.35;white-space:nowrap}
+  .startup-flow__steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0;padding:0;list-style:none}
+  .startup-flow__step{display:flex;flex-direction:column;min-width:0;min-height:206px;padding:16px;border:1px solid var(--line);border-radius:10px;background:var(--paper-soft);transition:border-color .16s,background .16s,box-shadow .16s}
+  .startup-flow__step.is-current{border-color:#9dbbb2;background:#f2f7f2;box-shadow:0 0 0 2px rgba(79,111,89,.08)}
+  .startup-flow__step.is-done{border-color:#b9d9bb;background:#f4f8f3}
+  .startup-flow__step.is-locked{background:#fafbf9;color:var(--muted)}
+  .startup-flow__step-index{width:27px;height:27px;display:grid;place-items:center;border-radius:50%;background:#dfe7e1;color:var(--brand-deep);font-size:12px;font-weight:700;flex:0 0 auto}
+  .startup-flow__step.is-current .startup-flow__step-index{background:var(--brand);color:#fff}
+  .startup-flow__step.is-done .startup-flow__step-index{background:#d9ecd9;color:#2f7d3a}
+  .startup-flow__step-main{min-width:0;flex:1;margin-top:13px}
+  .startup-flow__step-title{display:flex;align-items:flex-start;gap:7px;min-width:0}
+  .startup-flow__step-title strong{font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+  .startup-flow__step-state{margin-left:auto;flex:0 0 auto;color:var(--muted);font-size:11px;line-height:1.45}
+  .startup-flow__step.is-current .startup-flow__step-state{color:var(--brand-deep);font-weight:650}
+  .startup-flow__step.is-done .startup-flow__step-state{color:#2f7d3a}
+  .startup-flow__step-main p{margin:7px 0 0;color:var(--muted);font-size:12px;line-height:1.55;overflow-wrap:anywhere}
+  .startup-flow__step-action{width:100%;min-height:38px;margin-top:14px;padding:8px 10px;font-size:12px}
+  .advanced-controls{margin:0 0 20px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.6);overflow:hidden}
+  .advanced-controls summary{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:52px;padding:12px 16px;cursor:pointer;list-style:none;color:var(--text)}
+  .advanced-controls summary::-webkit-details-marker{display:none}
+  .advanced-controls summary:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+  .advanced-controls summary>span:first-child{display:flex;align-items:baseline;gap:10px;min-width:0}
+  .advanced-controls summary strong{font-size:13px}
+  .advanced-controls summary small,.advanced-controls__hint{color:var(--muted);font-size:11px;font-weight:400}
+  .advanced-controls__hint{flex:0 0 auto}
+  .advanced-controls[open] summary{border-bottom:1px solid var(--line);background:var(--paper-soft)}
+  .advanced-controls__body{padding:16px}
+  .advanced-controls .console-two-col{margin:0}
   .console-main .wrap>header .sub{max-width:650px;font-size:14px}
+  @media(max-width:980px){.startup-flow__steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:720px){
+    .console-topbar{height:auto;min-height:66px;padding:12px 14px;align-items:flex-start;gap:8px;flex-wrap:wrap}
+    .console-brand-subtitle,.console-brand-divider{display:none}
+    .refresh{width:100%;font-size:11px}
+    .console-shell{grid-template-columns:1fr}
+    .console-sidebar{height:auto;position:static;top:auto;padding:8px 12px;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px;border-right:0;border-bottom:1px solid var(--line)}
+    .console-sidebar a{justify-content:center;min-height:40px;margin:0;padding:0 5px;font-size:11px}
+    .console-main{padding:0 14px 48px}
+    .console-main .wrap{padding:22px 0 48px}
+    .console-metric-grid{grid-template-columns:1fr;gap:10px;margin-bottom:20px}
+    .console-metric-grid .control-plane,.console-metric-grid .hero{height:auto;min-height:108px;max-height:none}
+    .console-two-col{grid-template-columns:1fr}
+    .startup-order-note{margin-bottom:12px;font-size:12px}
+    .console-control-card{min-height:0}
+    .startup-flow{padding:16px}
+    .startup-flow__head{display:block;margin-bottom:14px}
+    .startup-flow__status{display:inline-block;margin-top:10px;white-space:normal}
+    .startup-flow__steps{grid-template-columns:1fr;gap:8px}
+    .startup-flow__step{display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:12px;min-height:0;padding:14px}
+    .startup-flow__step-index{grid-row:span 2}
+    .startup-flow__step-main{margin-top:0}
+    .startup-flow__step-action{grid-column:2;margin-top:12px}
+    .advanced-controls summary{align-items:flex-start;flex-direction:column;gap:4px}
+    .advanced-controls summary>span:first-child{align-items:flex-start;flex-direction:column;gap:2px}
+    .advanced-controls__body{padding:12px}
+  }
 </style>
 </head>
 <body>
@@ -267,28 +332,83 @@
     </div>
   </div>
 
-  <div class="console-two-col">
-    <div class="bar console-card console-control-card">
-      <span class="title"><strong>项目服务</strong><small>只控制项目资源，不会停止本控制台</small></span>
-      <button class="primary" data-target="all" data-action="start">启动项目</button>
-      <button data-target="all" data-action="stop">停止项目</button>
-      <button class="ghost" data-target="all" data-action="restart">重启项目</button>
-      <button class="ghost" data-target="demo" data-action="seed">初始化演示数据</button>
-      <button class="ghost" id="e2e-btn">验证登录</button>
-    </div>
-    <div class="bar console-card console-control-card">
-      <span class="title"><strong>Docker / Colima</strong><small>停止或重启可能影响本机其他容器</small></span>
-      <button class="primary" data-target="colima" data-action="start">启动 Docker</button>
-      <button data-target="colima" data-action="stop">停止 Docker</button>
-      <button class="ghost" data-target="colima" data-action="restart">重启 Docker</button>
+  <div class="startup-order-note" role="note" aria-label="项目启动顺序">
+    <span>推荐启动顺序</span>
+    <div>
+      <strong>1. 启动 Docker / Colima → 2. 启动项目服务</strong>
+      <div>可以直接点击「启动项目」：启动项目会自动检测并启动 Docker，再依次启动数据库、缓存、后端、任务服务和前端。初始化演示数据需在项目服务就绪后执行。</div>
     </div>
   </div>
+
+  <section class="startup-flow" aria-labelledby="startup-flow-title">
+    <div class="startup-flow__head">
+      <div>
+        <p class="console-eyebrow">启动向导</p>
+        <h2 id="startup-flow-title">按状态完成一次启动</h2>
+        <p>每一步都会读取真实状态；完成前不会把无关操作放在主路径上。</p>
+      </div>
+      <span class="startup-flow__status" id="startup-flow-status" role="status" aria-live="polite">正在读取状态…</span>
+    </div>
+    <ol class="startup-flow__steps">
+      <li class="startup-flow__step is-current" id="flow-step-docker" data-flow-state="current">
+        <span class="startup-flow__step-index" aria-hidden="true">1</span>
+        <div class="startup-flow__step-main">
+          <div class="startup-flow__step-title"><strong id="flow-docker-title">准备 Docker / Colima</strong><span class="startup-flow__step-state" id="flow-docker-state">检查中</span></div>
+          <p id="flow-docker-detail">项目服务依赖 Docker；控制台本身不会被停止。</p>
+        </div>
+        <button class="startup-flow__step-action primary" id="flow-docker-action" data-target="colima" data-action="start">启动 Docker</button>
+      </li>
+      <li class="startup-flow__step is-locked" id="flow-step-project" data-flow-state="locked">
+        <span class="startup-flow__step-index" aria-hidden="true">2</span>
+        <div class="startup-flow__step-main">
+          <div class="startup-flow__step-title"><strong id="flow-project-title">启动项目服务</strong><span class="startup-flow__step-state" id="flow-project-state">等待 Docker</span></div>
+          <p id="flow-project-detail">按顺序启动数据库、缓存、后端、任务服务和前端。</p>
+        </div>
+        <button class="startup-flow__step-action" id="flow-project-action" data-target="all" data-action="start">启动项目</button>
+      </li>
+      <li class="startup-flow__step is-locked" id="flow-step-checks" data-flow-state="locked">
+        <span class="startup-flow__step-index" aria-hidden="true">3</span>
+        <div class="startup-flow__step-main">
+          <div class="startup-flow__step-title"><strong id="flow-checks-title">健康验收</strong><span class="startup-flow__step-state" id="flow-checks-state">等待项目服务</span></div>
+          <p id="flow-checks-detail">确认接口、数据库、缓存、任务服务和前端可用。</p>
+        </div>
+        <button class="startup-flow__step-action" id="checks-btn">执行完整验收</button>
+      </li>
+      <li class="startup-flow__step is-locked" id="flow-step-e2e" data-flow-state="locked">
+        <span class="startup-flow__step-index" aria-hidden="true">4</span>
+        <div class="startup-flow__step-main">
+          <div class="startup-flow__step-title"><strong id="flow-e2e-title">登录验证</strong><span class="startup-flow__step-state" id="flow-e2e-state">等待健康验收</span></div>
+          <p id="flow-e2e-detail">用真实浏览器验证 127.0.0.1 和 localhost 两个入口。</p>
+        </div>
+        <button class="startup-flow__step-action ghost" id="e2e-btn">验证登录</button>
+      </li>
+    </ol>
+  </section>
+
+  <details class="advanced-controls" id="advanced-controls">
+    <summary><span><strong>高级控制</strong><small>停止、重启、初始化与运行环境</small></span><span class="advanced-controls__hint">需要单独排障时使用</span></summary>
+    <div class="advanced-controls__body">
+      <div class="console-two-col">
+        <div class="bar console-card console-control-card">
+          <span class="title"><strong><span class="startup-step">项目服务</span></strong><small>只控制项目资源，不会停止本控制台。</small></span>
+          <button data-target="all" data-action="stop">停止项目</button>
+          <button class="ghost" data-target="all" data-action="restart">重启项目</button>
+          <button class="ghost" data-target="demo" data-action="seed">初始化演示数据</button>
+        </div>
+        <div class="bar console-card console-control-card">
+          <span class="title"><strong><span class="startup-step">Docker / Colima</span></strong><small>停止或重启可能影响本机其他容器。</small></span>
+          <button data-target="colima" data-action="stop">停止 Docker</button>
+          <button class="ghost" data-target="colima" data-action="restart">重启 Docker</button>
+        </div>
+      </div>
+    </div>
+  </details>
 
   <div class="card" id="checks">
     <div class="card-head">
       <h2>项目健康检查</h2>
       <span class="pill" id="checks-pill">—</span>
-      <button id="checks-btn" class="primary">执行完整验收</button>
+      <span class="muted-note">操作已移至上方启动向导</span>
     </div>
     <div class="check-grid" id="check-grid"><div class="muted-note">正在读取检查状态…</div></div>
     <div class="verify-summary" id="checks-summary">—</div>
@@ -363,6 +483,8 @@ const checkLabel = (state) => ({pass:'通过',fail:'失败',pending:'待执行',
 let lastLog = 'action';
 
 const e2eState = { '127.0.0.1': null, 'localhost': null };
+let latestStatus = null;
+let e2eActionRunning = false;
 async function fetchE2E(host, force = false) {
   try {
     const r = await fetch(`/api/e2e?host=${host}${force ? '&force=1' : ''}`);
@@ -372,12 +494,12 @@ async function fetchE2E(host, force = false) {
   } catch (e) { console.warn('e2e fetch fail', e); }
 }
 function renderE2E() {
-  let anyKnown = false, allOk = true, anyRunning = false;
+  let anyKnown = false, allOk = true, anyRunning = false, anyMissing = false;
   ['127.0.0.1', 'localhost'].forEach((host, i) => {
     const e = e2eState[host];
     const dot = $(`#e2e-h${i+1}-dot`);
     const st = $(`#e2e-h${i+1}-state`);
-    if (!e) { dot.className = 'e2e-host-dot'; st.textContent = '…待验证'; return; }
+    if (!e) { anyMissing = true; allOk = false; dot.className = 'e2e-host-dot'; st.textContent = '…待验证'; return; }
     anyKnown = true;
     if (e.running) { dot.className = 'e2e-host-dot run'; st.textContent = '验证中…'; anyRunning = true; return; }
     if (e.ok) {
@@ -395,6 +517,8 @@ function renderE2E() {
     $d.className = 'hero-dot'; $s.className = 'hero-state'; $s.textContent = '未运行'; $m.textContent = '点击「立即验证两者」';
   } else if (anyRunning) {
     $d.className = 'hero-dot busy'; $s.className = 'hero-state busy'; $s.textContent = '验证中…'; $m.textContent = '';
+  } else if (anyMissing) {
+    $d.className = 'hero-dot na'; $s.className = 'hero-state na'; $s.textContent = '等待验证'; $m.textContent = '需要完成两个本机入口的登录验证';
   } else if (allOk) {
     $d.className = 'hero-dot running'; $s.className = 'hero-state running'; $s.textContent = '两个入口都能登录 ✓'; $m.textContent = '两种入口（127.0.0.1/localhost）都能登';
   } else {
@@ -402,11 +526,106 @@ function renderE2E() {
     const failedHost = e2eState['127.0.0.1'] && !e2eState['127.0.0.1'].ok ? '127.0.0.1' : 'localhost';
     $m.textContent = `${failedHost} 登录失败。建议：用 127.0.0.1:5173 访问（已自动重定向 localhost → 127.0.0.1）。失败时按 F12 看 console。`;
   }
+  if (latestStatus) renderStartupFlow(latestStatus);
+}
+
+function setFlowStep(stepId, state, stateText, detail, actionText, options = {}) {
+  const step = $(`#${stepId}`);
+  const prefix = stepId.replace('flow-step-', 'flow-');
+  const stateNode = $(`#${prefix}-state`);
+  const detailNode = $(`#${prefix}-detail`);
+  const actionId = { 'flow-step-checks': 'checks-btn', 'flow-step-e2e': 'e2e-btn' }[stepId] || `${prefix}-action`;
+  const action = $(`#${actionId}`);
+  if (!step || !stateNode || !detailNode || !action) return;
+  step.dataset.flowState = state;
+  step.classList.remove('is-done', 'is-current', 'is-locked');
+  step.classList.add(`is-${state}`);
+  stateNode.textContent = stateText;
+  detailNode.textContent = detail;
+  action.textContent = actionText;
+  action.disabled = Boolean(options.disabled || options.busy);
+  action.classList.toggle('primary', Boolean(options.recommended));
+  action.classList.toggle('ghost', !options.recommended);
+  if (state === 'locked' && options.lockedReason) action.setAttribute('aria-label', options.lockedReason);
+  else action.removeAttribute('aria-label');
+}
+
+function renderStartupFlow(d) {
+  const be = d.backend || {};
+  const fe = d.frontend || {};
+  const checks = d.checks || [];
+  const checkRun = d.checks_run || {};
+  const checkCounts = checks.reduce((acc, item) => {
+    acc[item.state] = (acc[item.state] || 0) + 1;
+    return acc;
+  }, {});
+  const dockerReady = Boolean(d.docker_ready);
+  const backendReady = be.running === be.count && be.count > 0 && Boolean(be.health);
+  const projectReady = dockerReady && backendReady && fe.state === 'running';
+  const checksPassed = Boolean(
+    checkRun.finished && !checkRun.running && checks.length &&
+    !checkCounts.fail && !checkCounts.pending && !checkCounts.blocked &&
+    checks.every(item => item.state === 'pass')
+  );
+  const e2eResults = ['127.0.0.1', 'localhost'].map(host => e2eState[host]);
+  const e2eRunning = e2eActionRunning || Boolean(d.e2e && d.e2e.running) || e2eResults.some(item => item && item.running);
+  const e2ePassed = e2eResults.length === 2 && e2eResults.every(item => item && item.ok && !item.running);
+  const actionBusy = Boolean(d.action && d.action.running);
+  const busy = actionBusy || e2eActionRunning;
+
+  if (dockerReady) {
+    setFlowStep('flow-step-docker', 'done', '已完成', 'Docker / Colima 已就绪，可以使用项目容器资源。', 'Docker 已就绪', {disabled: true, busy});
+  } else {
+    setFlowStep('flow-step-docker', 'current', '当前步骤', '先启动本机容器运行环境；控制台会继续保持运行。', '启动 Docker', {recommended: true, busy});
+  }
+
+  if (projectReady) {
+    setFlowStep('flow-step-project', 'done', '已完成', '后端服务栈与前端均可访问。', '项目已运行', {disabled: true, busy});
+  } else if (dockerReady) {
+    setFlowStep('flow-step-project', 'current', '当前步骤', '启动数据库、缓存、后端、任务服务和前端。', '启动项目', {recommended: true, busy});
+  } else {
+    setFlowStep('flow-step-project', 'locked', '等待 Docker', '建议先完成第 1 步；也可以用此快捷方式一次准备 Docker 并启动项目。', '一键启动项目（含 Docker）', {
+      busy,
+      lockedReason: 'Docker 尚未就绪；此按钮会自动准备 Docker 后启动项目。'
+    });
+  }
+
+  if (checkRun.running) {
+    setFlowStep('flow-step-checks', 'current', '执行中', '正在执行完整健康验收，请等待结果返回。', '验收执行中…', {disabled: true, busy});
+  } else if (checksPassed) {
+    setFlowStep('flow-step-checks', 'done', '已通过', '最近一次完整验收全部通过；服务变化后可重新执行。', '重新执行验收', {busy});
+  } else if (projectReady) {
+    setFlowStep('flow-step-checks', 'current', '当前步骤', '确认接口、数据库、缓存、任务服务和前端均正常。', '执行完整验收', {recommended: true, busy});
+  } else {
+    setFlowStep('flow-step-checks', 'locked', '等待项目服务', '项目服务完全就绪后才执行验收，避免得到误报。', '等待项目服务', {disabled: true, busy});
+  }
+
+  if (e2ePassed) {
+    setFlowStep('flow-step-e2e', 'done', '已通过', '127.0.0.1 和 localhost 登录路径均已验证。', '重新验证登录', {busy});
+  } else if (!checksPassed) {
+    setFlowStep('flow-step-e2e', 'locked', '等待健康验收', '先完成完整健康验收，再验证真实登录，便于定位失败原因。', '等待健康验收', {disabled: true, busy});
+  } else if (e2eRunning) {
+    setFlowStep('flow-step-e2e', 'current', '执行中', '正在用真实浏览器验证两个本机入口。', '验证中…', {disabled: true, busy});
+  } else if (checksPassed) {
+    setFlowStep('flow-step-e2e', 'current', '当前步骤', '确认真实浏览器可以完成登录并正确跳转。', '验证登录', {recommended: true, busy});
+  }
+
+  const flowStatus = $('#startup-flow-status');
+  if (flowStatus) {
+    if (busy) flowStatus.textContent = '正在执行，请等待完成…';
+    else if (!dockerReady) flowStatus.textContent = '下一步：准备 Docker / Colima';
+    else if (!projectReady) flowStatus.textContent = '下一步：启动项目服务';
+    else if (!checksPassed) flowStatus.textContent = '下一步：执行健康验收';
+    else if (!e2ePassed) flowStatus.textContent = '下一步：验证登录';
+    else flowStatus.textContent = '启动流程已完成';
+  }
+  if (e2eActionRunning) document.querySelectorAll('button[data-target]').forEach(button => { button.disabled = true; });
 }
 
 async function fetchStatus() {
   const r = await fetch('/api/status');
   const d = await r.json();
+  latestStatus = d;
   render(d);
 }
 
@@ -547,6 +766,9 @@ function render(d) {
   $('#fe-url').href = `http://127.0.0.1:${fe.port}/`;
   $('#api-url').href = `http://127.0.0.1:${be.port}/api/health/`;
 
+  // ===== 启动向导 =====
+  renderStartupFlow(d);
+
   // 若当前看的是操作记录，自动刷新
   if (lastLog === 'action' && d.action && d.action.log) {
     $('#logtext').textContent = d.action.log.join('\n') || '(暂无操作)';
@@ -616,7 +838,9 @@ $('#log-svc').addEventListener('change', loadLog);
 // 端到端验证按钮：同时触发 127.0.0.1 + localhost 两条路径
 $('#e2e-btn').addEventListener('click', async () => {
   const btn = $('#e2e-btn');
+  e2eActionRunning = true;
   btn.disabled = true; btn.textContent = '验证中…';
+  if (latestStatus) renderStartupFlow(latestStatus);
   try {
     fetchE2E('127.0.0.1', true);
     fetchE2E('localhost', true);
@@ -624,16 +848,14 @@ $('#e2e-btn').addEventListener('click', async () => {
     fetchE2E('127.0.0.1');
     fetchE2E('localhost');
   } finally {
+    e2eActionRunning = false;
     btn.disabled = false; btn.textContent = '验证登录';
+    if (latestStatus) renderStartupFlow(latestStatus);
   }
 });
 
 fetchStatus();
-fetchE2E('127.0.0.1');
-fetchE2E('localhost');
 setInterval(fetchStatus, 5000);
-setInterval(() => fetchE2E('127.0.0.1'), 30000);
-setInterval(() => fetchE2E('localhost'), 30000);
 setInterval(() => { if (lastLog === 'action') loadLog(); }, 5000);
 </script>
 </body>

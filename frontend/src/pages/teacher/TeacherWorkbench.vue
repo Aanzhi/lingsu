@@ -2,12 +2,10 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
-  ArrowRight,
   CircleCheck,
   Collection,
-  User,
 } from "@element-plus/icons-vue";
-import { errorMessage } from "../../api";
+import { errorMessage, type Project } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
 import FeedbackBanner from "../../components/FeedbackBanner.vue";
 import MemberAssignDialog from "../../components/MemberAssignDialog.vue";
@@ -43,8 +41,6 @@ const comment = ref("");
 const busy = ref(false);
 const completedReview = ref(false);
 const feedback = ref<FeedbackState | null>(null);
-const poolPage = ref(1);
-const poolPageSize = 3;
 const poolSearch = ref("");
 const poolType = ref<"all" | "research" | "invention" | "engineering">("all");
 const poolSort = ref<"recent" | "attention">("recent");
@@ -61,13 +57,11 @@ const filteredPool = computed(() => {
       return right.created_at.localeCompare(left.created_at);
     });
 });
-const poolTotalPages = computed(() => Math.max(1, Math.ceil(filteredPool.value.length / poolPageSize)));
-const visiblePool = computed(() => filteredPool.value.slice((poolPage.value - 1) * poolPageSize, poolPage.value * poolPageSize));
-const teacherProjectPage = ref(1);
-const teacherProjectPageSize = 3;
 const teacherProjectSearch = ref("");
 const memberProjectId = ref<number | null>(null);
 const memberAssignOpen = ref(false);
+const poolPreview = ref<Project | null>(null);
+const poolPreviewOpen = ref(false);
 const attachmentState = attachmentSecurity;
 const selectedRevision = computed(() =>
   selectReviewById(
@@ -131,8 +125,6 @@ const filteredTeacherProjects = computed(() => {
   if (!keyword) return currentTeacherProjects.value;
   return currentTeacherProjects.value.filter((project) => `${project.title} ${project.problem}`.toLowerCase().includes(keyword));
 });
-const teacherProjectTotalPages = computed(() => Math.max(1, Math.ceil(filteredTeacherProjects.value.length / teacherProjectPageSize)));
-const visibleTeacherProjects = computed(() => filteredTeacherProjects.value.slice((teacherProjectPage.value - 1) * teacherProjectPageSize, teacherProjectPage.value * teacherProjectPageSize));
 const memberProject = computed(() => teacherStore.state.guided.find((project) => project.id === memberProjectId.value) ?? null);
 const reviewContextProject = computed(() => {
   const projectId = Number(route.query.projectId);
@@ -147,16 +139,13 @@ watch([surface, () => route.params.submissionId], () => {
   error.value = "";
   feedback.value = null;
   completedReview.value = false;
-  poolPage.value = 1;
-  teacherProjectPage.value = 1;
+  poolPreviewOpen.value = false;
+  poolPreview.value = null;
   poolSearch.value = "";
   poolType.value = "all";
   poolSort.value = "recent";
   teacherProjectSearch.value = "";
 });
-watch(activeTab, () => { teacherProjectPage.value = 1; });
-watch(poolTotalPages, (value) => { if (poolPage.value > value) poolPage.value = value; });
-watch(teacherProjectTotalPages, (value) => { if (teacherProjectPage.value > value) teacherProjectPage.value = value; });
 watch(() => route.query.projectId, () => {
   const requested = Number(route.query.projectId);
   if (Number.isFinite(requested) && requested > 0) memberProjectId.value = requested;
@@ -166,6 +155,10 @@ function navigateTab(tab: "guided" | "archived" | "trashed") {
     path: "/teacher/projects",
     query: tab === "guided" ? {} : { tab },
   });
+}
+function openPoolPreview(project: Project) {
+  poolPreview.value = project;
+  poolPreviewOpen.value = true;
 }
 async function handleMemberAssigned() {
   memberAssignOpen.value = false;
@@ -198,6 +191,8 @@ async function claim(id: number) {
   feedback.value = null;
   try {
     await teacherStore.claim(id);
+    poolPreviewOpen.value = false;
+    poolPreview.value = null;
     feedback.value = makeFeedback(
       "success",
       operationSuccess("claim"),
@@ -347,36 +342,16 @@ async function handleRestore(id: number) {
         ><EmptyState v-if="!teacherStore.state.reviews.length" title="暂无待处理事项" description="新的材料提交、项目认领和成员邀请会在这里出现。"><RouterLink class="secondary-button" to="/teacher/pool">查看项目池</RouterLink></EmptyState>
       </section></template
     ><template v-else-if="surface === 'pool'"
-      ><section class="pool-list-shell paper-card"><div class="pool-filter-bar filter-bar"><input v-model="poolSearch" class="input" placeholder="搜索项目名称或研究问题"><select v-model="poolType" class="select"><option value="all">全部类型</option><option value="research">研究型</option><option value="invention">发明型</option><option value="engineering">工程型</option></select><select v-model="poolSort" class="select"><option value="recent">最新创建</option><option value="attention">成员较少，优先关注</option></select></div><div class="pool-compact-list">
-        <article
-          v-for="project in visiblePool"
-          :key="project.id"
-          class="pool-card"
-        >
-          <div class="row-main"><div class="row-title">{{ project.title }}</div><div class="row-meta">{{ projectTypeLabel(project.project_type) }} · {{ project.members[0]?.username || '负责人待定' }} · {{ project.members.length || 1 }} 名成员</div></div>
-          <div class="row-actions"><StatusTag :status="project.status" /><button
-              class="primary-button"
-              type="button"
-              :disabled="busy || !auth.user.value?.authorized"
-              @click="claim(project.id)"
-            >
-              查看并认领
-            </button></div>
+      ><section class="pool-list-shell"><div class="pool-filter-bar filter-bar"><input v-model="poolSearch" class="input" placeholder="搜索项目名称或研究问题"><select v-model="poolType" class="select"><option value="all">全部类型</option><option value="research">研究型</option><option value="invention">发明型</option><option value="engineering">工程型</option></select><select v-model="poolSort" class="select"><option value="recent">最新创建</option><option value="attention">成员较少，优先关注</option></select></div><div class="project-card-grid">
+        <article v-for="project in filteredPool" :key="project.id" class="project-card project-card--pool">
+          <header class="project-card__header"><div class="project-card__identity"><span class="project-card__mark">{{ project.title.slice(0, 1) }}</span><div><p class="project-card__eyebrow">{{ projectTypeLabel(project.project_type) }} · 待认领</p><h2>{{ project.title }}</h2></div></div><StatusTag :status="project.status" /></header>
+          <p class="project-card__summary">{{ project.problem || '学生尚未填写研究问题' }}</p>
+          <div class="project-card__detail"><small>初步方案</small><p>{{ project.plan || '尚未填写初步方案，认领后可在项目详情中继续沟通。' }}</p></div>
+          <div class="project-card__facts"><span><small>负责人</small><strong>{{ project.members[0]?.username || '待确认' }}</strong></span><span><small>成员</small><strong>{{ project.members.length }} 人</strong></span><span><small>创建时间</small><strong>{{ project.created_at.slice(0, 10) }}</strong></span></div>
+          <footer class="project-card__actions"><button class="secondary-button" type="button" @click="openPoolPreview(project)">查看开题报告</button><button class="primary-button" type="button" :disabled="busy || !auth.user.value?.authorized" @click="openPoolPreview(project)">认领为指导项目</button></footer>
         </article>
-        <EmptyState
-          v-if="!filteredPool.length"
-          :title="teacherStore.state.pool.length ? '没有匹配项目' : '当前没有待认领项目'"
-          :description="teacherStore.state.pool.length ? '调整关键词或类型后继续查找。' : '学生新建项目后会自动出现在本校项目池。'"
-          ><RouterLink class="secondary-button" to="/teacher/projects"
-            >查看指导项目</RouterLink
-          ></EmptyState
-        >
-      </div></section>
-      <nav v-if="filteredPool.length > poolPageSize" class="pool-pagination" aria-label="项目池分页">
-        <button class="secondary-button" type="button" :disabled="poolPage === 1" @click="poolPage -= 1">上一页</button>
-        <span>第 {{ poolPage }} / {{ poolTotalPages }} 页</span>
-        <button class="secondary-button" type="button" :disabled="poolPage === poolTotalPages" @click="poolPage += 1">下一页</button>
-      </nav></template
+        <EmptyState v-if="!filteredPool.length" :title="teacherStore.state.pool.length ? '没有匹配项目' : '当前没有待认领项目'" :description="teacherStore.state.pool.length ? '调整关键词或类型后继续查找。' : '学生新建项目后会自动出现在本校项目池。'"><RouterLink class="secondary-button" to="/teacher/projects">查看指导项目</RouterLink></EmptyState>
+      </div></section></template
     ><template v-else-if="surface === 'projects'">
       <nav class="project-lifecycle-tabs" role="tablist" aria-label="项目生命周期">
         <a href="#" :class="{ 'is-active': activeTab === 'guided' }" :aria-selected="activeTab === 'guided'" aria-controls="teacher-project-list" role="tab" @click.prevent="navigateTab('guided')">指导中 <span>{{ teacherStore.state.guided.length }}</span></a>
@@ -384,32 +359,30 @@ async function handleRestore(id: number) {
         <a href="#" :class="{ 'is-active': activeTab === 'trashed' }" :aria-selected="activeTab === 'trashed'" aria-controls="teacher-project-list" role="tab" @click.prevent="navigateTab('trashed')">回收站 <span>{{ teacherStore.state.trashed.length }}</span></a>
       </nav>
 
-      <section v-if="activeTab === 'guided'" id="teacher-project-list" class="pilot-card card-pad"><div class="filter-bar"><input v-model="teacherProjectSearch" class="input" placeholder="搜索指导项目或研究问题"></div><div class="teacher-project-table table-wrap"><table><thead><tr><th>项目</th><th>负责人</th><th>成员</th><th>创建时间</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="project in visibleTeacherProjects" :key="project.id"><td><div class="row-title">{{ project.title }}</div><div class="row-meta">{{ teacherProjectListMeta(project).typeLabel }} · {{ teacherProjectListMeta(project).memberCount }} 名成员</div></td><td>{{ teacherProjectListMeta(project).leaderName }}</td><td>{{ teacherProjectListMeta(project).memberCount }} 人</td><td>{{ teacherProjectListMeta(project).createdDate }}</td><td><StatusTag :status="project.status" /></td><td><div class="teacher-project-actions"><ProjectLifecycleMenu :project="project" :authorized="auth.user.value?.authorized" @archive="handleArchive(project.id)" @unarchive="handleUnarchive(project.id)" @trash="handleTrash(project.id)" @restore="handleRestore(project.id)" /><RouterLink class="secondary-button" :to="`/teacher/projects/${project.id}`">指导详情 →</RouterLink></div></td></tr></tbody></table></div>
+      <section v-if="activeTab === 'guided'" id="teacher-project-list" class="project-card-grid"><div class="project-card-grid__toolbar"><input v-model="teacherProjectSearch" class="input" placeholder="搜索指导项目或研究问题"></div>
+        <article v-for="project in filteredTeacherProjects" :key="project.id" class="project-card">
+          <header class="project-card__header"><div class="project-card__identity"><span class="project-card__mark">{{ project.title.slice(0, 1) }}</span><div><p class="project-card__eyebrow">{{ teacherProjectListMeta(project).typeLabel }} · 指导中</p><h2>{{ project.title }}</h2></div></div><StatusTag :status="project.status" /></header>
+          <p class="project-card__summary">{{ project.summary || project.problem || '进入项目详情查看研究章节和材料进度。' }}</p>
+          <div class="project-card__facts"><span><small>负责人</small><strong>{{ teacherProjectListMeta(project).leaderName }}</strong></span><span><small>成员</small><strong>{{ teacherProjectListMeta(project).memberCount }} 人</strong></span><span><small>创建时间</small><strong>{{ teacherProjectListMeta(project).createdDate }}</strong></span></div>
+          <footer class="project-card__actions"><RouterLink class="primary-button" :to="`/teacher/projects/${project.id}`">指导详情 →</RouterLink><ProjectLifecycleMenu :project="project" :authorized="auth.user.value?.authorized" @archive="handleArchive(project.id)" @unarchive="handleUnarchive(project.id)" @trash="handleTrash(project.id)" @restore="handleRestore(project.id)" /></footer>
+        </article>
         <EmptyState v-if="!filteredTeacherProjects.length" :title="teacherStore.state.guided.length ? '没有匹配的指导项目' : '还没有指导项目'" :description="teacherStore.state.guided.length ? '调整关键词后继续查找。' : '认领学生项目后，可在详情页跟进团队、任务和材料进度。'"><RouterLink v-if="!teacherStore.state.guided.length" class="secondary-button" to="/teacher/pool">前往项目池</RouterLink></EmptyState>
       </section>
 
-      <div v-else-if="activeTab === 'archived'" id="teacher-project-list" class="guided-list">
-        <article v-for="project in visibleTeacherProjects" :key="project.id" class="project-row project-row--archived">
-          <div class="project-row__main"><div class="project-row__title"><h2>{{ project.title }}</h2><StatusTag :status="project.status" /><span class="status-tag success">已归档</span><span class="project-row__type">{{ teacherProjectListMeta(project).typeLabel }}</span></div><div class="project-row__meta"><span><small>负责人</small><strong>{{ teacherProjectListMeta(project).leaderName }}</strong></span><span><small>成员</small><strong>{{ teacherProjectListMeta(project).memberCount }} 人</strong></span><span><small>归档于</small><strong>{{ project.archived_at?.slice(0, 10) ?? teacherProjectListMeta(project).createdDate }}</strong></span></div></div>
-          <div class="project-row__actions" @click.stop><ProjectLifecycleMenu :project="project" :authorized="auth.user.value?.authorized" @unarchive="handleUnarchive(project.id)" @trash="handleTrash(project.id)" /></div>
-          <RouterLink class="project-row__detail" :to="`/teacher/projects/${project.id}`">查看指导详情 <ArrowRight /></RouterLink>
-        </article>
+      <section v-else-if="activeTab === 'archived'" id="teacher-project-list" class="project-card-grid">
+        <article v-for="project in filteredTeacherProjects" :key="project.id" class="project-card project-card--archived"><header class="project-card__header"><div class="project-card__identity"><span class="project-card__mark">{{ project.title.slice(0, 1) }}</span><div><p class="project-card__eyebrow">{{ teacherProjectListMeta(project).typeLabel }} · 已归档</p><h2>{{ project.title }}</h2></div></div><StatusTag :status="project.status" /></header><p class="project-card__summary">{{ project.summary || project.problem || '该项目已归档，可查看历史指导记录。' }}</p><div class="project-card__facts"><span><small>负责人</small><strong>{{ teacherProjectListMeta(project).leaderName }}</strong></span><span><small>成员</small><strong>{{ teacherProjectListMeta(project).memberCount }} 人</strong></span><span><small>归档时间</small><strong>{{ project.archived_at?.slice(0, 10) ?? teacherProjectListMeta(project).createdDate }}</strong></span></div><footer class="project-card__actions"><RouterLink class="secondary-button" :to="`/teacher/projects/${project.id}`">指导详情 →</RouterLink><ProjectLifecycleMenu :project="project" :authorized="auth.user.value?.authorized" @unarchive="handleUnarchive(project.id)" @trash="handleTrash(project.id)" /></footer></article>
         <EmptyState v-if="!teacherStore.state.archived.length" title="没有已归档的项目" description="完成的项目可以归档保存，保持列表整洁。" />
-      </div>
+      </section>
 
-      <div v-else-if="activeTab === 'trashed'" id="teacher-project-list" class="guided-list">
-        <article v-for="project in visibleTeacherProjects" :key="project.id" class="project-row project-row--trashed">
-          <div class="project-row__main"><div class="project-row__title"><h2>{{ project.title }}</h2><StatusTag :status="project.status" /><span class="status-tag danger">回收站</span><span class="project-row__type">{{ teacherProjectListMeta(project).typeLabel }}</span></div><div class="project-row__meta"><span><small>负责人</small><strong>{{ teacherProjectListMeta(project).leaderName }}</strong></span><span><small>成员</small><strong>{{ teacherProjectListMeta(project).memberCount }} 人</strong></span><span><small>移入于</small><strong>{{ project.trashed_at?.slice(0, 10) ?? teacherProjectListMeta(project).createdDate }}</strong></span><span><small>自动清除</small><strong>{{ project.days_until_purge ?? 30 }} 天</strong></span></div></div>
-          <div class="project-row__actions" @click.stop><ProjectLifecycleMenu :project="project" :authorized="auth.user.value?.authorized" @restore="handleRestore(project.id)" /></div>
-          <RouterLink class="project-row__detail" :to="`/teacher/projects/${project.id}`">查看指导详情 <ArrowRight /></RouterLink>
+      <section v-else-if="activeTab === 'trashed'" id="teacher-project-list" class="project-card-grid">
+        <article v-for="project in filteredTeacherProjects" :key="project.id" class="project-card project-card--trashed">
+          <header class="project-card__header"><div class="project-card__identity"><span class="project-card__mark">{{ project.title.slice(0, 1) }}</span><div><p class="project-card__eyebrow">{{ teacherProjectListMeta(project).typeLabel }} · 回收站</p><h2>{{ project.title }}</h2></div></div><StatusTag :status="project.status" /></header>
+          <p class="project-card__summary">{{ project.summary || project.problem || '该项目已移入回收站。' }}</p>
+          <div class="project-card__facts"><span><small>负责人</small><strong>{{ teacherProjectListMeta(project).leaderName }}</strong></span><span><small>成员</small><strong>{{ teacherProjectListMeta(project).memberCount }} 人</strong></span><span><small>自动删除</small><strong>{{ project.days_until_purge ?? 30 }} 天</strong></span></div>
+          <footer class="project-card__actions"><RouterLink class="secondary-button" :to="`/teacher/projects/${project.id}`">查看项目 →</RouterLink><ProjectLifecycleMenu :project="project" :authorized="auth.user.value?.authorized" @restore="handleRestore(project.id)" /></footer>
         </article>
         <EmptyState v-if="!teacherStore.state.trashed.length" title="回收站是空的" description="删除的项目会在这里保留 30 天，逾期后会被自动清除。" />
-      </div>
-      <nav v-if="currentTeacherProjects.length > teacherProjectPageSize" class="teacher-project-pagination" aria-label="指导项目分页">
-        <button class="secondary-button" type="button" :disabled="teacherProjectPage === 1" @click="teacherProjectPage -= 1">上一页</button>
-        <span>第 {{ teacherProjectPage }} / {{ teacherProjectTotalPages }} 页</span>
-        <button class="secondary-button" type="button" :disabled="teacherProjectPage === teacherProjectTotalPages" @click="teacherProjectPage += 1">下一页</button>
-      </nav> </template
+      </section> </template
     ><template v-else-if="surface === 'reviews'"
       ><section class="review-inbox">
         <div class="inbox-list">
@@ -576,6 +549,16 @@ async function handleRestore(id: number) {
           description="成员接受邀请后，会在此等待主指导教师确认。"
         /></section
     ></template>
+    <el-dialog v-model="poolPreviewOpen" title="查看开题报告" width="720px" class="paper-dialog" @closed="poolPreview = null">
+      <div v-if="poolPreview" class="pool-preview">
+        <header class="pool-preview__header"><div><p class="eyebrow">{{ projectTypeLabel(poolPreview.project_type) }} · 待认领</p><h2>{{ poolPreview.title }}</h2></div><StatusTag :status="poolPreview.status" /></header>
+        <section><h3>研究问题</h3><p>{{ poolPreview.problem || '学生尚未填写研究问题。' }}</p></section>
+        <section><h3>初步方案</h3><p>{{ poolPreview.plan || '学生尚未填写初步方案。' }}</p></section>
+        <section><h3>项目摘要</h3><p>{{ poolPreview.summary || '暂无项目摘要。' }}</p></section>
+        <div class="pool-preview__facts"><span><small>负责人</small><strong>{{ poolPreview.members[0]?.username || '待确认' }}</strong></span><span><small>成员</small><strong>{{ poolPreview.members.length }} 人</strong></span><span><small>创建时间</small><strong>{{ poolPreview.created_at.slice(0, 10) }}</strong></span></div>
+        <footer class="dialog-actions"><button class="secondary-button" type="button" @click="poolPreviewOpen = false">关闭</button><button class="primary-button" type="button" :disabled="busy || !auth.user.value?.authorized" @click="claim(poolPreview.id)">认领为指导项目</button></footer>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -644,16 +627,16 @@ async function handleRestore(id: number) {
 }
 .pool-list-shell { padding: 26px; }
 .pool-filter-bar { margin-bottom: 6px; }
-.pool-compact-list { display: grid; }
-.pool-compact-list .pool-card { display: flex; width: 100%; min-height: 68px; box-sizing: border-box; flex-direction: row; align-items: center; justify-content: space-between; gap: 18px; padding: 15px 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; }
-.pool-compact-list .pool-card:hover { border-color: var(--line); box-shadow: none; transform: none; }
-.pool-compact-list .pool-card:first-child { border-top: 0; }
-.pool-compact-list .row-actions { display: flex; align-items: center; gap: 10px; }
-.pool-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--muted); font-size: 12px; }
-.teacher-project-pagination { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 18px; color: var(--muted); font-size: 12px; }
-.teacher-project-table table { min-width: 800px; }
-.teacher-project-actions { display: flex; align-items: center; gap: 8px; }
-.teacher-project-actions .secondary-button { white-space: nowrap; }
+.pool-preview { display: grid; gap: 18px; }
+.pool-preview__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.pool-preview__header h2 { margin: 4px 0 0; color: var(--ink); font: 700 23px/1.35 var(--sans); }
+.pool-preview section { padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper-soft); }
+.pool-preview section h3 { margin: 0 0 7px; color: var(--ink); font: 700 13px var(--sans); }
+.pool-preview section p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; white-space: pre-wrap; }
+.pool-preview__facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.pool-preview__facts span { display: grid; gap: 4px; min-width: 0; }
+.pool-preview__facts small { color: var(--muted-light); font-size: 11px; }
+.pool-preview__facts strong { overflow: hidden; color: var(--ink); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .demo-member-list { padding: 26px; }
 .member-context-bar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
 .member-context-bar label { display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
@@ -663,37 +646,6 @@ async function handleRestore(id: number) {
 .review-context-note { margin: 0 0 12px; padding: 9px 12px; border: 1px solid var(--sage-line); border-radius: var(--radius-sm); background: var(--sage-soft); color: var(--moss-dark); font-size: 12px; }
 .review-read-only strong { color: var(--ink); font-size: 13px; }
 .review-read-only p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
-
-.guided-list { display: grid; gap: 8px; }
-.project-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 18px; min-width: 0; padding: 15px 17px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper); transition: border-color .15s ease, box-shadow .15s ease; }
-.project-row:hover { border-color: var(--sage-line); box-shadow: var(--shadow-soft); }
-.project-row--archived { background: var(--sage-soft); }
-.project-row--trashed { background: var(--amber-soft); border-color: var(--amber-line); }
-.project-row__main { min-width: 0; display: grid; gap: 10px; }
-.project-row__title { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
-.project-row__title h2 { min-width: 0; max-width: min(48vw, 520px); margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 17px/1.35 var(--sans); color: var(--ink); }
-.project-row__type { color: var(--muted); font-size: 11px; }
-.project-row__meta { display: flex; align-items: center; gap: 26px; color: var(--muted); }
-.project-row__meta span { display: grid; gap: 2px; min-width: 74px; }
-.project-row__meta small { font-size: 10px; }
-.project-row__meta strong { color: var(--ink); font-size: 12px; font-weight: 600; }
-.project-row__actions { position: relative; z-index: 2; }
-.project-row__detail { display: inline-flex; align-items: center; gap: 5px; color: var(--moss-dark); font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
-.project-row__detail:hover { color: var(--moss); }
-.project-row__detail .el-icon, .project-row__detail > svg { width: 14px; height: 14px; font-size: 14px; flex: 0 0 auto; }
-@media (max-width: 820px) {
-  .project-row { grid-template-columns: minmax(0, 1fr) auto; gap: 12px; }
-  .project-row__main { grid-column: 1 / -1; }
-  .project-row__detail { grid-column: 1; grid-row: 2; }
-  .project-row__actions { grid-column: 2; grid-row: 2; }
-  .project-row__title h2 { max-width: 56vw; }
-}
-@media (max-width: 520px) {
-  .project-row { padding: 13px; }
-  .project-row__meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
-  .project-row__title h2 { max-width: 100%; font-size: 16px; }
-  .project-row__detail { font-size: 11.5px; }
-}
 
 .metric-card--archived {
   background: var(--sage-soft);

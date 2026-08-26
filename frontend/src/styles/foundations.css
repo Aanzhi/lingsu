@@ -74,7 +74,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .workspace-sidebar > a { min-height: 40px; padding: 0 11px; border-radius: var(--radius-sm); display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 600; margin: 3px 0; transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast); }
 .workspace-sidebar > a .el-icon { width: 18px; height: 18px; flex: 0 0 18px; color: currentColor; font-size: 15px; }
 .workspace-sidebar > a:hover { background: var(--paper-muted); color: var(--moss-dark); transform: translateX(1px); }
-.workspace-sidebar > a.router-link-active { color: var(--moss-dark); background: var(--sage-soft); font-weight: 700; }
+.workspace-sidebar > a.workspace-router-active { color: var(--moss-dark); background: var(--sage-soft); font-weight: 700; }
 .workspace-sidebar__subnav { display: grid; gap: 2px; margin: 0 0 7px 28px; padding-left: 8px; border-left: 1px solid var(--line); }
 .workspace-sidebar__subnav a { min-height: 32px; margin: 0; padding: 0 9px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0; display: flex; align-items: center; color: var(--muted-light); font-size: 12px; font-weight: 500; }
 .workspace-sidebar__subnav a:hover { color: var(--moss-dark); background: var(--paper-muted); }
@@ -264,8 +264,8 @@ td:last-child, th:last-child { padding-right:0; text-align:right; }
 .pilot-chart i { flex: 1; border-radius: 5px 5px 0 0; background: var(--sage-soft); }
 .pilot-chart i:last-child { background: var(--moss); }
 .pilot-chart-axis { display: flex; justify-content: space-between; margin-top: 8px; color: var(--muted-light); font-size: 11px; }
-.metric-card, .desk-panel, .console-panel, .home-panel, .team-card, .activity-card, .guided-card, .review-guide, .review-actions, .school-license-card, .school-usage, .settings-card, .announcement-card, .case-card, .competition-card, .management-list, .license-table, .data-table { transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background-color .18s ease; }
-.metric-card:hover, .guided-card:hover, .case-card:hover, .competition-card:hover, .pool-card:hover { border-color: var(--line-dark); box-shadow: var(--shadow-hover); transform: translateY(-2px); }
+.metric-card, .desk-panel, .console-panel, .home-panel, .team-card, .activity-card, .review-guide, .review-actions, .school-license-card, .school-usage, .settings-card, .announcement-card, .case-card, .competition-card, .management-list, .license-table, .data-table { transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease, background-color .18s ease; }
+.metric-card:hover, .case-card:hover, .competition-card:hover { border-color: var(--line-dark); box-shadow: var(--shadow-hover); transform: translateY(-2px); }
 .status-tag { width: fit-content; flex: 0 0 auto; gap: 5px; padding: 5px 9px; border-radius: 999px; white-space: nowrap; font-size: 11px; font-weight: 700; line-height: 1; border: 1px solid transparent; }
 .status-tag.success { color: var(--success); background: var(--success-soft); border-color: var(--sage-line-soft); }
 .status-tag.current { color: var(--moss-dark); background: var(--sage-soft); border-color: var(--sage-line); box-shadow: inset 0 0 0 1px var(--color-focus-ring); }

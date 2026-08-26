@@ -4,19 +4,16 @@ import { useRoute, useRouter } from 'vue-router'
 import { api, archiveAIConversation, createAIConversation, createAIConversationMessage, createProjectFromOpening, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, retryAIConversationMessage, saveAIGenerationAsMaterial, streamAIConversationMessage, updateAIConversation, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
 import { auth } from '../../stores/auth'
 import { aiWorkspaceMode, buildResearchQuestionPrompt, filterConversations, groupAgentsByCategory, isNearBottom, isTerminalSSEEvent, normalizeResearchQuestionArtifact, optionalAgentInputs, researchProjectDraftFromArtifact, researchResponseNotice, type ResearchQuestionArtifact, type ResearchQuestionInputs } from '../../stores/aiConversationModel'
-import { normalizeAIWorkspaceMode, resolveAIContext, visibleAgents, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
+import { materialSelectionScope, normalizeAIWorkspaceMode, resolveAIContext, visibleAgents, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
 import { conversationDisplayTitle, groupConversationSummaries } from '../../stores/presentationModel'
 import { studentProjectRoute } from '../../stores/pageContracts'
 import AIModeTabs from '../../components/ai/AIModeTabs.vue'
-import AIContextChooser from '../../components/ai/AIContextChooser.vue'
 import AIContextDrawer from '../../components/ai/AIContextDrawer.vue'
 import AIConversationHistory from '../../components/ai/AIConversationHistory.vue'
 import AIDraftActions from '../../components/ai/AIDraftActions.vue'
-import AIProjectAssistant from '../../components/ai/AIProjectAssistant.vue'
 import AIResearchWizard from '../../components/ai/AIResearchWizard.vue'
 import AIToolPicker from '../../components/ai/AIToolPicker.vue'
 import AIWorkbenchComposer from '../../components/ai/AIWorkbenchComposer.vue'
-import PageHeader from '../../components/PageHeader.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -36,7 +33,7 @@ const messages = ref<AIConversationMessage[]>([])
 const projects = ref<Project[]>([])
 const agents = ref<AIAgent[]>([])
 const selectedId = ref<number | null>(null)
-const projectFilter = ref<number | null>(queryNumber(route.query.projectId))
+const projectFilter = ref<number | null>(route.query.mode === 'opening' || route.query.mode === 'brainstorm' ? null : queryNumber(route.query.projectId) ?? auth.user.value?.primaryProject ?? null)
 const selectedAgent = ref<string | undefined>(routeAgent())
 const taskId = ref<number | undefined>(queryNumber(route.query.taskId) ?? undefined)
 const conversationSearch = ref('')
@@ -46,13 +43,16 @@ const agentCategory = ref('all')
 const historyOpen = ref(false)
 const draft = ref('')
 const loading = ref(true)
+const projectsLoading = ref(true)
+const agentsLoading = ref(true)
+const projectResourceError = ref('')
+const agentResourceError = ref('')
 const sending = ref(false)
 const contextOpen = ref(false)
 const agentOpen = ref(false)
 const showArchived = ref(false)
 const error = ref('')
 const paperType = ref('')
-const agentInputs = ref<Record<string, string>>({})
 const materials = ref<Material[]>([])
 const artifactDrafts = ref<Record<number, string>>({})
 const savingMessage = ref<number | null>(null)
@@ -63,6 +63,7 @@ const chatStreamRef = ref<HTMLElement | null>(null)
 const showJumpLatest = ref(false)
 const streamNotice = ref('')
 const referencedSources = ref<string[]>([])
+const selectedMaterialIds = ref<number[]>([])
 const streamController = ref<AbortController | null>(null)
 const requestVersion = ref(0)
 const selectionVersion = ref(0)
@@ -78,22 +79,33 @@ const researchFallback = ref('')
 const projectDraft = ref<{ title: string; problem: string; plan: string; project_type: Project['project_type'] }>({ title: '', problem: '', plan: '', project_type: 'research' })
 const creatingProject = ref(false)
 const projectCreated = ref(false)
-const aiInputHelp = '补充信息（可选）'
-const aiInputHelpDescription = '填写后可让 AI 工具更准确；不填写也可以直接提问。'
 const paperTypes = [{ value: 'empirical', label: '实证研究' }, { value: 'case', label: '案例研究' }, { value: 'literature-review', label: '文献综述' }, { value: 'theoretical', label: '理论研究' }]
 
 const current = computed(() => conversations.value.find((item) => item.id === selectedId.value) || null)
-const currentProject = computed(() => projects.value.find((item) => item.id === current.value?.project) || null)
+const currentProject = computed(() => projects.value.find((item) => item.id === (current.value?.project ?? projectFilter.value)) || null)
 const currentDisplayTitle = computed(() => current.value ? conversationDisplayTitle(current.value, conversationPreviews.value[current.value.id] || '') : '新建科创对话')
+const workbenchMode = computed<AIWorkspaceMode>(() => normalizeAIWorkspaceMode(route.query.mode))
 const visibleConversations = computed(() => filterConversations(conversations.value, { project: projectFilter.value, includeArchived: showArchived.value }).filter((item) => {
   const keyword = conversationSearch.value.trim().toLowerCase()
   if (!keyword) return true
   return `${conversationDisplayTitle(item, conversationPreviews.value[item.id] || '')} ${item.project_title || ''}`.toLowerCase().includes(keyword)
 }))
 const visibleConversationGroups = computed(() => groupConversationSummaries(visibleConversations.value, conversationPreviews.value))
-const currentAgent = computed(() => agents.value.find((item) => item.key === selectedAgent.value) || agents.value.find((item) => item.key === current.value?.current_agent) || null)
-const workbenchMode = computed<AIWorkspaceMode>(() => normalizeAIWorkspaceMode(route.query.mode))
 const modeAgents = computed(() => visibleAgents(workbenchMode.value, agents.value))
+const currentAgent = computed(() => {
+  const selected = modeAgents.value.find((item) => item.key === selectedAgent.value)
+  const conversationAgent = modeAgents.value.find((item) => item.key === current.value?.current_agent)
+  const guidedOpeningAgent = workbenchMode.value === 'research' && route.query.researchQuestion === '1'
+    ? agents.value.find((item) => item.key === selectedAgent.value || item.key === current.value?.current_agent)
+    : null
+  return selected || conversationAgent || guidedOpeningAgent || modeAgents.value[0] || null
+})
+const allowedSelections = computed(() => {
+  const value = currentAgent.value?.context_scope_default?.allowed_selections
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
+})
+const canSelectMaterials = computed(() => workbenchMode.value !== 'opening' && allowedSelections.value.includes('selected_materials'))
+const hasConversationMessages = computed(() => messages.value.length > 0)
 const agentCategories = computed(() => ['all', ...new Set(modeAgents.value.map((agent) => agent.category?.trim()).filter(Boolean) as string[])])
 const filteredAgents = computed(() => modeAgents.value.filter((agent) => {
   const keyword = agentSearch.value.trim().toLowerCase()
@@ -101,6 +113,9 @@ const filteredAgents = computed(() => modeAgents.value.filter((agent) => {
   return matchesKeyword && (agentCategory.value === 'all' || (agent.category || '其他') === agentCategory.value)
 }))
 const groupedAgents = computed(() => groupAgentsByCategory(filteredAgents.value))
+watch(agentCategories, (categories) => {
+  if (!categories.includes(agentCategory.value)) agentCategory.value = 'all'
+})
 const brainstormMode = computed(() => workbenchMode.value === 'opening')
 const workspaceMode = computed(() => aiWorkspaceMode({
   brainstorm: brainstormMode.value,
@@ -112,25 +127,27 @@ const workspaceMode = computed(() => aiWorkspaceMode({
 const researchMode = computed(() => brainstormMode.value || (workbenchMode.value === 'research' && workspaceMode.value === 'project' && (route.query.researchQuestion === '1' || selectedAgent.value === 'proposal-topic')))
 const aiContext = computed(() => resolveAIContext(workbenchMode.value, currentProject.value?.id ?? projectFilter.value))
 const workspaceContextLabel = computed(() => brainstormMode.value ? '无项目 · 开题引导' : currentProject.value?.title || (aiContext.value.projectId ? '当前项目 · 正在加载' : '未绑定项目 · 请选择项目'))
+const workspaceContextTitle = computed(() => brainstormMode.value ? '开题草稿' : currentProject.value ? '当前项目内容' : '尚未选择项目')
+const workspaceContextDetail = computed(() => {
+  if (brainstormMode.value) return '开题不读取项目材料'
+  if (!currentProject.value) return '选择项目后开始研究'
+  const materialLabel = materials.value.length ? `可引用 ${materials.value.length} 份材料` : '暂无可引用材料'
+  const selectedLabel = selectedMaterialIds.value.length ? ` · 已选 ${selectedMaterialIds.value.length} 份` : ''
+  return `${materialLabel}${selectedLabel} · 仅读取当前项目`
+})
 const aiPageDescription = computed(() => {
-  if (workbenchMode.value === 'opening') return '用开题助手整理观察和研究问题，确认草稿后才会创建项目。'
-  if (workbenchMode.value === 'defense') return '围绕已完成成果练习表达和问答，生成内容需要你确认。'
-  if (currentProject.value) return '围绕当前项目和任务拆解问题，生成可以核对和修改的建议。'
-  return '请选择一个项目后，灵思 AI 才会读取项目材料并提供研究建议。'
+  if (workbenchMode.value === 'opening') return '整理观察、研究问题和开题草稿；确认后再创建项目。'
+  if (workbenchMode.value === 'defense') return '围绕已完成成果练习表达，生成可编辑的展示和答辩建议。'
+  if (currentProject.value) return '围绕当前项目的任务、材料和进度，直接处理下一步研究工作。'
+  return '选择项目后，灵思 AI 才会读取项目范围内的内容。'
 })
-const aiContextTitle = computed(() => {
-  if (workbenchMode.value === 'opening') return '整理观察，形成研究问题'
-  if (workbenchMode.value === 'defense') return '准备成果表达和问答'
-  if (currentProject.value) return '围绕当前项目继续研究'
-  return '先选择一个研究场景'
+const aiEmptyDescription = computed(() => {
+  if (workbenchMode.value === 'opening') return '写下你的观察或研究想法，先从一个可研究的问题开始。'
+  if (workbenchMode.value === 'defense') return '直接说出想准备的展示、摘要或答辩问题，结果会先作为可编辑建议。'
+  if (currentProject.value) return '告诉灵思你现在要推进的任务，它会基于当前项目给出可核对的建议。'
+  return '选择一个项目后，才能读取项目中的任务和材料。'
 })
-const aiContextDescription = computed(() => {
-  if (workbenchMode.value === 'opening') return 'AI 会先追问、比较和整理，最后由你确认项目草稿。'
-  if (workbenchMode.value === 'defense') return 'AI 读取当前项目的已确认材料，帮助你准备展示提纲和问答。'
-  if (currentProject.value) return 'AI 只读取当前项目和当前任务，不会替你直接提交材料。'
-  return '先选择当前项目；未绑定项目时不会读取任何项目材料。'
-})
-const aiStepperLabels = computed(() => workbenchMode.value === 'defense' ? ['梳理成果', '模拟提问', '修正表达', '确认输出'] : currentProject.value ? ['选择目标', '补充背景', '得到建议', '确认保存'] : ['发现现象', '打开问题', '头脑风暴', '共同成题'])
+const resourceErrorMessage = computed(() => [projectResourceError.value, agentResourceError.value].filter(Boolean).join('；'))
 const isResearchLeader = computed(() => Boolean(currentProject.value && auth.user.value?.authorized && currentProject.value.leader === auth.user.value.id))
 
 function scrollToLatest(behavior: ScrollBehavior = 'smooth') {
@@ -161,6 +178,7 @@ function resetConversationSelection() {
   selectedId.value = null
   messages.value = []
   materials.value = []
+  selectedMaterialIds.value = []
   targetMaterialId.value = null
   streamNotice.value = ''
   error.value = ''
@@ -219,9 +237,9 @@ async function selectConversation(item: AIConversation) {
   if (sending.value) return
   const version = ++selectionVersion.value
   selectedId.value = item.id
-  selectedAgent.value = item.current_agent || selectedAgent.value
+  const modeAgent = modeAgents.value.find((agent) => agent.key === item.current_agent) || modeAgents.value[0]
+  selectedAgent.value = modeAgent?.key || item.current_agent || selectedAgent.value
   paperType.value = item.paper_type || ''
-  agentInputs.value = {}
   const [messageResponse, materialResponse] = await Promise.all([
     getAIConversationMessages(item.id),
     item.project ? getMaterials(item.project) : Promise.resolve({ data: [] as Material[] }),
@@ -297,46 +315,46 @@ function syncResearchArtifact(message?: AIConversationMessage) {
   if (researchMode.value) researchStep.value = 3
 }
 
-function goToBrainstorm() {
-  selectWorkbenchMode('opening')
-}
-
-function goToExistingProject() {
-  const projectId = currentProject.value?.id ?? projectFilter.value
-  if (!projectId) {
-    void router.push('/student/projects')
-    return
-  }
-  void router.push({ path: '/student/ai', query: { mode: 'research', projectId: String(projectId) } })
-}
-
 function selectWorkbenchMode(mode: AIWorkspaceMode) {
   const projectId = currentProject.value?.id ?? projectFilter.value ?? auth.user.value?.primaryProject ?? projects.value.find((project) => project.status === 'active')?.id ?? null
+  const nextAgent = visibleAgents(mode, agents.value)[0]
+  selectedAgent.value = nextAgent?.key
   const query: Record<string, string> = { mode }
   if (mode === 'opening') query.agent = 'proposal-topic'
-  else if (projectId) query.projectId = String(projectId)
+  else {
+    if (projectId) query.projectId = String(projectId)
+    if (nextAgent) query.agent = nextAgent.key
+  }
   void router.push({ path: '/student/ai', query })
 }
 
 function openScienceAgentPicker() {
   agentOpen.value = true
   contextOpen.value = false
+  historyOpen.value = false
 }
 
-function fillQuickPrompt(prompt: string) {
-  draft.value = prompt
-  void nextTick(() => document.querySelector<HTMLTextAreaElement>('.ai-workbench-composer__textarea')?.focus())
+function toggleHistory() {
+  historyOpen.value = !historyOpen.value
+  if (historyOpen.value) {
+    contextOpen.value = false
+    agentOpen.value = false
+  }
+}
+
+function toggleContext() {
+  if (workbenchMode.value === 'opening') return
+  contextOpen.value = !contextOpen.value
+  if (contextOpen.value) {
+    historyOpen.value = false
+    agentOpen.value = false
+  }
 }
 
 function citeProjectMaterial() {
   if (workbenchMode.value === 'opening') return
-  referencedSources.value = materials.value.slice(0, 3).map((material) => material.title)
   contextOpen.value = true
-  streamNotice.value = referencedSources.value.length ? `已打开 ${referencedSources.value.length} 份当前项目材料，可在提问时引用。` : '当前项目暂时没有可引用材料。'
-}
-
-function updateAgentInput(key: string, value: string) {
-  agentInputs.value[key] = value
+  streamNotice.value = canSelectMaterials.value ? '选择后会将当前项目材料作为本次生成的可核验来源。' : '当前 Agent 使用默认项目上下文，暂不支持手动选择材料。'
 }
 
 function advanceFromObservation() {
@@ -395,8 +413,8 @@ async function sendMessage(options: { content?: string; inputValues?: Record<str
   if (!options.content) draft.value = ''
   let assistantId: number | undefined
   try {
-    const inputValues = optionalAgentInputs(options.inputValues || agentInputs.value)
-    const response = await createAIConversationMessage(conversationId, { content, agent_key: selectedAgent.value, paper_type: paperType.value || undefined, project: current.value?.project, workspace_mode: workbenchMode.value, task: taskId.value, ...(inputValues ? { input_values: inputValues } : {}) })
+    const inputValues = optionalAgentInputs(options.inputValues || {})
+    const response = await createAIConversationMessage(conversationId, { content, agent_key: selectedAgent.value, paper_type: paperType.value || undefined, project: current.value?.project, workspace_mode: workbenchMode.value, task: taskId.value, context_scope: materialSelectionScope(workbenchMode.value, selectedMaterialIds.value, allowedSelections.value), ...(inputValues ? { input_values: inputValues } : {}) })
     if (version !== requestVersion.value || controller.signal.aborted) return
     messages.value.push({ role: 'user', content, status: 'completed', created_at: new Date().toISOString(), id: -Date.now() })
     messages.value.push(response.data)
@@ -559,7 +577,6 @@ async function retryMessage(message: AIConversationMessage) {
 function chooseAgent(agent: AIAgent) {
   if (sending.value) return
   selectedAgent.value = agent.key
-  agentInputs.value = {}
   agentOpen.value = false
   researchSaveError.value = ''
   if (agent.key === 'proposal-topic') {
@@ -638,36 +655,158 @@ watch(() => route.query.mode, (value) => {
   }
 })
 watch(currentProject, (project) => prefillResearchFromProject(project), { immediate: true })
-onMounted(async () => { window.addEventListener('keydown', onGlobalKeydown); try { if (brainstormMode.value) { projectFilter.value = null; selectedAgent.value = 'proposal-topic' } const [projectResponse, agentResponse] = await Promise.all([getProjects(), getAIAgents()]); projects.value = projectResponse.data; agents.value = agentResponse.data; if (!brainstormMode.value && projectFilter.value === null) projectFilter.value = queryNumber(route.query.projectId) ?? auth.user.value?.primaryProject ?? projects.value.find((project) => project.status === 'active')?.id ?? null; if (brainstormMode.value) { await refreshConversationList(); await newConversation() } else { await loadConversations(); if (!selectedId.value) await newConversation() } } catch (reason) { error.value = errorMessage(reason, 'AI 工作台加载失败。') } finally { loading.value = false; await nextTick(); scrollToLatest('auto') } })
+
+async function loadProjectsResource() {
+  projectsLoading.value = true
+  projectResourceError.value = ''
+  try {
+    const response = await getProjects()
+    projects.value = response.data
+    if (!brainstormMode.value && projectFilter.value === null) {
+      projectFilter.value = queryNumber(route.query.projectId)
+        ?? auth.user.value?.primaryProject
+        ?? projects.value.find((project) => project.status === 'active')?.id
+        ?? null
+    }
+  } catch (reason) {
+    projectResourceError.value = errorMessage(reason, '项目上下文加载失败，请重试。')
+  } finally {
+    projectsLoading.value = false
+  }
+}
+
+async function loadAgentsResource() {
+  agentsLoading.value = true
+  agentResourceError.value = ''
+  try {
+    const response = await getAIAgents()
+    agents.value = response.data
+    if (!selectedAgent.value && !brainstormMode.value) selectedAgent.value = visibleAgents(workbenchMode.value, response.data)[0]?.key
+  } catch (reason) {
+    agentResourceError.value = errorMessage(reason, '当前模式的 AI 能力加载失败，请重试。')
+  } finally {
+    agentsLoading.value = false
+  }
+}
+
+async function bootstrapWorkbench() {
+  loading.value = true
+  error.value = ''
+  const projectsPromise = loadProjectsResource()
+  const agentsPromise = loadAgentsResource()
+  try {
+    await projectsPromise
+    if (brainstormMode.value) {
+      projectFilter.value = null
+      selectedAgent.value = 'proposal-topic'
+      await refreshConversationList()
+      if (!selectedId.value) await newConversation()
+    } else {
+      await loadConversations()
+      if (!selectedId.value && projectFilter.value !== null) await newConversation()
+    }
+    await agentsPromise
+  } catch (reason) {
+    error.value = errorMessage(reason, '历史会话加载失败，请重试。')
+  } finally {
+    loading.value = false
+    await nextTick()
+    scrollToLatest('auto')
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('keydown', onGlobalKeydown)
+  void bootstrapWorkbench()
+})
 onBeforeUnmount(() => { window.removeEventListener('keydown', onGlobalKeydown); requestVersion.value += 1; abortActiveStream() })
 </script>
 
 <template>
-  <div class="page ai-center-page">
-    <PageHeader eyebrow="AI 助手" :title="researchMode ? '开题引导' : '灵思 AI'" :description="aiPageDescription" />
-    <AIModeTabs :model-value="workbenchMode" :agents="modeAgents" :selected-agent="selectedAgent" :disabled="sending" @update:model-value="selectWorkbenchMode" @select-agent="chooseAgent" @more-agents="openScienceAgentPicker" />
-    <div class="conversation-page">
-    <AIConversationHistory v-if="historyOpen" :groups="visibleConversationGroups" :selected-id="selectedId" :sending="sending" :search="conversationSearch" :show-archived="showArchived" @update:search="conversationSearch = $event" @new="void newConversation()" @select="void selectConversation($event)" @toggle-archived="showArchived = !showArchived" @close="historyOpen = false" />
+  <div class="page ai-center-page ai-workbench-frame">
+    <header class="ai-workbench-header" aria-labelledby="ai-workbench-title">
+      <div class="ai-workbench-heading">
+        <span class="eyebrow">研究工作台</span>
+        <h1 id="ai-workbench-title">灵思 AI</h1>
+        <p>{{ aiPageDescription }}</p>
+      </div>
+      <div class="ai-workbench-header__actions">
+        <span class="ai-workbench-context-pill">{{ workspaceContextLabel }}</span>
+        <button type="button" :aria-expanded="historyOpen" aria-controls="conversation-history" @click="toggleHistory">历史会话</button>
+      </div>
+    </header>
 
-    <div class="ai-simple-layout" :class="{ 'is-research-mode': researchMode }">
-      <section class="chat-main ai-main-panel">
-        <header class="chat-header"><div><span class="eyebrow">灵思 AI · 研究伙伴</span><div v-if="renaming" class="rename-row"><input v-model="titleDraft" aria-label="对话标题" @keydown.enter="void saveRename()" /><button type="button" :disabled="sending" @click="void saveRename()">保存</button><button type="button" :disabled="sending" @click="renaming = false">取消</button></div><div v-else class="title-row"><h2>{{ researchMode ? '研究问题引导' : currentDisplayTitle }}</h2><button v-if="current && !current.is_archived && !researchMode" class="rename-button" type="button" :disabled="sending" @click="startRename">重命名对话</button></div><small>{{ researchMode ? 'AI 会追问、比较和整理；最终决定权在你。' : workspaceContextLabel }}</small></div><div class="chat-actions"><button v-if="!researchMode" type="button" :aria-expanded="historyOpen" aria-controls="conversation-history" @click="historyOpen = !historyOpen">历史对话</button><button v-if="!researchMode" type="button" :disabled="sending" :aria-label="`选择 AI 工具（${agents.length} 个）${currentAgent ? ` · ${currentAgent.name}` : ''}`" aria-controls="agent-menu" :aria-expanded="agentOpen" @click="agentOpen = !agentOpen">科创 Agent{{ currentAgent ? ` · ${currentAgent.name}` : '' }}⌄</button><button v-if="current && !current.is_archived && !researchMode" type="button" :disabled="sending" @click="archiveCurrent">归档</button></div></header>
-        <AIContextChooser v-if="!researchMode && !loading && !messages.length" :brainstorm="brainstormMode" :agent-active="agentOpen" :disabled="sending" @existing="goToExistingProject" @brainstorm="goToBrainstorm" @agent="openScienceAgentPicker" />
-        <div v-if="!researchMode" class="ai-context-summary"><div><p class="eyebrow">当前使用场景</p><h2>{{ aiContextTitle }}</h2><p>{{ aiContextDescription }}</p></div><span class="ai-context-status">{{ currentProject ? '已有项目 · 当前任务' : brainstormMode ? '无项目 · 选题引导' : '等待选择场景' }}</span></div>
-        <div v-if="!researchMode && !loading && !messages.length" class="ai-stepper-simple" aria-label="AI 工作方式"><div v-for="(label, index) in aiStepperLabels" :key="label" class="ai-step-simple" :class="{ active: index === 0 }"><span>{{ index + 1 }}</span><small>{{ label }}</small></div></div>
-        <div v-if="!researchMode && !loading && !messages.length" class="ai-guide-card"><AIProjectAssistant :project="currentProject" @prompt="fillQuickPrompt" @choose-project="router.push('/student/projects')" /></div>
-      <AIToolPicker v-if="agentOpen" :categories="agentCategories" :groups="groupedAgents" :search="agentSearch" :category="agentCategory" :sending="sending" @update:search="agentSearch = $event" @update:category="agentCategory = $event" @choose="chooseAgent" />
-      <AIResearchWizard v-if="researchMode && !loading" :workspace-mode="workspaceMode === 'brainstorm' ? 'brainstorm' : 'project'" :workspace-context-label="workspaceContextLabel" :research-step="researchStep" :research-inputs="researchInputs" :research-artifact="researchArtifact" :research-selected-index="researchSelectedIndex" :research-draft="researchDraft" :research-save-confirm="researchSaveConfirm" :research-saved="researchSaved" :research-save-error="researchSaveError" :research-fallback="researchFallback" :project-draft="projectDraft" :current-project="currentProject" :sending="sending" :creating-project="creatingProject" :project-created="projectCreated" @update:research-step="researchStep = $event" @update:research-draft="researchDraft = $event" @update:research-save-confirm="researchSaveConfirm = $event" @update:research-fallback="researchFallback = $event; projectDraft.problem = $event" @advance-from-observation="advanceFromObservation" @generate="void generateResearchCandidates()" @choose-candidate="chooseResearchCandidate" @edit-candidate="editResearchCandidate" @open-draft="openResearchDraft" @request-save="requestResearchSave" @create-project="void createProjectFromResearch()" @save-question="void saveResearchQuestion()" @copy-question="copyResearchQuestion" />
-      <div v-if="error" class="error-banner">{{ error }}</div><div v-if="streamNotice" class="stream-notice">{{ streamNotice }}</div>
-      <section v-if="!researchMode && (loading || messages.length)" ref="chatStreamRef" class="chat-stream" aria-live="polite" :aria-busy="sending" @scroll="updateScrollAffordance"><div v-if="loading" class="empty-state">正在加载对话…</div><article v-for="message in messages" :key="message.id" class="message" :class="message.role"><div class="message-label">{{ message.role === 'user' ? '你' : '灵思 AI' }}</div><div class="message-body">{{ message.content || (message.status === 'queued' ? '正在排队…' : message.status === 'streaming' ? '正在生成…' : '') }}<div v-if="message.status === 'failed'" class="message-error"><span>{{ message.error_message || '生成失败' }}</span><button type="button" class="retry-button" :disabled="sending" @click="retryMessage(message)">{{ sending ? '重试中…' : '重试' }}</button></div><div v-if="message.artifact_payload?.draft" class="artifact-card"><b>{{ message.artifact_payload.title || '可编辑草稿' }}</b><textarea v-model="artifactDrafts[message.id]" :placeholder="message.artifact_payload.draft" rows="5" /><small>核验项：{{ message.verification_items?.length || 0 }} 项 · {{ message.artifact_payload.next_action || '请核对事实与引用' }}</small><label v-if="materials.length" class="target-material"><span>保存到指定材料</span><select v-model="targetMaterialId"><option :value="null">请选择目标材料</option><option v-for="material in materials" :key="material.id" :value="material.id">{{ material.title }}</option></select></label><AIDraftActions :mode="workbenchMode" :status="message.status" :can-save-material="Boolean(materials.length)" :can-create-project="workbenchMode === 'opening'" :saving="savingMessage === message.id" @save-material="void saveArtifact(message)" @create-project="createProjectFromArtifact(message)" /></div></div></article></section>
-      <button v-if="!researchMode && showJumpLatest" type="button" class="jump-latest" @click="scrollToLatest()">↓ 跳到最新消息</button>
-      <AIWorkbenchComposer v-if="(!researchMode && currentProject) || researchSaved" :draft="draft" :mode="workbenchMode" :agent-name="currentAgent?.name" :project-label="currentProject ? `项目：${currentProject.title}` : '已确认草稿'" :input-schema="!researchMode ? currentAgent?.input_schema : undefined" :input-values="agentInputs" :input-help="`${aiInputHelp}：${aiInputHelpDescription}`" :disabled="sending || Boolean(current?.is_archived)" :can-send="Boolean(draft.trim() && selectedId)" :referenced-count="referencedSources.length" :sending="sending" @update:draft="draft = $event" @update:input="updateAgentInput" @send="void sendMessage()" @cite-material="citeProjectMaterial" />
+    <section class="ai-workbench-mode-region" aria-label="选择灵思 AI 工作模式">
+      <div class="ai-workbench-mode-heading">
+        <span class="eyebrow">研究方式</span>
+        <h2>先选择研究方式</h2>
+      </div>
+      <AIModeTabs :model-value="workbenchMode" :agents="modeAgents" :selected-agent="selectedAgent" :disabled="sending" @update:model-value="selectWorkbenchMode" @select-agent="chooseAgent" @more-agents="openScienceAgentPicker" />
+    </section>
+
+    <section class="ai-workbench-context-strip" aria-label="当前 AI 上下文">
+      <div class="ai-workbench-context-strip__main">
+        <span class="eyebrow">当前上下文</span>
+        <strong>{{ workspaceContextTitle }}</strong>
+        <span>{{ workspaceContextDetail }}</span>
+      </div>
+      <button v-if="workbenchMode !== 'opening'" type="button" class="ai-workbench-context-strip__action" :aria-expanded="contextOpen" aria-controls="ai-context-drawer" @click="toggleContext">{{ contextOpen ? '收起上下文' : '查看上下文' }}</button>
+      <span v-else class="ai-workbench-context-strip__readonly">不绑定项目</span>
+    </section>
+
+    <section v-if="loading && !modeAgents.length" class="ai-workbench-skeleton" role="status" aria-label="正在准备灵思 AI"><i /><i /><i /></section>
+
+    <Teleport to="body">
+      <div v-if="historyOpen || contextOpen" class="ai-workbench-drawer-backdrop" aria-hidden="true" @click="historyOpen = false; contextOpen = false" />
+    </Teleport>
+
+    <section class="ai-workbench-conversation" :class="{ 'has-messages': hasConversationMessages }" aria-label="灵思 AI 对话">
+      <header v-if="hasConversationMessages" class="ai-session-bar">
+        <div class="ai-session-bar__main">
+          <span class="eyebrow">当前会话</span>
+          <div v-if="renaming" class="rename-row"><input v-model="titleDraft" aria-label="对话标题" @keydown.enter="void saveRename()" /><button type="button" :disabled="sending" @click="void saveRename()">保存</button><button type="button" :disabled="sending" @click="renaming = false">取消</button></div>
+          <div v-else class="ai-session-bar__title-row"><h2>{{ currentDisplayTitle }}</h2><button v-if="current && !current.is_archived && !researchMode" class="rename-button" type="button" :disabled="sending" @click="startRename">重命名</button></div>
+          <small>{{ workspaceContextLabel }} · {{ currentAgent?.name || '正在准备 Agent' }}</small>
+        </div>
+        <div class="ai-session-bar__actions">
+          <button v-if="current && !current.is_archived && !researchMode" type="button" :disabled="sending" @click="archiveCurrent">归档会话</button>
+        </div>
+      </header>
+
+      <div v-if="resourceErrorMessage" class="ai-resource-notice" role="status"><span>{{ resourceErrorMessage }}</span><button type="button" :disabled="loading" @click="void bootstrapWorkbench()">重试加载</button></div>
+      <div v-if="error" class="error-banner" role="alert"><span>{{ error }}</span><button type="button" :disabled="loading || sending" @click="void bootstrapWorkbench()">重试</button></div>
+      <div v-if="streamNotice" class="stream-notice" role="status">{{ streamNotice }}</div>
+
+      <AIResearchWizard v-if="researchMode && researchArtifact && !loading" :workspace-mode="workspaceMode === 'brainstorm' ? 'brainstorm' : 'project'" :workspace-context-label="workspaceContextLabel" :research-step="researchStep" :research-inputs="researchInputs" :research-artifact="researchArtifact" :research-selected-index="researchSelectedIndex" :research-draft="researchDraft" :research-save-confirm="researchSaveConfirm" :research-saved="researchSaved" :research-save-error="researchSaveError" :research-fallback="researchFallback" :project-draft="projectDraft" :current-project="currentProject" :sending="sending" :creating-project="creatingProject" :project-created="projectCreated" @update:research-step="researchStep = $event" @update:research-draft="researchDraft = $event" @update:research-save-confirm="researchSaveConfirm = $event" @update:research-fallback="researchFallback = $event; projectDraft.problem = $event" @advance-from-observation="advanceFromObservation" @generate="void generateResearchCandidates()" @choose-candidate="chooseResearchCandidate" @edit-candidate="editResearchCandidate" @open-draft="openResearchDraft" @request-save="requestResearchSave" @create-project="void createProjectFromResearch()" @save-question="void saveResearchQuestion()" @copy-question="copyResearchQuestion" />
+
+      <section v-if="loading || messages.length" ref="chatStreamRef" class="chat-stream ai-conversation-stream" aria-live="polite" :aria-busy="sending" @scroll="updateScrollAffordance">
+        <div v-if="loading" class="ai-stream-loading"><span class="ai-loading-dot" />正在恢复会话…</div>
+        <article v-for="message in messages" :key="message.id" class="message" :class="message.role">
+          <div class="message-label">{{ message.role === 'user' ? '你' : `灵思 AI · ${currentAgent?.name || '研究伙伴'}` }}</div>
+          <div class="message-body">
+            {{ message.content || (message.status === 'queued' ? '正在排队…' : message.status === 'streaming' ? '正在生成…' : '') }}
+            <div v-if="message.status === 'failed'" class="message-error"><span>{{ message.error_message || '生成失败' }}</span><button type="button" class="retry-button" :disabled="sending" @click="retryMessage(message)">{{ sending ? '重试中…' : '重试' }}</button></div>
+            <div v-if="message.artifact_payload?.draft && workbenchMode !== 'opening'" class="artifact-card"><b>{{ message.artifact_payload.title || '可编辑草稿' }}</b><textarea v-model="artifactDrafts[message.id]" :placeholder="message.artifact_payload.draft" rows="5" /><small>核验项：{{ message.verification_items?.length || 0 }} 项 · {{ message.artifact_payload.next_action || '请核对事实与引用' }}</small><label v-if="materials.length" class="target-material"><span>保存到指定材料</span><select v-model="targetMaterialId"><option :value="null">请选择目标材料</option><option v-for="material in materials" :key="material.id" :value="material.id">{{ material.title }}</option></select></label><AIDraftActions :mode="workbenchMode" :status="message.status" :can-save-material="Boolean(materials.length)" :can-create-project="false" :saving="savingMessage === message.id" @save-material="void saveArtifact(message)" @create-project="createProjectFromArtifact(message)" /></div>
+          </div>
+        </article>
       </section>
 
-      <aside v-if="!researchMode" class="ai-scope-card"><p class="eyebrow">AI 的边界</p><h2>{{ currentProject ? '只帮助当前项目' : '先选择一个项目' }}</h2><ul><li>AI 会追问和整理，不直接替你下结论</li><li>{{ currentProject ? '不会切换到其他项目' : '未绑定项目时不会读取项目材料' }}</li><li>每次生成后都由你检查和确认</li></ul><div class="ai-scope-divider" /><p class="eyebrow">下一步</p><strong>{{ currentProject ? '确认建议是否可用' : '选择当前项目后开始研究' }}</strong><p class="ai-note">{{ currentProject ? '建议只作为研究过程中的辅助，保存前请核对事实和引用。' : '开题请切换到开题模式；研究和成果表达只绑定当前项目。' }}</p><button class="scope-context-button" type="button" @click="contextOpen = !contextOpen">{{ contextOpen ? '收起上下文设置' : '查看上下文设置' }}</button></aside>
-    </div>
-    <AIContextDrawer :open="contextOpen" :mode="workbenchMode" :project="currentProject" :materials="materials" :agent="currentAgent" :paper-type="paperType" :paper-types="paperTypes" :referenced-sources="referencedSources" @close="contextOpen = false" @update-paper-type="paperType = $event; void changePaperType()" />
-    </div>
+      <section v-else class="ai-empty-state" aria-label="开始使用灵思 AI">
+        <div class="ai-empty-state__prompt">
+          <h2>现在要推进哪一项研究工作？</h2>
+          <p>直接输入你的研究目标。{{ aiEmptyDescription }}</p>
+        </div>
+      </section>
+
+      <button v-if="!researchMode && showJumpLatest" type="button" class="jump-latest" @click="scrollToLatest()">↓ 跳到最新消息</button>
+      <div class="ai-workbench-composer-host">
+        <AIWorkbenchComposer :draft="draft" :mode="workbenchMode" :agent-name="currentAgent?.name" :project-label="workspaceContextDetail" :disabled="loading || sending || Boolean(current?.is_archived) || !currentAgent || (workbenchMode !== 'opening' && !currentProject)" :can-send="Boolean(draft.trim() && selectedId && currentAgent && (workbenchMode === 'opening' || currentProject))" :selected-material-ids="selectedMaterialIds" :can-cite-materials="canSelectMaterials" :sending="sending" @update:draft="draft = $event" @send="void sendMessage()" @stop="abortActiveStream()" @cite-material="citeProjectMaterial" />
+      </div>
+    </section>
+
+    <AIConversationHistory v-if="historyOpen" :groups="visibleConversationGroups" :selected-id="selectedId" :sending="sending" :search="conversationSearch" :show-archived="showArchived" @update:search="conversationSearch = $event" @new="void newConversation()" @select="void selectConversation($event)" @toggle-archived="showArchived = !showArchived" @close="historyOpen = false" />
+    <AIToolPicker v-if="agentOpen" :categories="agentCategories" :groups="groupedAgents" :search="agentSearch" :category="agentCategory" :sending="sending" @update:search="agentSearch = $event" @update:category="agentCategory = $event" @choose="chooseAgent" @close="agentOpen = false" />
+    <AIContextDrawer :open="contextOpen" :mode="workbenchMode" :project="currentProject" :materials="materials" :agent="currentAgent" :paper-type="paperType" :paper-types="paperTypes" :referenced-sources="referencedSources" :selected-material-ids="selectedMaterialIds" :can-select-materials="canSelectMaterials" @close="contextOpen = false" @update:selected-material-ids="selectedMaterialIds = $event" @update-paper-type="paperType = $event; void changePaperType()" />
   </div>
 </template>
 
@@ -1282,6 +1421,501 @@ onBeforeUnmount(() => { window.removeEventListener('keydown', onGlobalKeydown); 
   }
   .send-button {
     width: 100%;
+  }
+}
+
+/* Project Workbench: the launch state stays light, focused and project-bound. */
+.ai-center-page {
+  display: flex;
+  width: 100%;
+  max-width: var(--content-max, 1120px);
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin: 0 auto;
+  padding: clamp(34px, 7vh, 86px) 0 24px;
+}
+.ai-workbench-launch {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  max-width: 680px;
+  margin: 0 auto 28px;
+  text-align: center;
+}
+.ai-workbench-launch h1 {
+  margin: 0;
+  color: var(--ink);
+  font: 700 clamp(44px, 5.5vw, 68px)/1.05 var(--sans);
+  letter-spacing: -.055em;
+}
+.ai-workbench-launch > p:last-child { margin: 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
+.ai-workbench-launch__history {
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--moss-dark);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-workbench-launch__history:hover,
+.ai-workbench-launch__history:focus-visible { border-color: var(--moss); background: var(--sage-soft); }
+.ai-workbench-skeleton { width: min(100%, 900px); display: grid; gap: 12px; margin: 0 auto 20px; }
+.ai-workbench-skeleton i { display: block; height: 12px; border-radius: 999px; background: var(--paper-muted); animation: ai-workbench-pulse 1.2s ease-in-out infinite alternate; }
+.ai-workbench-skeleton i:nth-child(1) { width: 42%; }
+.ai-workbench-skeleton i:nth-child(2) { width: 68%; animation-delay: .12s; }
+.ai-workbench-skeleton i:nth-child(3) { width: 54%; animation-delay: .24s; }
+@keyframes ai-workbench-pulse { from { opacity: .45; } to { opacity: 1; } }
+.ai-center-page > .ai-mode-tabs { width: min(100%, 980px); margin: 0 auto 22px; border: 0; background: transparent; }
+.ai-workbench-page, .ai-simple-layout, .ai-simple-layout.is-research-mode { display: flex; width: 100%; min-width: 0; min-height: 0; flex: 1 1 auto; }
+.chat-main.ai-main-panel {
+  width: 100%;
+  max-width: 1100px;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.chat-header {
+  min-height: 38px;
+  padding: 0 0 12px;
+  border: 0;
+  background: transparent;
+}
+.chat-header h2 { font-size: 16px; }
+.chat-header .eyebrow { display: none; }
+.chat-actions { max-width: none; }
+.chat-actions button { border-radius: 999px; background: var(--paper); }
+.ai-conversation-stream {
+  max-height: none;
+  min-height: 0;
+  padding: 28px 10px 130px;
+}
+.ai-workbench-page.has-messages .chat-main { min-height: 0; }
+.ai-workbench-page.has-messages .chat-header { padding-inline: 10px; border-bottom: 1px solid var(--line); }
+.ai-workbench-page:not(.has-messages) .chat-header { display: none; }
+.ai-workbench-page:not(.has-messages) .ai-main-panel { display: flex; justify-content: flex-end; }
+.ai-workbench-page:not(.has-messages) :deep(.ai-workbench-composer) {
+  width: min(100%, 900px);
+  margin: 0 auto 8vh;
+  border-color: var(--moss-dark);
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(42, 70, 47, .1);
+}
+.ai-workbench-page.has-messages :deep(.ai-workbench-composer) {
+  position: sticky;
+  bottom: 12px;
+  width: min(100%, 960px);
+  margin: 0 auto 12px;
+  box-shadow: 0 12px 28px rgba(42, 70, 47, .12);
+}
+.message { max-width: min(82%, 820px); }
+.message:not(.user) .message-body { padding: 4px 0; background: transparent; }
+.message.user .message-body { border: 1px solid var(--sage-line); }
+.error-banner, .stream-notice { width: min(100%, 920px); margin-inline: auto; }
+
+/* Action-first workbench: one calm column, with the research action always
+   visible before the conversation starts. */
+.ai-center-page.ai-workbench-frame {
+  display: flex;
+  width: 100%;
+  max-width: 1120px;
+  min-width: 0;
+  min-height: calc(100vh - var(--topbar-height));
+  box-sizing: border-box;
+  flex-direction: column;
+  margin: 0 auto;
+  padding: 28px 0 24px;
+  overflow: visible;
+}
+.ai-workbench-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  min-width: 0;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+.ai-workbench-heading { min-width: 0; }
+.ai-workbench-heading h1 {
+  margin: 5px 0 6px;
+  color: var(--ink);
+  font: 700 clamp(32px, 4vw, 46px)/1.05 var(--sans);
+  letter-spacing: -.045em;
+}
+.ai-workbench-heading p {
+  max-width: 620px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.ai-workbench-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 560px;
+}
+.ai-workbench-header__actions > button,
+.ai-session-bar__actions button {
+  min-height: 34px;
+  padding: 7px 11px;
+  border: 1px solid var(--line-dark);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--moss-dark);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background-color var(--transition-fast);
+}
+.ai-workbench-header__actions > button:hover:not(:disabled),
+.ai-workbench-header__actions > button:focus-visible,
+.ai-session-bar__actions button:hover:not(:disabled),
+.ai-session-bar__actions button:focus-visible {
+  border-color: var(--moss);
+  background: var(--sage-soft);
+}
+.ai-workbench-header__actions > button:disabled { cursor: not-allowed; opacity: .45; }
+.ai-workbench-context-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  max-width: 290px;
+  overflow: hidden;
+  padding: 7px 11px;
+  border: 1px solid var(--sage-line);
+  border-radius: 999px;
+  background: var(--sage-soft);
+  color: var(--moss-dark);
+  font-size: 12px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-workbench-mode-region {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin-top: 24px;
+}
+.ai-workbench-mode-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+.ai-workbench-mode-heading h2 {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font: 700 19px/1.3 var(--sans);
+}
+.ai-workbench-skeleton {
+  display: grid;
+  gap: 9px;
+  width: min(100%, 960px);
+  margin: 14px auto 0;
+}
+.ai-workbench-skeleton i {
+  display: block;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--paper-muted);
+  animation: ai-workbench-pulse 1.2s ease-in-out infinite alternate;
+}
+.ai-workbench-skeleton i:nth-child(1) { width: 38%; }
+.ai-workbench-skeleton i:nth-child(2) { width: 70%; animation-delay: .12s; }
+.ai-workbench-skeleton i:nth-child(3) { width: 54%; animation-delay: .24s; }
+.ai-workbench-drawer-backdrop,
+.agent-picker-overlay { position: fixed; inset: 0; }
+.ai-workbench-drawer-backdrop { z-index: 89; background: rgba(30, 45, 38, .08); }
+.ai-workbench-conversation {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: 18px;
+}
+.ai-session-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  min-width: 0;
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+.ai-session-bar__main { min-width: 0; flex: 1 1 auto; }
+.ai-session-bar__title-row { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.ai-session-bar h2 {
+  min-width: 0;
+  margin: 4px 0 2px;
+  overflow: hidden;
+  color: var(--ink);
+  font: 700 16px/1.35 var(--sans);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-session-bar small { display: block; overflow-wrap: anywhere; color: var(--muted); font-size: 11px; }
+.ai-session-bar__actions { flex: 0 0 auto; }
+.rename-button { min-height: 28px; padding: 5px 8px; border: 0; background: transparent; color: var(--moss-dark); font: inherit; font-size: 11px; cursor: pointer; }
+.rename-button:hover, .rename-button:focus-visible { text-decoration: underline; }
+.rename-row { display: flex; align-items: center; gap: 6px; margin-top: 5px; }
+.rename-row input { width: min(340px, 100%); min-height: 32px; padding: 6px 9px; border: 1px solid var(--line-dark); border-radius: var(--radius-sm); }
+.rename-row button { min-height: 30px; padding: 5px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); color: var(--moss-dark); cursor: pointer; }
+.ai-resource-notice,
+.ai-center-page .error-banner,
+.ai-center-page .stream-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 12px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.ai-resource-notice { background: var(--amber-soft); color: var(--amber); }
+.ai-center-page .error-banner { background: var(--danger-soft); color: var(--danger); }
+.ai-center-page .stream-notice { background: var(--sage-soft); color: var(--moss-dark); }
+.ai-resource-notice button,
+.ai-center-page .error-banner button {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.ai-resource-notice button:disabled,
+.ai-center-page .error-banner button:disabled { cursor: wait; opacity: .5; }
+.ai-conversation-stream {
+  width: min(100%, 960px);
+  max-height: none;
+  margin: 0 auto;
+  padding: 24px 0 122px;
+}
+.ai-stream-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.ai-loading-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sage); animation: ai-workbench-pulse 1s ease-in-out infinite alternate; }
+.ai-empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(100%, 680px);
+  margin: 20px auto 0;
+  text-align: center;
+}
+.ai-empty-state__agent { color: var(--moss); font-size: 12px; font-weight: 700; }
+.ai-empty-state h2 { margin: 0; color: var(--ink); font: 700 clamp(24px, 3vw, 34px)/1.2 var(--sans); letter-spacing: -.025em; }
+.ai-empty-state p { max-width: 520px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.ai-workbench-composer-host { width: min(100%, 960px); margin: 16px auto 0; }
+.ai-workbench-conversation:not(.has-messages) .ai-workbench-composer-host { margin-top: 16px; }
+.ai-workbench-conversation.has-messages .ai-workbench-composer-host { position: sticky; bottom: 12px; z-index: 20; }
+.ai-center-page :deep(.ai-workbench-composer) { width: 100%; margin: 0; border-color: var(--line-dark); border-radius: var(--radius-md); box-shadow: 0 12px 30px rgba(42, 70, 47, .09); }
+.ai-center-page :deep(.ai-workbench-composer__textarea) { min-height: 82px; }
+.ai-center-page :deep(.ai-workbench-composer__footer) { min-height: 34px; }
+.jump-latest { align-self: center; margin: 0 0 8px; }
+@media (max-width: 900px) {
+  .ai-center-page.ai-workbench-frame { padding-inline: 20px; }
+  .ai-workbench-header { flex-direction: column; }
+  .ai-workbench-header__actions { justify-content: flex-start; }
+}
+@media (max-width: 620px) {
+  .ai-workbench-mode-heading { align-items: flex-start; flex-direction: column; }
+  .ai-workbench-context-pill { max-width: 100%; }
+  .ai-session-bar { flex-direction: column; }
+  .ai-session-bar__actions { align-self: flex-start; }
+  .ai-conversation-stream { padding-inline: 0; }
+}
+
+/* Compact action-first composition: the input remains in the first viewport,
+   while conversation management appears only after a message exists. */
+.ai-center-page.ai-workbench-frame {
+  min-height: 0;
+  padding: 16px 0 18px;
+}
+.ai-workbench-header {
+  align-items: center;
+  gap: 18px;
+  padding-bottom: 12px;
+}
+.ai-workbench-heading h1 {
+  margin: 3px 0 4px;
+  font-size: clamp(28px, 3vw, 34px);
+}
+.ai-workbench-heading p {
+  max-width: 700px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.ai-workbench-header__actions {
+  max-width: 430px;
+}
+.ai-workbench-mode-region {
+  gap: 6px;
+  margin-top: 12px;
+}
+.ai-workbench-mode-heading {
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 10px;
+}
+.ai-workbench-mode-heading h2 {
+  margin: 0;
+  font-size: 14px;
+}
+.ai-workbench-context-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  margin-top: 10px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, .55);
+}
+.ai-workbench-context-strip__main {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  min-width: 0;
+}
+.ai-workbench-context-strip__main .eyebrow {
+  flex: 0 0 auto;
+}
+.ai-workbench-context-strip__main strong {
+  min-width: 0;
+  max-width: min(48vw, 480px);
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-workbench-context-strip__main > span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+.ai-workbench-context-strip__action,
+.ai-workbench-context-strip__readonly {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid var(--line-dark);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--moss-dark);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+}
+.ai-workbench-context-strip__action {
+  cursor: pointer;
+}
+.ai-workbench-context-strip__action:hover,
+.ai-workbench-context-strip__action:focus-visible {
+  border-color: var(--moss);
+  background: var(--sage-soft);
+}
+.ai-workbench-context-strip__readonly {
+  color: var(--muted-light);
+}
+.ai-workbench-skeleton {
+  margin-top: 12px;
+}
+.ai-workbench-conversation {
+  flex: 0 1 auto;
+  margin-top: 10px;
+}
+.ai-workbench-conversation.has-messages {
+  min-height: min(62vh, 620px);
+}
+.ai-session-bar {
+  padding: 8px 0 10px;
+}
+.ai-conversation-stream {
+  max-height: min(62vh, 620px);
+  padding-top: 18px;
+}
+.ai-empty-state {
+  width: min(100%, 720px);
+  margin: 10px auto 0;
+}
+.ai-empty-state__prompt {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+.ai-empty-state h2 {
+  font-size: clamp(21px, 2.4vw, 28px);
+}
+.ai-empty-state p {
+  max-width: 600px;
+  font-size: 12px;
+}
+.ai-workbench-composer-host {
+  margin: 10px auto 0;
+}
+.ai-workbench-conversation:not(.has-messages) .ai-workbench-composer-host {
+  margin-top: 10px;
+}
+.ai-center-page :deep(.ai-workbench-composer) {
+  box-shadow: 0 10px 24px rgba(42, 70, 47, .08);
+}
+.ai-center-page :deep(.ai-workbench-composer__textarea) {
+  height: 72px;
+  min-height: 72px;
+}
+.ai-center-page :deep(.ai-workbench-composer__footer) {
+  min-height: 30px;
+}
+@media (max-width: 900px) {
+  .ai-center-page.ai-workbench-frame {
+    padding-inline: 20px;
+  }
+}
+@media (max-width: 620px) {
+  .ai-workbench-context-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .ai-workbench-context-strip__main strong {
+    max-width: 100%;
+  }
+  .ai-workbench-context-strip__action,
+  .ai-workbench-context-strip__readonly {
+    align-self: flex-start;
   }
 }
 </style>

@@ -42,6 +42,20 @@ class CoreE2ESeedCommandTests(TestCase):
         self.assertEqual(public_project.status, Project.Status.COMPLETED)
         self.assertEqual(Material.objects.filter(project=public_project, status="approved").count(), 1)
 
+        pool_projects = Project.objects.filter(
+            school=school, title__startswith="核心项目池验收 ", status=Project.Status.UNCLAIMED,
+        ).order_by("title")
+        guided_projects = Project.objects.filter(
+            school=school, title__startswith="核心指导项目验收 ",
+            status=Project.Status.ACTIVE, primary_teacher=teacher,
+        ).order_by("title")
+        self.assertEqual(pool_projects.count(), 4)
+        self.assertEqual(guided_projects.count(), 4)
+        self.assertEqual(pool_projects.first().problem, "如何验证校园观察问题 1 的关键变量？")
+        self.assertEqual(guided_projects.first().summary, "指导项目确定性样本 1，用于验证教师工作台的完整列表。")
+        self.assertTrue(all(project.members.filter(account=student).exists() for project in pool_projects))
+        self.assertTrue(all(project.members.filter(account=student).exists() for project in guided_projects))
+
         template = Template.objects.get(school=school, name="核心闭环验收模板")
         self.assertTrue(template.is_published)
         tasks = list(ProjectTask.objects.filter(project=project).order_by("order"))

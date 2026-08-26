@@ -33,7 +33,7 @@ class ProjectConsoleTests(unittest.TestCase):
         self.assertNotIn('查看运行状态', html)
         self.assertIn('--brand:#3d6c6a', html)
         self.assertIn('max-height:150px', html)
-        self.assertIn('class="ghost" id="e2e-btn"', html)
+        self.assertIn('class="startup-flow__step-action ghost" id="e2e-btn"', html)
         self.assertEqual(html.count('id="e2e-btn"'), 1)
 
     def test_console_does_not_render_role_or_sidebar_tip_labels(self):
@@ -61,6 +61,41 @@ class ProjectConsoleTests(unittest.TestCase):
             content = handle.read()
         self.assertEqual(content.count('data-target="backend" data-action="start"'), 1)
 
+    def test_console_explains_docker_before_project_services(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn("推荐启动顺序", content)
+        self.assertIn("1. 启动 Docker / Colima", content)
+        self.assertIn("2. 启动项目服务", content)
+        self.assertIn("启动项目会自动检测并启动 Docker", content)
+
+    def test_console_mobile_layout_stacks_navigation_and_controls(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn(".console-shell{grid-template-columns:1fr}", content)
+        self.assertIn(".console-sidebar{height:auto;position:static", content)
+        self.assertIn(".console-two-col{grid-template-columns:1fr}", content)
+        self.assertIn(".startup-flow__steps{grid-template-columns:repeat(2,minmax(0,1fr))}", content)
+
+    def test_console_uses_guided_startup_flow_and_unique_primary_actions(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn('class="startup-flow"', content)
+        for step in ("flow-step-docker", "flow-step-project", "flow-step-checks", "flow-step-e2e"):
+            self.assertIn(f'id="{step}"', content)
+        self.assertIn('class="advanced-controls"', content)
+        self.assertEqual(content.count('id="checks-btn"'), 1)
+        self.assertEqual(content.count('id="e2e-btn"'), 1)
+        self.assertEqual(content.count('data-target="all" data-action="start"'), 1)
+        self.assertEqual(content.count('data-target="colima" data-action="start"'), 1)
+
+    def test_console_does_not_start_browser_login_until_user_requests_step_four(self):
+        with open("scripts/console.html", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertNotIn("fetchE2E('127.0.0.1');\nfetchE2E('localhost');", content)
+        self.assertNotIn("setInterval(() => fetchE2E('127.0.0.1'), 30000)", content)
+        self.assertNotIn("setInterval(() => fetchE2E('localhost'), 30000)", content)
+
     def test_console_html_does_not_render_persistent_bottom_tip(self):
         with open("scripts/console.html", encoding="utf-8") as handle:
             content = handle.read()
@@ -87,6 +122,26 @@ class ProjectConsoleTests(unittest.TestCase):
              patch.object(console, "compose", return_value=(0, "ok", "")) as compose:
             self.assertTrue(console.compose_service_action("nginx", "start"))
         compose.assert_called_once_with("--profile", "production", "up", "-d", "nginx", timeout=180)
+
+    def test_production_frontend_start_uses_nginx_and_port_80(self):
+        with patch.object(console, "COMPOSE_PROFILE", "production"), \
+             patch.object(console, "ACTIVE_FRONTEND_SERVICE", "nginx"), \
+             patch.object(console, "FRONTEND_PORT", 80), \
+             patch.object(console, "FRONTEND_MODE", "docker"), \
+             patch.object(console, "http_ok", side_effect=[False, True]), \
+             patch.object(console, "ensure_docker", return_value=True), \
+             patch.object(console, "compose", return_value=(0, "ok", "")) as compose, \
+             patch.object(console.time, "sleep"):
+            self.assertTrue(console.frontend_start())
+        compose.assert_called_once_with("--profile", "production", "up", "-d", "nginx", timeout=240)
+
+    def test_production_frontend_stop_does_not_kill_unrelated_port_80_process(self):
+        with patch.object(console, "COMPOSE_PROFILE", "production"), \
+             patch.object(console, "ACTIVE_FRONTEND_SERVICE", "nginx"), \
+             patch.object(console, "compose_frontend_state", return_value="not_created"), \
+             patch.object(console, "kill_port") as kill_port:
+            self.assertTrue(console.frontend_stop())
+        kill_port.assert_not_called()
 
     def test_collect_services_keeps_expected_services_when_compose_is_empty(self):
         with patch.object(console, "compose", return_value=(0, "", "")):

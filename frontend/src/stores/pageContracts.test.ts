@@ -25,10 +25,8 @@ describe('page contracts and route locations', () => {
       'public.platform-login',
       'student.home',
       'student.projects',
-      'student.project.overview',
       'student.project.map',
       'student.project.task',
-      'student.project.materials',
       'student.project.report',
       'student.ai',
       'student.notifications',
@@ -37,6 +35,7 @@ describe('page contracts and route locations', () => {
       'teacher.home',
       'teacher.pool',
       'teacher.projects',
+      'teacher.ai',
       'teacher.reviews',
       'teacher.members',
       'teacher.notifications',
@@ -78,13 +77,13 @@ describe('page contracts and route locations', () => {
   })
 
   it('builds canonical project and contextual locations without nested duplicates', () => {
-    expect(studentProjectRoute(8)).toBe('/student/projects/8')
+    expect(studentProjectRoute(8)).toBe('/student/projects/8/map')
     expect(studentProjectRoute(8, 'map')).toBe('/student/projects/8/map')
-    expect(studentProjectRoute(8, 'materials')).toBe('/student/projects/8/materials')
+    expect(studentProjectRoute(8, 'materials')).toBe('/student/projects/8/map')
     expect(studentProjectRoute(8, 'report')).toBe('/student/projects/8/report')
     expect(studentTaskRoute(8, 21)).toBe('/student/projects/8/tasks/21')
     expect(studentProjectsLocation('journey')).toEqual({ path: '/student/projects', query: { focus: 'journey' } })
-    expect(studentProjectsLocation('materials')).toEqual({ path: '/student/projects', query: { focus: 'materials' } })
+    expect(studentProjectsLocation('materials')).toEqual({ path: '/student/projects', query: { focus: 'journey' } })
     expect(studentProjectsLocation('apply')).toEqual({ path: '/student/projects', query: { focus: 'apply' } })
   })
 

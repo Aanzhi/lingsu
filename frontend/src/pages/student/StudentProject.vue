@@ -1,13 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Download, MagicStick, User } from '@element-plus/icons-vue'
+import { Download } from '@element-plus/icons-vue'
 import { createReportExport, errorMessage, getReportExports, type ReportExport } from '../../api'
 import EmptyState from '../../components/EmptyState.vue'
 import FeedbackBanner from '../../components/FeedbackBanner.vue'
-import JourneyDeliveryBoard, { type DeliveryItem } from '../../components/JourneyDeliveryBoard.vue'
-import JourneyHero, { type JourneyKpi } from '../../components/JourneyHero.vue'
-import JourneyTimeline, { type JourneyNode } from '../../components/JourneyTimeline.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import ProjectLifecycleMenu from '../../components/ProjectLifecycleMenu.vue'
 import StatusTag from '../../components/StatusTag.vue'
@@ -23,7 +20,7 @@ import { projectTypeLabel } from '../../stores/presentationModel'
 
 const route = useRoute(); const router = useRouter(); const error = ref(''); const feedback = ref<FeedbackState | null>(null); const exports = ref<ReportExport[]>([]); const exportBusy = ref(false); let pollTimer: number | undefined
 const loading = ref(true)
-const surface = computed(() => String(route.meta.surface ?? 'overview')); const projectId = computed(() => Number(route.params.id))
+const surface = computed(() => String(route.meta.surface ?? 'map')); const projectId = computed(() => Number(route.params.id))
 const project = computed(() => student.project(projectId.value))
 const researchQuestionLocation = computed(() => ({
   path: '/student/ai',
@@ -37,10 +34,9 @@ const reportSections = computed(() => materials.value.flatMap((material) => {
 }))
 const typeLabel = computed(() => projectTypeLabel(project.value?.project_type))
 const pageDescription = computed(() => {
-  if (surface.value === 'map') return '按章节查看任务状态，打开具体任务后提交材料或查看审核意见。'
-  if (surface.value === 'materials') return '按章节和状态查找已提交材料，需修订的内容可直接回到对应任务。'
+  if (surface.value === 'map') return '按章节推进任务，打开具体任务提交材料并查看审核意见。'
   if (surface.value === 'report') return '根据已通过材料查看报告结构，满足条件后导出 Word 或 PDF。'
-  return '查看项目问题、成员和当前进度，选择下一步进入研究旅程。'
+  return '查看项目问题、成员和当前进度。'
 })
 const mayInvite = computed(() => project.value ? canInviteMember({ currentUserId: auth.user.value?.id, leaderId: project.value.leader, projectStatus: project.value.status, authorized: Boolean(auth.user.value?.authorized) }) : false)
 
@@ -49,124 +45,26 @@ const journeySummary = computed(() => projectJourneySummary(tasks.value, materia
 const journeyChapters = computed(() => journeySummary.value.chapters)
 const journeySteps = computed(() => journeyChapters.value.flatMap((chapter) => chapter.steps))
 const currentChapter = computed(() => journeyChapters.value.find((chapter) => chapter.containsCurrent) ?? journeyChapters.value.at(-1) ?? null)
+const currentStep = computed(() => journeySteps.value.find((step) => step.isCurrent) ?? null)
+const researchAILocation = computed(() => ({
+  path: '/student/ai',
+  query: {
+    mode: 'research',
+    projectId: String(projectId.value),
+    ...(currentStep.value ? { taskId: String(currentStep.value.id) } : {}),
+  },
+}))
 function chapterStatus(chapter: typeof journeyChapters.value[number]): 'completed' | 'current' | 'pending' | 'locked' {
   if (chapter.status === 'done') return 'completed'
   if (chapter.containsCurrent) return 'current'
   if (currentChapter.value && chapter.index > currentChapter.value.index) return 'locked'
   return 'pending'
 }
-const journeyNodes = computed<JourneyNode[]>(() => journeyChapters.value.map((chapter) => ({
-  order: chapter.index,
-  title: chapter.name,
-  status: chapterStatus(chapter) === 'current' ? 'current' : chapterStatus(chapter) === 'completed' ? 'completed' : chapterStatus(chapter) === 'locked' ? 'locked' : 'pending',
-  passed: chapter.done,
-  total: chapter.total,
-  hint: chapterStatus(chapter) === 'locked' ? '完成上一章并通过审核后解锁' : chapterStatus(chapter) === 'current' ? '当前章节：聚焦这一组任务' : undefined,
-})))
 const selectedStage = ref<number | null>(null)
 watch(currentChapter, (chapter) => { if (selectedStage.value === null) selectedStage.value = chapter?.index ?? null }, { immediate: true })
-watch(journeyNodes, (nodes) => {
-  if (selectedStage.value === null || !nodes.some((node) => node.order === selectedStage.value)) selectedStage.value = currentChapter.value?.index ?? nodes[0]?.order ?? null
+watch(journeyChapters, (chapters) => {
+  if (selectedStage.value === null || !chapters.some((chapter) => chapter.index === selectedStage.value)) selectedStage.value = currentChapter.value?.index ?? chapters[0]?.index ?? null
 })
-function selectStage(order: number) { selectedStage.value = order }
-const selectedChapter = computed(() => journeyChapters.value.find((chapter) => chapter.index === selectedStage.value) ?? currentChapter.value)
-function openTask(item: DeliveryItem) { void router.push(studentTaskRoute(projectId.value, item.taskId)) }
-const expandedMaterialChapter = ref<number | null>(null)
-const materialSearch = ref('')
-type MaterialStatusFilter = 'all' | 'approved' | 'pending_review' | 'revision_required' | 'draft'
-const materialChapterFilter = ref<number | 'all'>('all')
-const materialStatusFilter = ref<MaterialStatusFilter>('all')
-watch(currentChapter, (chapter) => {
-  if (expandedMaterialChapter.value === null) expandedMaterialChapter.value = chapter?.index ?? null
-})
-function toggleMaterialChapter(order: number) {
-  expandedMaterialChapter.value = expandedMaterialChapter.value === order ? null : order
-}
-function materialForStep(stepId: number) {
-  return materials.value.find((item) => item.task === stepId)
-}
-function materialStatusForStep(step: typeof journeySteps.value[number]): MaterialStatusFilter | 'locked' {
-  const material = materialForStep(step.id)
-  if (material) {
-    if (material.status === 'submitted') return 'pending_review'
-    return material.status as MaterialStatusFilter | 'locked'
-  }
-  if (step.taskStatus === 'locked') return 'locked'
-  if (step.taskStatus === 'revision_required') return 'revision_required'
-  if (step.taskStatus === 'pending_review') return 'pending_review'
-  if (step.taskStatus === 'approved' || step.taskStatus === 'completed') return 'approved'
-  return 'draft'
-}
-const filteredJourneyChapters = computed(() => {
-  const query = materialSearch.value.trim().toLowerCase()
-  return journeyChapters.value
-    .filter((chapter) => materialChapterFilter.value === 'all' || chapter.index === materialChapterFilter.value)
-    .map((chapter) => ({
-      ...chapter,
-      steps: chapter.steps.filter((step) => {
-        const haystack = [step.deliverable, step.title, step.reportSection].join(' ').toLowerCase()
-        const matchesQuery = !query || haystack.includes(query)
-        const status = materialStatusForStep(step)
-        const matchesStatus = materialStatusFilter.value === 'all' || status === materialStatusFilter.value
-        return matchesQuery && matchesStatus
-      }),
-    }))
-    .filter((chapter) => chapter.steps.length)
-})
-watch(filteredJourneyChapters, (chapters) => {
-  if (chapters.length && !chapters.some((chapter) => chapter.index === expandedMaterialChapter.value)) expandedMaterialChapter.value = chapters[0].index
-}, { immediate: true })
-function clearMaterialFilters() {
-  materialSearch.value = ''
-  materialChapterFilter.value = 'all'
-  materialStatusFilter.value = 'all'
-}
-
-// 「本章推荐 AI 助手」入口：跳转思考室并预选当前查看的章节。
-const recoStage = computed(() => selectedChapter.value?.index ?? currentChapter.value?.index)
-const recoStageName = computed(() => selectedChapter.value?.name ?? '当前章节')
-
-const journeyKpis = computed<JourneyKpi[]>(() => {
-  const totalTasks = journeySteps.value.length
-  const passedTasks = journeySteps.value.filter((step) => step.status === 'done').length
-  const pending = journeySteps.value.filter((step) => step.status === 'active' || step.status === 'revision').length
-  return [
-    { label: '研究章节', value: journeyChapters.value.length, caption: '从任务聚合出的研究主线' },
-    { label: '总任务', value: totalTasks, caption: '逐项可追踪的证据' },
-    { label: '已通过', value: `${passedTasks} / ${totalTasks || 0}`, caption: '任务通过率' },
-    { label: '待处理', value: pending, caption: `已交付 ${passedTasks} / ${totalTasks || 0}` },
-  ]
-})
-
-interface DeliveryGroup {
-  order: number
-  title: string
-  status: 'completed' | 'current' | 'pending' | 'locked'
-  passed: number
-  total: number
-  items: DeliveryItem[]
-}
-const deliveryGroups = computed<DeliveryGroup[]>(() => journeyChapters.value.map((chapter) => {
-  const status = chapterStatus(chapter)
-  return {
-    order: chapter.index,
-    title: chapter.name,
-    status,
-    passed: chapter.done,
-    total: chapter.total,
-    items: chapter.steps.map((step) => ({
-      id: `task-${step.id}`,
-      taskId: step.id,
-      title: step.title,
-      description: step.description,
-      materialLabel: step.deliverable,
-      reportSection: step.reportSection,
-      status: status === 'locked' ? 'locked' : step.status,
-      xpReward: step.xpReward,
-      stage: step.order,
-    })),
-  }
-}))
 async function handleSetPrimary() { try { await student.setPrimary(projectId.value); await student.refreshProject(projectId.value) } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '主项目没有切换成功，可以重试。', '重试') } }
 async function handleArchive() { if (!confirm('确定归档该项目？仅已完成项目可归档。')) return; try { await student.archive(projectId.value); router.replace('/student/projects?tab=archived') } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '归档失败，可以稍后重试。', '重试') } }
 async function handleUnarchive() { try { await student.unarchive(projectId.value); await student.refreshProject(projectId.value) } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '恢复失败，可以重试。', '重试') } }
@@ -183,7 +81,12 @@ async function load() {
   window.clearTimeout(pollTimer)
   pollTimer = undefined
   try {
-    await student.refreshProject(projectId.value)
+    await student.loadProjectShell()
+    // Paint the project shell as soon as the project list is available, then
+    // hydrate the slower task/material resources without hiding the shell.
+    loading.value = false
+    if (!project.value) return
+    await student.loadProjectResources(projectId.value)
     if (surface.value === 'report') await loadExports()
   } catch (reason) {
     feedback.value = makeFeedback('error', errorMessage(reason), '项目数据没有加载完成，请重试。', '重试')
@@ -207,73 +110,88 @@ watch([projectId, surface], () => { void load() })
 </script>
 <template>
   <FeedbackBanner v-model="feedback" @action="load" />
-  <p v-if="loading" class="loading-state" role="status">正在读取项目详情…</p>
-  <div v-if="project && !loading" class="page project-detail-page">
+  <div class="page project-detail-page">
     <PageHeader
-      :eyebrow="surface === 'map' ? '研究旅程' : surface === 'materials' ? '材料档案' : surface === 'report' ? '研究报告' : typeLabel"
-      :title="surface === 'materials' ? '材料档案' : surface === 'report' ? '研究报告' : project.title"
+      :eyebrow="surface === 'map' ? '研究进程' : '研究报告'"
+      :title="surface === 'report' ? '研究报告' : project?.title || (loading ? '正在读取项目' : '找不到项目')"
       :description="pageDescription"
     >
       <template #actions>
-        <template v-if="surface === 'overview'">
+        <template v-if="project && surface === 'map'">
+          <RouterLink class="secondary-button" :to="studentProjectRoute(project.id, 'report')">研究报告</RouterLink>
+          <MemberInvitationDialog v-if="mayInvite" :project-id="project.id" />
           <ProjectLifecycleMenu :project="project" :authorized="auth.user.value?.authorized" student-mode @primary="handleSetPrimary" @archive="handleArchive" @unarchive="handleUnarchive" @trash="handleTrash" @restore="handleRestore" />
           <StatusTag :status="project.status" />
         </template>
-        <RouterLink v-else-if="surface === 'map'" class="secondary-button" :to="studentProjectRoute(project.id)">返回项目概览</RouterLink>
+        <RouterLink v-else-if="project && surface === 'report'" class="secondary-button" :to="studentProjectRoute(project.id, 'map')">返回研究进程</RouterLink>
       </template>
     </PageHeader>
 
-    <template v-if="surface === 'overview'">
-      <div class="detail-layout demo-project-overview">
-        <section class="paper-card demo-card-pad">
-          <p class="eyebrow">项目问题</p><h2>{{ project.problem || '尚未确定研究问题' }}</h2>
+    <section v-if="loading && !project" class="project-detail-skeleton" role="status" aria-label="正在读取项目详情">
+      <div class="project-detail-skeleton__overview"><i /><strong /><span /><span /><b /></div>
+      <div class="project-detail-skeleton__workspace"><i /><i /></div>
+    </section>
+
+    <template v-else-if="project && surface === 'map'">
+      <section class="journey-overview paper-card">
+        <div class="journey-overview__project">
+          <p class="eyebrow">项目问题</p>
+          <h2>{{ project.problem || '尚未确定研究问题' }}</h2>
           <RouterLink v-if="project.leader === auth.user.value?.id && auth.user.value?.authorized" class="text-link" :to="researchQuestionLocation">生成/完善研究问题 →</RouterLink>
-          <div class="demo-rule" /><p class="eyebrow">初步方案</p><p class="muted">{{ project.plan || '确认研究问题后再补充初步方案。' }}</p>
-          <div class="summary-line"><span>研究类型 <strong>{{ typeLabel }}</strong></span><span>整体进度 <strong>{{ journeySummary.summary.completed }} / {{ journeySummary.summary.total }} 章</strong></span><span>当前章节 <strong>{{ currentChapter?.name || '等待认领' }}</strong></span></div>
+          <p class="journey-overview__plan"><span>初步方案</span>{{ project.plan || '确认研究问题后再补充初步方案。' }}</p>
+        </div>
+        <div class="journey-overview__progress">
+          <div class="journey-overview__progress-heading"><div><p class="eyebrow">研究进程</p><strong>{{ journeySummary.summary.percent }}%</strong></div><span>{{ journeySummary.summary.completed }} / {{ journeySummary.summary.total }} 章节已通过</span></div>
+          <div class="progress-track" aria-label="研究进度"><i :style="{ width: `${journeySummary.summary.percent}%` }" /></div>
+          <div class="journey-overview__facts">
+            <span><small>研究类型</small><strong>{{ typeLabel }}</strong></span>
+            <span><small>研究小组</small><strong>{{ project.members.length }} 位成员</strong></span>
+            <span><small>指导教师</small><strong>{{ project.primary_teacher_name || (project.primary_teacher ? '已分配' : '等待认领') }}</strong></span>
+            <span><small>最近更新</small><strong>今天</strong></span>
+          </div>
+        </div>
+      </section>
+
+      <div class="journey-workspace">
+        <section class="journey-chapters paper-card">
+          <div class="journey-chapters__heading"><div><p class="eyebrow">研究路径</p><h2>研究章节</h2><p>打开章节查看任务、材料状态和审核意见。</p></div><span>{{ journeySteps.length }} 项任务</span></div>
+          <section class="demo-chapter-accordion paper-card">
+            <article v-for="chapter in journeyChapters" :key="chapter.index" class="demo-accordion-row" :class="[`is-${chapterStatus(chapter)}`, { 'is-open': selectedStage === chapter.index }]">
+              <button type="button" class="demo-accordion-head" :aria-expanded="selectedStage === chapter.index" @click="selectedStage = selectedStage === chapter.index ? null : chapter.index">
+                <span class="demo-accordion-number">{{ chapter.index }}</span><strong>{{ chapter.name }}</strong><small>{{ chapter.total }} 项任务 · {{ chapter.done }} 项已通过</small><span>⌄</span>
+              </button>
+              <div v-if="selectedStage === chapter.index" class="demo-accordion-body">
+                <div v-for="step in chapter.steps" :key="step.id" class="demo-task-mini">
+                  <div class="demo-task-mini__main"><strong>{{ step.title }}</strong><small>{{ step.deliverable || '完成任务后提交对应材料' }}</small></div>
+                  <StatusTag :status="step.taskStatus" />
+                  <RouterLink v-if="step.taskStatus !== 'locked'" class="text-link" :to="studentTaskRoute(project.id, step.id)">打开任务 →</RouterLink>
+                </div>
+              </div>
+            </article>
+            <EmptyState v-if="!journeyChapters.length" title="等待教师认领" description="教师认领项目后，研究任务链会自动生成。" compact />
+          </section>
         </section>
-        <aside class="paper-card demo-card-pad">
-          <div class="section-heading"><div><p class="eyebrow">研究小组</p><h2>{{ project.members.length }} 位成员</h2></div><MemberInvitationDialog v-if="mayInvite" :project-id="project.id" /></div>
-          <div class="demo-list"><div v-for="member in project.members" :key="member.id" class="demo-list-row"><span>{{ member.username }}</span><strong>{{ member.role === 'leader' ? '负责人' : '成员' }}</strong></div><div class="demo-list-row"><span>主指导教师</span><strong>{{ project.primary_teacher ? `教师 #${project.primary_teacher}` : '等待认领' }}</strong></div></div>
+
+        <aside class="journey-action-rail">
+          <section class="paper-card journey-action-card">
+            <p class="eyebrow">下一步</p>
+            <h2>{{ currentStep?.title || (journeyChapters.length ? '研究章节已完成' : '等待研究任务') }}</h2>
+            <p v-if="currentStep" class="muted">{{ currentStep.description || '完成当前任务并提交材料，推进研究进程。' }}</p>
+            <p v-else class="muted">{{ journeyChapters.length ? '所有章节都已完成，可以查看研究报告。' : '教师认领项目后，研究任务会自动生成。' }}</p>
+            <StatusTag v-if="currentStep" :status="currentStep.taskStatus" />
+            <RouterLink v-if="currentStep && currentStep.taskStatus !== 'locked'" class="primary-button" :to="studentTaskRoute(project.id, currentStep.id)">继续当前任务 →</RouterLink>
+          </section>
+          <section class="paper-card journey-action-card journey-ai-card">
+            <p class="eyebrow">灵思 AI</p>
+            <h2>把当前问题说清楚</h2>
+            <p class="muted">围绕当前项目和任务获取建议，内容需要你核对后再写入材料。</p>
+            <RouterLink class="secondary-button" :to="researchAILocation">进入灵思 AI →</RouterLink>
+          </section>
         </aside>
       </div>
-      <div class="demo-journey-actions"><RouterLink class="primary-button" :to="studentProjectRoute(project.id, 'map')">进入研究旅程 →</RouterLink><RouterLink class="secondary-button" :to="studentProjectRoute(project.id, 'materials')">查看材料档案</RouterLink></div>
     </template>
 
-    <template v-else-if="surface === 'map'">
-      <section class="demo-journey-summary paper-card">
-        <div class="summary-line"><span>研究类型 <strong>{{ typeLabel }}</strong></span><span>整体进度 <strong>{{ journeySummary.summary.percent }}%</strong></span><span>最近更新 <strong>今天</strong></span></div>
-        <div class="demo-progress"><div class="progress-row"><span>研究进度</span><strong>{{ journeySummary.summary.completed }} / {{ journeySummary.summary.total }} 章节</strong></div><div class="progress-track"><i :style="{ width: `${journeySummary.summary.percent}%` }" /></div></div>
-      </section>
-      <div class="demo-section-head"><div><h2>研究章节</h2><p>点击章节查看任务和材料，不再重复展示全部节点</p></div></div>
-      <section class="demo-chapter-accordion paper-card">
-        <article v-for="chapter in journeyChapters" :key="chapter.index" class="demo-accordion-row" :class="[`is-${chapterStatus(chapter)}`, { 'is-open': selectedStage === chapter.index }]">
-          <button type="button" class="demo-accordion-head" :aria-expanded="selectedStage === chapter.index" @click="selectedStage = selectedStage === chapter.index ? null : chapter.index">
-            <span class="demo-accordion-number">{{ chapter.index }}</span><strong>{{ chapter.name }}</strong><small>{{ chapter.total }} 项任务 · {{ chapter.done }} 项已通过</small><span>⌄</span>
-          </button>
-          <div v-if="selectedStage === chapter.index" class="demo-accordion-body">
-            <div v-for="step in chapter.steps" :key="step.id" class="demo-task-mini"><span>{{ step.title }}</span><StatusTag :status="step.taskStatus" /><RouterLink v-if="step.taskStatus !== 'locked'" class="text-link" :to="studentTaskRoute(project.id, step.id)">打开任务 →</RouterLink></div>
-          </div>
-        </article>
-        <EmptyState v-if="!journeyChapters.length" title="等待教师认领" description="教师认领项目后，研究任务链会自动生成。" compact />
-      </section>
-      <div class="demo-journey-actions">
-        <article class="paper-card demo-card-pad"><h2>下一步</h2><p class="muted">完成当前章节后，就可以继续进入下一项研究任务。</p><RouterLink v-if="currentChapter?.steps[0]" class="primary-button" :to="studentTaskRoute(project.id, currentChapter.steps[0].id)">继续当前任务 →</RouterLink></article>
-        <article class="paper-card demo-card-pad"><h2>需要帮助？</h2><p class="muted">只针对当前章节提问，AI 会保留你的研究背景。</p><RouterLink class="secondary-button" :to="{ path: '/student/ai', query: { mode: 'research', projectId: String(project.id) } }">使用 AI 协助</RouterLink></article>
-      </div>
-    </template>
-
-    <template v-else-if="surface === 'materials'">
-      <section class="demo-material-archive paper-card">
-        <div class="materials-filters" aria-label="材料筛选"><label class="materials-filter-search"><span class="sr-only">搜索材料</span><input v-model="materialSearch" type="search" placeholder="搜索材料名称" /></label><select v-model="materialChapterFilter"><option value="all">全部章节</option><option v-for="chapter in journeyChapters" :key="chapter.index" :value="chapter.index">{{ chapter.name }}</option></select><select v-model="materialStatusFilter"><option value="all">全部状态</option><option value="approved">已审核</option><option value="pending_review">已提交</option><option value="revision_required">需修订</option><option value="draft">未开始</option></select></div>
-        <div v-for="chapter in filteredJourneyChapters" :key="chapter.index" class="demo-accordion-row" :class="[`is-${chapterStatus(chapter)}`, { 'is-open': expandedMaterialChapter === chapter.index }]">
-          <button type="button" class="demo-accordion-head" :aria-expanded="expandedMaterialChapter === chapter.index" @click="toggleMaterialChapter(chapter.index)"><span class="demo-accordion-number">{{ chapter.index }}</span><strong>{{ chapter.name }}</strong><small>{{ chapter.done }} / {{ chapter.total }} 份材料</small><span>⌄</span></button>
-          <div v-if="expandedMaterialChapter === chapter.index" class="demo-accordion-body"><div v-for="step in chapter.steps" :key="step.id" class="demo-task-mini"><span>{{ step.deliverable || step.title }}</span><StatusTag :status="materialForStep(step.id)?.status || 'disabled'" /><RouterLink v-if="materialForStep(step.id)?.task && ['revision_required', 'available'].includes(materialForStep(step.id)?.status ?? '')" class="text-link" :to="studentTaskRoute(project.id, materialForStep(step.id)!.task!)">去任务处理 →</RouterLink></div></div>
-        </div>
-        <EmptyState v-if="!filteredJourneyChapters.length" title="暂无材料" description="教师认领项目后会生成材料档案。" compact />
-      </section>
-    </template>
-
-    <template v-else>
+    <template v-else-if="project">
       <div class="demo-report-grid">
         <div class="demo-stack">
           <section class="paper-card demo-card-pad"><p class="eyebrow">当前状态</p><h2>还差 {{ Math.max(materials.length - reportSections.length, 0) }} 项材料</h2><p class="muted">完成并通过审核后，Word 和 PDF 导出会自动解锁。</p><div class="demo-progress"><div class="progress-row"><span>报告完成度</span><strong>{{ reportSections.length }} / {{ materials.length }}</strong></div><div class="progress-track"><i :style="{ width: `${Math.round(reportSections.length / Math.max(materials.length, 1) * 100)}%` }" /></div></div></section>
@@ -286,10 +204,20 @@ watch([projectId, surface], () => { void load() })
       </div>
     </template>
   </div>
-  <EmptyState v-else-if="!loading" title="找不到项目" description="项目可能不存在，或不属于当前账号。" />
+  <EmptyState v-if="!loading && !project" title="找不到项目" description="项目可能不存在，或不属于当前账号。" />
 </template>
 
 <style scoped>
+.project-detail-skeleton { display: grid; gap: 22px; }
+.project-detail-skeleton__overview, .project-detail-skeleton__workspace { display: grid; gap: 14px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper); box-shadow: var(--shadow-soft); }
+.project-detail-skeleton__overview { min-height: 190px; background: linear-gradient(115deg, var(--paper) 0%, var(--sage-soft) 100%); }
+.project-detail-skeleton__workspace { grid-template-columns: minmax(0, 1fr) 280px; min-height: 260px; background: transparent; border: 0; box-shadow: none; padding: 0; }
+.project-detail-skeleton i, .project-detail-skeleton strong, .project-detail-skeleton span, .project-detail-skeleton b { display: block; height: 13px; border-radius: 999px; background: var(--paper-muted); }
+.project-detail-skeleton__overview strong { width: min(62%, 560px); height: 42px; margin-top: 16px; background: var(--sage-line); }
+.project-detail-skeleton__overview span { width: min(78%, 700px); }
+.project-detail-skeleton__overview b { width: 92%; height: 8px; margin-top: auto; }
+.project-detail-skeleton__workspace i { min-height: 260px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper); box-shadow: var(--shadow-soft); }
+.project-detail-skeleton__workspace i:last-child { min-height: 160px; }
 .demo-card-pad { padding: var(--space-6); }
 .demo-card-pad h2 { margin: 0 0 8px; color: var(--ink); font: 700 20px/1.25 var(--sans); letter-spacing: -.015em; }
 .muted { color: var(--muted); }
@@ -304,16 +232,34 @@ watch([projectId, surface], () => { void load() })
 .demo-list-row:last-child { padding-bottom: 0; border-bottom: 0; }
 .demo-list-row > div { min-width: 0; display: grid; gap: 3px; }
 .demo-list-row small { color: var(--muted-light); font-size: 12px; }
-.demo-journey-summary { padding: var(--space-6); }
 .demo-progress { margin-top: 18px; }
 .progress-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 7px; color: var(--muted); font-size: 12px; }
 .progress-row strong { color: var(--ink); }
 .progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: var(--paper-muted); }
 .progress-track i { display: block; height: 100%; border-radius: inherit; background: var(--moss); }
-.demo-section-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-4); margin: var(--space-7) 0 var(--space-4); }
-.demo-section-head h2 { margin: 0; color: var(--ink); font: 700 20px/1.25 var(--sans); }
-.demo-section-head p { margin: 4px 0 0; color: var(--muted-light); font-size: 12px; }
-.demo-chapter-accordion, .demo-material-archive { overflow: hidden; padding: var(--space-6); }
+.journey-overview { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(300px, .9fr); gap: 30px; align-items: stretch; padding: 25px 28px; border-color: var(--sage-line); background: linear-gradient(115deg, var(--paper) 0%, var(--sage-soft) 100%); }
+.journey-overview__project { min-width: 0; }
+.journey-overview__project h2 { margin: 6px 0 8px; color: var(--ink); font: 700 21px/1.4 var(--sans); overflow-wrap: anywhere; }
+.journey-overview__project .text-link { display: inline-flex; margin-bottom: 4px; }
+.journey-overview__plan { display: grid; gap: 4px; margin: 17px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.journey-overview__plan span { color: var(--moss); font-size: 10px; font-weight: 700; letter-spacing: .06em; }
+.journey-overview__progress { display: grid; align-content: center; min-width: 0; padding-left: 28px; border-left: 1px solid var(--sage-line); }
+.journey-overview__progress-heading { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+.journey-overview__progress-heading .eyebrow { margin: 0 0 3px; }
+.journey-overview__progress-heading strong { color: var(--moss-dark); font: 700 34px/1 var(--sans); }
+.journey-overview__progress-heading > span { padding-bottom: 3px; color: var(--muted); font-size: 11px; text-align: right; }
+.journey-overview__progress .progress-track { margin-top: 14px; height: 8px; }
+.journey-overview__facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 18px; margin-top: 19px; }
+.journey-overview__facts span { display: grid; gap: 4px; min-width: 0; }
+.journey-overview__facts small { color: var(--muted-light); font-size: 10px; }
+.journey-overview__facts strong { overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+.journey-workspace { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 18px; align-items: start; margin-top: 22px; }
+.journey-chapters { min-width: 0; padding: 24px; }
+.journey-chapters__heading { display: flex; align-items: end; justify-content: space-between; gap: 18px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
+.journey-chapters__heading h2 { margin: 4px 0 5px; color: var(--ink); font: 700 21px/1.25 var(--sans); }
+.journey-chapters__heading p { margin: 0; color: var(--muted); font-size: 12px; }
+.journey-chapters__heading > span { flex: 0 0 auto; color: var(--muted); font-size: 11px; }
+.journey-chapters .demo-chapter-accordion { overflow: hidden; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .demo-accordion-row { border-bottom: 1px solid var(--line); }
 .demo-accordion-row:last-child { border-bottom: 0; }
 .demo-accordion-head { display: flex; width: 100%; align-items: center; gap: 12px; padding: 16px 0; border: 0; background: transparent; color: var(--ink); text-align: left; }
@@ -326,96 +272,30 @@ watch([projectId, surface], () => { void load() })
 .demo-accordion-row.is-current .demo-accordion-number { color: #fff; background: var(--moss); }
 .demo-accordion-body { padding: 0 0 14px 42px; }
 .demo-task-mini { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--paper-soft); color: var(--muted); font-size: 12px; }
+.demo-task-mini__main { display: grid; gap: 3px; min-width: 0; }
+.demo-task-mini__main strong { overflow: hidden; color: var(--ink); text-overflow: ellipsis; white-space: nowrap; }
+.demo-task-mini__main small { overflow: hidden; color: var(--muted-light); text-overflow: ellipsis; white-space: nowrap; }
 .demo-task-mini + .demo-task-mini { margin-top: 7px; }
-.demo-journey-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); margin-top: var(--space-4); }
-.demo-journey-actions > .primary-button, .demo-journey-actions > .secondary-button { justify-self: start; }
-.demo-material-archive .materials-filters { margin: 0 0 var(--space-5); }
+.journey-action-rail { display: grid; gap: 18px; position: sticky; top: 94px; }
+.journey-action-card { display: grid; align-content: start; gap: 11px; padding: 22px; }
+.journey-action-card h2 { margin: 0; color: var(--ink); font: 700 19px/1.4 var(--sans); overflow-wrap: anywhere; }
+.journey-action-card p { margin: 0; }
+.journey-action-card .status-tag { justify-self: start; }
+.journey-action-card .primary-button, .journey-action-card .secondary-button { justify-content: center; margin-top: 5px; }
+.journey-ai-card { border-color: var(--sage-line); background: linear-gradient(145deg, var(--paper) 0%, var(--sage-soft) 100%); }
 .demo-report-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); align-items: start; }
 .demo-stack { display: grid; align-content: start; gap: var(--space-4); }
 .demo-export-actions { margin-top: 18px; }
 .demo-export-actions .secondary-button { width: 100%; }
-.journey-rail-block { margin-top: 22px; }
-.journey-delivery-block { margin-top: 22px; }
-.consistency-block { margin-bottom: 22px; }
-.overview-chapters { grid-column: 1 / -1; padding: 22px 24px; }
-.overview-chapters .section-heading > div > p:last-child { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
-.overview-chapter-list { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; list-style: none; margin: 18px 0 0; padding: 0; }
-.overview-chapter-list li { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 9px; align-items: start; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper-soft); }
-.overview-chapter-list li > .status-tag { grid-column: 2; justify-self: start; margin-top: 8px; }
-.overview-chapter-list__index { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--moss); color: #fff; font: 700 11px var(--sans); }
-.overview-chapter-list li.is-current { border-color: var(--sage-line); background: var(--sage-soft); }
-.overview-chapter-list li.is-current .overview-chapter-list__index { background: #fff; color: var(--moss-dark); box-shadow: 0 0 0 1px var(--moss); }
-.overview-chapter-list li.is-locked .overview-chapter-list__index { background: var(--line-dark); color: var(--muted); }
-.overview-chapter-list__body { min-width: 0; display: grid; gap: 5px; }
-.overview-chapter-list__body strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 13px/1.35 var(--sans); }
-.overview-chapter-list__body small { color: var(--muted); font-size: 10px; }
-.overview-chapter-list .mini-progress { height: 5px; }
-.materials-chapters { display: grid; gap: 8px; margin-top: 18px; }
-.materials-filters { display: grid; grid-template-columns: minmax(220px, 1fr) 190px 150px auto; gap: 8px; align-items: center; margin-top: 18px; }
-.materials-filter-search input, .materials-filters select { width: 100%; min-height: 36px; border: 1px solid var(--line-dark); border-radius: var(--radius-sm); background: var(--paper); color: var(--ink); font: inherit; font-size: 12px; padding: 0 11px; }
-.materials-filter-search input:focus, .materials-filters select:focus { outline: 2px solid rgba(76,114,69,.22); outline-offset: 1px; border-color: var(--moss); }
-.materials-filter-clear { justify-self: end; border: 0; background: transparent; cursor: pointer; padding: 4px 0; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-.materials-chapter { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper); }
-.materials-chapter.is-current { border-color: var(--sage-line); }
-.materials-chapter.is-locked { background: var(--paper-soft); }
-.materials-chapter__toggle { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto auto 48px; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border: 0; background: transparent; color: var(--ink); text-align: left; cursor: pointer; }
-.materials-chapter__toggle:hover, .materials-chapter__toggle:focus-visible { background: var(--paper-soft); }
-.materials-chapter__index { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--moss); color: #fff; font: 700 11px var(--sans); }
-.materials-chapter.is-current .materials-chapter__index { background: #fff; color: var(--moss-dark); box-shadow: 0 0 0 1px var(--moss); }
-.materials-chapter.is-locked .materials-chapter__index { background: var(--line-dark); color: var(--muted); }
-.materials-chapter__title { display: grid; gap: 2px; min-width: 0; }
-.materials-chapter__title small { color: var(--moss); font-size: 10px; font-weight: 700; }
-.materials-chapter__title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 700 14px/1.35 var(--sans); }
-.materials-chapter__summary { color: var(--muted); font-size: 11px; white-space: nowrap; }
-.materials-chapter__chevron { color: var(--moss-dark); font-size: 11px; font-weight: 700; text-align: right; }
-.materials-chapter__body { border-top: 1px solid var(--line); }
-.materials-archive-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 13px 14px; border-bottom: 1px dashed var(--line); }
-.materials-archive-row:last-child { border-bottom: 0; }
-.materials-archive-row__main { display: grid; gap: 3px; min-width: 0; }
-.materials-archive-row__main strong { overflow-wrap: anywhere; font-size: 12px; }
-.materials-archive-row__main small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
-.materials-archive-row > a { color: var(--moss-dark); font-size: 11px; font-weight: 700; white-space: nowrap; }
-.report-public-link { display: block; margin-top: 14px; }
-.ai-reco-cta { display: flex; align-items: center; gap: 12px; margin-top: 18px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); text-decoration: none; color: var(--ink); transition: border-color .15s, box-shadow .15s; }
-.ai-reco-cta:hover { border-color: var(--moss); box-shadow: var(--shadow-soft); }
-.ai-reco-icon { font-size: 20px; color: var(--moss); flex: none; }
-.ai-reco-text { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.ai-reco-text strong { font-size: 14px; color: var(--moss-dark); }
-.ai-reco-text small { font-size: 12px; color: var(--muted); line-height: 1.5; }
-.ai-reco-go { font-size: 13px; color: var(--moss-dark); white-space: nowrap; }
-.research-question-cta { display: inline-flex; margin: 4px 0 8px; color: var(--moss-dark); font-size: 12px; font-weight: 700; text-decoration: none; }
-.research-question-cta:hover { color: var(--moss); text-decoration: underline; }
 @media (max-width: 1024px) {
-  .overview-chapter-list { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .journey-workspace { grid-template-columns: minmax(0, 1fr) 280px; }
 }
 @media (max-width: 768px) {
-  .overview-chapters { padding: 18px 16px; }
-  .overview-chapter-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .materials-table { padding: 20px 16px; }
-  .materials-filters { grid-template-columns: 1fr 1fr; }
-  .materials-filter-search { grid-column: 1 / -1; }
-  .materials-filter-clear { justify-self: start; }
-  .materials-chapter__toggle { grid-template-columns: 32px minmax(0, 1fr) auto 42px; gap: 9px; }
-  .materials-chapter__summary { grid-column: 2; justify-self: start; }
-  .materials-chapter__toggle > .status-tag { grid-column: 3; grid-row: 1 / span 2; }
-  .materials-chapter__chevron { grid-column: 4; grid-row: 1 / span 2; }
-  .materials-archive-row { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 8px; }
-  .materials-archive-row > .status-tag { grid-column: 2; justify-self: start; }
-  .materials-archive-row > a, .materials-archive-row > .archive-read-only { grid-column: 3; grid-row: 2; }
-  .ai-reco-cta { align-items: flex-start; }
-  .ai-reco-go { margin-left: auto; }
-}
-@media (max-width: 430px) {
-  .overview-chapter-list { grid-template-columns: 1fr; }
-  .overview-chapter-list li { grid-template-columns: 30px minmax(0, 1fr) auto; }
-  .overview-chapter-list li > .status-tag { grid-column: 3; grid-row: 1; margin-top: 0; }
-  .materials-chapter__summary { font-size: 10px; }
-  .materials-filters { grid-template-columns: 1fr; }
-  .materials-filter-search { grid-column: auto; }
-  .materials-archive-row__main small { white-space: normal; }
-  .ai-reco-cta { flex-wrap: wrap; }
-  .ai-reco-text { flex-basis: calc(100% - 32px); }
-  .ai-reco-go { margin-left: 32px; }
+  .project-detail-skeleton__workspace { grid-template-columns: 1fr; }
+  .journey-overview { grid-template-columns: 1fr; gap: 20px; }
+  .journey-overview__progress { padding: 20px 0 0; border-top: 1px solid var(--sage-line); border-left: 0; }
+  .journey-workspace { grid-template-columns: 1fr; }
+  .journey-action-rail { position: static; }
 }
 </style>

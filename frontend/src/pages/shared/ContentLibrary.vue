@@ -37,7 +37,7 @@ const heading = computed(() => surface.value === 'cases'
   ? ['案例库', '案例库', isTeacher.value ? '浏览已公开案例，为指导和选题提供参考。' : '浏览已公开的学生项目案例，按研究方向参考过程和成果。']
   : surface.value === 'competitions'
     ? ['赛事信息', '赛事信息', isTeacher.value ? '查看平台赛事信息，为学生提供参赛建议。' : '查看平台发布的赛事和截止时间，判断当前项目是否适合参加。']
-    : ['通知公告', '通知公告', '查看平台公告和学校通知，优先处理与项目进度相关的消息。'])
+    : [isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '学生公告' : '平台公告', '查看平台公告和学校通知，优先处理与项目进度相关的消息。'])
 const filteredCases = computed(() => cases.value.filter((item) => (
   item.status === 'published' || (isTeacher.value && item.status === 'pending_teacher')
 ) && `${item.project_title}${item.tags.join('')}${item.discipline}${item.application_scene}`.toLowerCase().includes(appliedKeyword.value.toLowerCase())))
@@ -149,7 +149,7 @@ watch(surface, () => {
     </div>
     <div v-else class="demo-content-grid">
       <article v-for="item in notices.slice(0, 3)" :key="item.id" class="demo-content-card paper-card"><p class="eyebrow">{{ item.audience === 'all' ? '平台公告' : '本校公告' }}</p><h3>{{ item.title }}</h3><p class="muted">{{ item.body }}</p><p class="demo-content-meta">{{ item.published_at?.slice(0, 10) }}</p></article>
-      <EmptyState v-if="!loading && !notices.length" title="暂无通知" />
+      <EmptyState v-if="!loading && !notices.length" :title="isTeacher ? '暂无学生公告' : '暂无平台公告'" />
     </div>
 
     <el-dialog :model-value="Boolean(rejecting)" title="驳回公开申请" width="520px" @close="rejecting = null">

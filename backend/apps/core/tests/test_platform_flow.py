@@ -30,6 +30,50 @@ class PlatformFlowTests(TestCase):
         self.assertEqual(claimed.data["status"], "active")
         self.assertEqual(claimed.data["primary_teacher"], self.teacher.id)
 
+    def test_teacher_pool_exposes_opening_fields_before_claim(self):
+        project = Project.objects.create(
+            school=self.school,
+            title="开题预览项目",
+            leader=self.leader,
+            status=Project.Status.UNCLAIMED,
+            problem="如何减少校园雨后积水？",
+            plan="记录不同位置的积水变化并比较排水条件。",
+            summary="通过连续观察形成可复核的研究证据。",
+        )
+        project.members.create(account=self.leader, role="leader")
+        teacher_client = self.client_for(self.teacher)
+
+        response = teacher_client.get("/api/projects/pool/")
+
+        self.assertEqual(response.status_code, 200)
+        item = next(value for value in response.data if value["id"] == project.id)
+        self.assertEqual(item["title"], "开题预览项目")
+        self.assertEqual(item["problem"], "如何减少校园雨后积水？")
+        self.assertEqual(item["plan"], "记录不同位置的积水变化并比较排水条件。")
+        self.assertEqual(item["summary"], "通过连续观察形成可复核的研究证据。")
+        self.assertEqual(item["status"], Project.Status.UNCLAIMED)
+        self.assertIsNone(item["primary_teacher"])
+        project.refresh_from_db()
+        self.assertEqual(project.status, Project.Status.UNCLAIMED)
+        self.assertIsNone(project.primary_teacher_id)
+
+    def test_project_payload_includes_supervising_teacher_display_name(self):
+        self.teacher.first_name = "林老师"
+        self.teacher.save(update_fields=["first_name"])
+        project = Project.objects.create(
+            school=self.school,
+            title="教师名称展示",
+            leader=self.leader,
+            primary_teacher=self.teacher,
+            status=Project.Status.ACTIVE,
+        )
+
+        response = self.client_for(self.leader).get("/api/projects/")
+
+        self.assertEqual(response.status_code, 200)
+        item = next(value for value in response.data if value["id"] == project.id)
+        self.assertEqual(item["primary_teacher_name"], "林老师")
+
     def test_member_invitation_requires_student_then_teacher_confirmation(self):
         project = Project.objects.create(school=self.school, title="项目", leader=self.leader, primary_teacher=self.teacher, status="active")
         project.members.create(account=self.leader, role="leader")

@@ -13,14 +13,14 @@ const props = defineProps<{
   sectionLabel: string
 }>()
 const route = useRoute()
-const nav = primaryNavigation(props.role)
+const nav = computed(() => primaryNavigation(props.role, auth.user.value?.primaryProject))
 const utilityNav = computed(() => utilityNavigation(props.role, auth.user.value?.primaryProject))
 const iconMap: Record<NavigationIcon, Component> = {
   home: House, projects: FolderOpened, journey: Collection, review: DocumentChecked,
   members: Briefcase, content: props.role === 'platform_admin' ? Medal : Reading,
   schools: Collection, ai: MagicStick, settings: Setting, bell: Bell,
 }
-function isNavActive(item: (typeof nav)[number]) { return isNavigationActive(props.role, item, route.path) }
+function isNavActive(item: (typeof nav.value)[number]) { return isNavigationActive(props.role, item, route.path, route.query) }
 function isUtilityActive(to: string) {
   const path = to.split('?')[0]
   return route.path === path || route.path.startsWith(`${path}/`)
@@ -33,7 +33,7 @@ function isUtilityActive(to: string) {
     <template #sidebar>
       <p class="workspace-sidebar__label">{{ sectionLabel }}</p>
       <template v-for="item in nav" :key="item.key">
-        <RouterLink :to="item.to" :class="{ 'router-link-active': isNavActive(item) }" :aria-current="isNavActive(item) ? 'page' : undefined">
+        <RouterLink :to="item.to" active-class="workspace-router-active" :class="{ 'workspace-router-active': isNavActive(item) }" :aria-current="isNavActive(item) ? 'page' : undefined">
           <el-icon aria-hidden="true"><component :is="iconMap[item.icon]" /></el-icon><span>{{ item.label }}</span>
         </RouterLink>
         <div v-if="navigationChildren(role, item).length" class="workspace-sidebar__subnav" :aria-label="`${item.label}子页面`">

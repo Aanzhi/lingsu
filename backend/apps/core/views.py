@@ -1205,18 +1205,27 @@ class AIConversationViewSet(viewsets.ModelViewSet):
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
-        # Conversations are deliberately student-private; teachers get no rows.
-        if self.request.user.role != Account.Role.STUDENT:
-            return AIConversation.objects.none()
-        return AIConversation.objects.filter(owner=self.request.user).select_related("project")
+        user = self.request.user
+        if user.role == Account.Role.STUDENT:
+            return AIConversation.objects.filter(owner=user).select_related("project")
+        if user.role == Account.Role.TEACHER:
+            return AIConversation.objects.filter(owner=user, project__primary_teacher=user).select_related("project")
+        return AIConversation.objects.none()
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.role != Account.Role.STUDENT:
-            raise PermissionDenied("只有学生可以创建 AI 对话。")
+        if user.role not in {Account.Role.STUDENT, Account.Role.TEACHER}:
+            raise PermissionDenied("只有学生或教师可以创建 AI 对话。")
         mode = normalize_workspace_mode(serializer.validated_data.get("workspace_mode", AIConversation.WorkspaceMode.RESEARCH))
         project = serializer.validated_data.get("project")
-        if mode == AIConversation.WorkspaceMode.OPENING and project is not None:
+        if user.role == Account.Role.TEACHER:
+            if project is None:
+                raise ValidationError({"project": "教师指导会话必须绑定本人负责的项目。"})
+            if project.primary_teacher_id != user.id:
+                raise PermissionDenied("只能在本人负责的项目中创建指导会话。")
+            if mode == AIConversation.WorkspaceMode.OPENING:
+                raise ValidationError({"workspace_mode": "教师指导会话不支持开题模式。"})
+        elif mode == AIConversation.WorkspaceMode.OPENING and project is not None:
             raise ValidationError({"project": "开题工作台不绑定项目，请从无项目会话开始。"})
         serializer.save(owner=user, workspace_mode=mode)
 
@@ -1226,6 +1235,11 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             raise ValidationError({"project": "对话创建后不能切换项目，请新建对话。"})
         mode = normalize_workspace_mode(serializer.validated_data.get("workspace_mode", conversation.workspace_mode))
         project = serializer.validated_data.get("project", conversation.project)
+        if request_user := self.request.user:
+            if request_user.role == Account.Role.TEACHER and (project is None or project.primary_teacher_id != request_user.id):
+                raise PermissionDenied("只能在本人负责的项目中使用指导会话。")
+            if request_user.role == Account.Role.TEACHER and mode == AIConversation.WorkspaceMode.OPENING:
+                raise ValidationError({"workspace_mode": "教师指导会话不支持开题模式。"})
         if mode == AIConversation.WorkspaceMode.OPENING and project is not None:
             raise ValidationError({"project": "开题工作台不绑定项目，请从无项目会话开始。"})
         serializer.save()

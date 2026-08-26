@@ -38,4 +38,6 @@
 .el-dialog__footer { padding: 10px 26px 24px !important; }
 .el-dialog__title { font: 700 20px var(--sans); }
 .el-overlay { backdrop-filter: blur(3px); }
+.paper-dialog { max-height: calc(100vh - 32px); margin: 16px auto !important; display: flex; flex-direction: column; }
+.paper-dialog .el-dialog__body { min-height: 0; overflow-y: auto; }
 .paper-dialog .el-dialog__header { padding-bottom: 12px !important; }

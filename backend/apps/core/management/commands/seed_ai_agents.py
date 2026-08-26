@@ -586,18 +586,19 @@ for _spec in AGENTS:
 # other Agents only receive the task/material explicitly associated with a run.
 _SHARED_CONTEXT = {"project_basics": True, "approved_materials": False, "ai_history": True, "teacher_feedback": True}
 _TASK_MATERIAL_CONTEXT = {**_SHARED_CONTEXT, "current_task": True, "current_material_draft": True, "current_guidance": True}
+_SELECTABLE_TASK_MATERIAL_CONTEXT = {**_TASK_MATERIAL_CONTEXT, "allowed_selections": ["selected_materials"]}
 _CONTEXT_BY_KEY = {
     "proposal-topic": _SHARED_CONTEXT,
-    "proposal-background": _TASK_MATERIAL_CONTEXT,
-    "proposal-objectives": _TASK_MATERIAL_CONTEXT,
-    "proposal-plan": _TASK_MATERIAL_CONTEXT,
+    "proposal-background": _SELECTABLE_TASK_MATERIAL_CONTEXT,
+    "proposal-objectives": _SELECTABLE_TASK_MATERIAL_CONTEXT,
+    "proposal-plan": _SELECTABLE_TASK_MATERIAL_CONTEXT,
     "proposal-consistency": {**_SHARED_CONTEXT, "consistency": True},
     "paper-title-abstract": _SHARED_CONTEXT,
-    "paper-framework": _TASK_MATERIAL_CONTEXT,
-    "paper-expand-polish": _TASK_MATERIAL_CONTEXT,
-    "paper-reference-format": _TASK_MATERIAL_CONTEXT,
-    "paper-result-interpret": _TASK_MATERIAL_CONTEXT,
-    "paper-reviewer-response": _TASK_MATERIAL_CONTEXT,
+    "paper-framework": _SELECTABLE_TASK_MATERIAL_CONTEXT,
+    "paper-expand-polish": _SELECTABLE_TASK_MATERIAL_CONTEXT,
+    "paper-reference-format": _SELECTABLE_TASK_MATERIAL_CONTEXT,
+    "paper-result-interpret": _SELECTABLE_TASK_MATERIAL_CONTEXT,
+    "paper-reviewer-response": _SELECTABLE_TASK_MATERIAL_CONTEXT,
 }
 for _spec in AGENTS:
     _spec["context_scope_default"] = _CONTEXT_BY_KEY[_spec["key"]]

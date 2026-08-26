@@ -5,35 +5,44 @@ import { isNavigationActive, navigationChildren, primaryNavigation, studentTopNa
 describe('primary navigation registry', () => {
   it('registers one primary entry per capability and role', () => {
     expect(primaryNavigation('student').map((item) => item.key))
-      .toEqual(['home', 'projects', 'ai', 'journey', 'materials', 'invitations', 'public-applications', 'notifications'])
+      .toEqual(['home', 'projects', 'ai', 'journey', 'invitations', 'public-applications', 'notifications', 'content'])
     expect(primaryNavigation('teacher').map((item) => item.key))
-      .toEqual(['home', 'pool', 'projects', 'reviews', 'content'])
+      .toEqual(['home', 'pool', 'projects', 'ai', 'reviews', 'content'])
     expect(primaryNavigation('platform_admin').map((item) => item.key))
       .toEqual(['home', 'schools', 'ai-agents', 'content', 'settings'])
   })
 
-  it('keeps the student portal capabilities flat for the top navigation', () => {
+  it('keeps the student primary entries stable and groups content pages in the sidebar', () => {
     const student = primaryNavigation('student')
-    expect(student.every((item) => !item.children?.length)).toBe(true)
+    expect(student.filter((item) => item.key !== 'content').every((item) => !item.children?.length)).toBe(true)
     expect(student.map((item) => item.label)).toEqual([
-      '首页', '我的项目', '灵思 AI', '研究旅程', '材料档案', '项目邀请', '成果申请',
-      '通知',
+      '首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请',
+      '消息中心', '内容资源',
     ])
+    expect(student.find((item) => item.key === 'content')?.children).toEqual(['cases', 'competitions', 'announcements'])
   })
 
   it('surfaces the notification center in the student top navigation', () => {
     expect(studentTopNavigation(8).find((item) => item.key === 'notifications')).toEqual({
-      key: 'notifications', label: '通知', to: '/student/notifications', icon: 'bell',
+      key: 'notifications', label: '消息中心', to: '/student/notifications', icon: 'bell',
     })
   })
 
   it('keeps project-dependent student entries distinct before a project exists', () => {
-    const entries = studentTopNavigation(null)
+    const entries = primaryNavigation('student')
     expect(entries.find((item) => item.key === 'projects')?.to).toBe('/student/projects')
     expect(entries.find((item) => item.key === 'journey')?.to).toBe('/student/projects?focus=journey')
-    expect(entries.find((item) => item.key === 'materials')?.to).toBe('/student/projects?focus=materials')
+    expect(entries.find((item) => item.key === 'materials')).toBeUndefined()
     expect(entries.find((item) => item.key === 'public-applications')?.to).toBe('/student/projects?focus=apply')
     expect(new Set(entries.map((item) => item.to)).size).toBe(entries.length)
+  })
+
+  it('builds real project destinations when a primary project exists', () => {
+    const entries = primaryNavigation('student', 8)
+    expect(entries.find((item) => item.key === 'projects')?.to).toBe('/student/projects')
+    expect(entries.find((item) => item.key === 'journey')?.to).toBe('/student/projects/8/map')
+    expect(entries.find((item) => item.key === 'materials')).toBeUndefined()
+    expect(entries.find((item) => item.key === 'public-applications')?.to).toBe('/student/public-applications?projectId=8')
   })
 
   it('exposes content child pages from the same sidebar section', () => {
@@ -56,19 +65,30 @@ describe('primary navigation registry', () => {
     }
   })
 
-  it('keeps a primary section active for nested routes without creating duplicate entries', () => {
-    const student = primaryNavigation('student')
+  it('activates only the matching student project surface', () => {
+    const student = primaryNavigation('student', 8)
     const projects = student.find((item) => item.key === 'projects')!
+    const journey = student.find((item) => item.key === 'journey')!
+    const applications = student.find((item) => item.key === 'public-applications')!
     const settings = primaryNavigation('platform_admin').find((item) => item.key === 'settings')!
 
-    expect(isNavigationActive('student', projects, '/student/projects/8/map')).toBe(true)
+    expect(isNavigationActive('student', projects, '/student/projects/8')).toBe(true)
+    expect(isNavigationActive('student', projects, '/student/projects/8/map')).toBe(false)
+    expect(isNavigationActive('student', journey, '/student/projects/8/map')).toBe(true)
+    expect(isNavigationActive('student', journey, '/student/projects/8/tasks/21')).toBe(true)
+    expect(isNavigationActive('student', journey, '/student/projects', { focus: 'journey' })).toBe(true)
+    expect(isNavigationActive('student', journey, '/student/projects/8/materials')).toBe(true)
+    expect(isNavigationActive('student', journey, '/student/projects/8/map')).toBe(true)
+    expect(isNavigationActive('student', applications, '/student/public-applications', { projectId: 8 })).toBe(true)
+    expect(isNavigationActive('student', applications, '/student/projects', { focus: 'apply' })).toBe(true)
     expect(isNavigationActive('platform_admin', settings, '/platform/settings')).toBe(true)
   })
 
-  it('keeps project work pages under the same primary project section', () => {
-    const projects = primaryNavigation('student').find((item) => item.key === 'projects')!
-    expect(isNavigationActive('student', projects, '/student/projects/8')).toBe(true)
-    expect(isNavigationActive('student', projects, '/student/projects/8/map')).toBe(true)
+  it('uses focus query destinations when no student project exists', () => {
+    const student = primaryNavigation('student')
+    const journey = student.find((item) => item.key === 'journey')!
+    expect(isNavigationActive('student', journey, '/student/projects', { focus: 'journey' })).toBe(true)
+    expect(isNavigationActive('student', journey, '/student/projects', { focus: 'materials' })).toBe(true)
   })
 
   it('does not register project detail tabs as duplicate global entries', () => {

@@ -12,7 +12,7 @@ import { student } from '../../stores/student'
 import { projectJourneySummary, selectHomeTask, selectPriorityTask, studentPrimaryAction } from '../../stores/studentApiModel'
 
 const feedback = ref<FeedbackState | null>(null)
-const loading = ref(false)
+const loading = ref(true)
 const project = computed(() => {
   const primary = student.state.projects.find((item) => item.is_primary)
   if (primary) return primary
@@ -55,7 +55,10 @@ onMounted(load)
   <div class="page student-home-page">
     <PageHeader eyebrow="当前项目" title="继续当前研究" description="从当前项目的待办开始，查看进度、材料状态和下一项可完成任务。" />
     <FeedbackBanner v-model="feedback" @action="load" />
-    <div v-if="loading" class="loading-state" role="status">正在读取你的研究进度…</div>
+    <section v-if="!project && loading" class="student-home-skeleton" role="status" aria-label="正在读取当前项目">
+      <div class="student-home-skeleton__hero"><i /><strong /><span /><span /></div>
+      <div class="student-home-skeleton__card"><i /><strong /><span /><span /><b /></div>
+    </section>
     <EmptyState v-else-if="!project" title="先创建一个研究项目" description="已有课题可以直接创建；还没有课题也可以从一个观察开始，让 AI 一步步帮你找到研究方向。"><RouterLink class="primary-button" :to="`${studentProjectsPath()}?create=1`">创建项目</RouterLink></EmptyState>
     <template v-else>
       <div class="pilot-hero-grid">
@@ -67,7 +70,7 @@ onMounted(load)
         </section>
         <section class="pilot-card pilot-next-card">
           <div class="pilot-next-card__kicker"><span>优先处理</span><StatusTag :status="next?.status ?? 'draft'" /></div>
-          <div class="pilot-next-card__title">{{ next?.title ?? '查看研究旅程' }}</div>
+          <div class="pilot-next-card__title">{{ next?.title ?? '查看研究进程' }}</div>
           <div class="pilot-next-card__text">{{ next?.description || '查看当前章节，完成下一项可执行任务。' }}</div>
           <div class="pilot-progress-row"><span>章节进度</span><strong>{{ currentChapter?.done ?? 0 }} / {{ currentChapter?.total ?? 0 }}</strong></div>
           <div class="pilot-progress-track" aria-hidden="true"><i :style="{ width: `${currentChapter?.percent ?? 0}%` }" /></div>
@@ -85,9 +88,9 @@ onMounted(load)
       </section>
       <div class="pilot-two-col student-home-support">
         <section class="pilot-card pilot-list-card">
-          <div class="student-support-head"><div><h2>最近材料</h2><p>按研究章节自动归档</p></div><RouterLink class="secondary-button pilot-subtle-action" :to="studentProjectRoute(project.id, 'materials')">查看全部</RouterLink></div>
+          <div class="student-support-head"><div><h2>最近材料</h2><p>按研究章节自动归档</p></div><RouterLink class="secondary-button pilot-subtle-action" :to="studentProjectRoute(project.id, 'map')">进入研究进程</RouterLink></div>
           <div v-if="recentMaterials.length"><div v-for="item in recentMaterials" :key="item.material.id" class="pilot-list-row"><div class="pilot-list-row__main"><div class="pilot-list-row__title">{{ item.material.title }}</div><div class="pilot-list-row__meta">{{ item.material.report_section || '待映射章节' }} · {{ item.latest ? item.latest.created_at.slice(0, 10) : '尚无版本' }}</div></div><StatusTag :status="item.material.status" /></div></div>
-          <EmptyState v-else title="还没有材料记录" description="完成研究旅程中的第一项任务后，材料会自动出现在这里。" compact />
+          <EmptyState v-else title="还没有材料记录" description="完成研究进程中的第一项任务后，材料会自动出现在这里。" compact />
         </section>
         <section class="pilot-card pilot-content-card student-reminder"><h2>研究小提醒</h2><div class="student-reminder__callout"><strong>先问“为什么”，再急着找答案。</strong><span>一个清晰的问题，比一堆没有方向的资料更有价值。</span></div><RouterLink class="secondary-button" :to="reminderLocation">请 AI 帮我想一想</RouterLink></section>
       </div>
@@ -107,4 +110,15 @@ onMounted(load)
 .student-reminder__callout { margin: 16px 0; padding: var(--space-4); border-left: 3px solid var(--moss); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: var(--sage-soft); color: var(--muted); font-size: 13px; }
 .student-reminder__callout strong, .student-reminder__callout span { display: block; }
 .student-reminder__callout strong { margin-bottom: 4px; color: var(--moss-dark); }
+.student-home-skeleton { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr); gap: var(--space-4); }
+.student-home-skeleton__hero, .student-home-skeleton__card { display: grid; align-content: start; gap: 14px; min-height: 270px; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper); box-shadow: var(--shadow-soft); }
+.student-home-skeleton__hero { background: var(--moss-dark); }
+.student-home-skeleton i, .student-home-skeleton strong, .student-home-skeleton span, .student-home-skeleton b { display: block; height: 12px; border-radius: 999px; background: var(--paper-muted); }
+.student-home-skeleton__hero i { width: 96px; background: rgba(255,255,255,.28); }
+.student-home-skeleton__hero strong { width: 78%; height: 48px; margin-top: 20px; background: rgba(255,255,255,.82); }
+.student-home-skeleton__hero span { width: 62%; background: rgba(255,255,255,.28); }
+.student-home-skeleton__card strong { width: 70%; height: 28px; margin-top: 12px; }
+.student-home-skeleton__card span { width: 86%; }
+.student-home-skeleton__card b { width: 100%; height: 38px; margin-top: auto; }
+@media (max-width: 760px) { .student-home-skeleton { grid-template-columns: 1fr; } }
 </style>
