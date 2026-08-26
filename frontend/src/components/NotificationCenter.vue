@@ -7,6 +7,7 @@ import EmptyState from './EmptyState.vue'
 import FeedbackBanner from './FeedbackBanner.vue'
 import PageHeader from './PageHeader.vue'
 import { makeFeedback, type FeedbackState } from '../stores/feedbackModel'
+import { personalNotifications } from '../stores/notificationModel'
 
 const props = defineProps<{ role: 'student' | 'teacher' }>()
 const router = useRouter()
@@ -19,20 +20,23 @@ const busy = ref(false)
 const copy = computed(() => props.role === 'teacher'
   ? {
       title: '教师通知中心',
-      description: '查看项目池、材料审核和学校公告的重要变化。',
+      description: '查看与你负责项目有关的审核、项目池和成员动态；学校公告请到内容资源查看。',
       loading: '正在读取教师通知…',
-      empty: '新的项目池和审核动态会显示在这里。',
-      success: '已将全部教师通知标记为已读。',
+      empty: '新的项目池、审核和成员动态会显示在这里。',
+      success: '已将全部个人消息标记为已读。',
+      scopeHint: '这里只显示与你负责项目有关的个人动态；学校公告请到内容资源查看。',
     }
   : {
-      title: '通知中心',
-      description: '查看系统、学校、教师反馈和项目状态变化；需要处理的邀请进入项目邀请。',
+      title: '消息中心',
+      description: '查看与你有关的审核结果、项目邀请、成员变化和成果状态；平台公告与学校通知请到内容资源查看。',
       loading: '正在读取通知…',
-      empty: '新的学校通知和教师反馈会显示在这里。',
-      success: '已将全部通知标记为已读。',
+      empty: '新的审核、邀请、成员和成果动态会显示在这里。',
+      success: '已将全部个人消息标记为已读。',
+      scopeHint: '这里只显示需要你处理或与你有关的个人动态；平台公告与学校通知请到内容资源查看。',
     })
-const visible = computed(() => unreadOnly.value ? notifications.value.filter((item) => !item.is_read) : notifications.value)
-const unreadCount = computed(() => notifications.value.filter((item) => !item.is_read).length)
+const personal = computed(() => personalNotifications(notifications.value))
+const visible = computed(() => unreadOnly.value ? personal.value.filter((item) => !item.is_read) : personal.value)
+const unreadCount = computed(() => personal.value.filter((item) => !item.is_read).length)
 function emitNotificationsChanged() { window.dispatchEvent(new Event('notifications:changed')) }
 
 async function load() {
@@ -77,7 +81,7 @@ function notificationKind(kind: string) {
     school_announcement: '学校通知', platform_announcement: '平台公告', case_published: '成果展示', case_rejected: '成果展示',
     case_consent_required: '成果申请', case_pending_platform: '成果申请',
   }
-  return labels[kind] ?? '工作台通知'
+  return labels[kind] ?? '工作台消息'
 }
 
 onMounted(() => { void load() })
@@ -85,14 +89,15 @@ onMounted(() => { void load() })
 
 <template>
   <div class="page notification-center-page" :class="`notification-center-page--${role}`">
-    <PageHeader eyebrow="通知" :title="copy.title" :description="copy.description">
+    <PageHeader eyebrow="消息" :title="copy.title" :description="copy.description">
       <template #actions><button class="secondary-button" type="button" :disabled="busy || !unreadCount" @click="void markAllRead()">全部已读</button></template>
     </PageHeader>
     <FeedbackBanner v-model="feedback" @action="() => void load()" />
     <p v-if="error && !feedback" class="form-error" role="alert">{{ error }}</p>
     <p v-if="loading" class="loading-state" role="status">{{ copy.loading }}</p>
-    <div class="notification-toolbar" aria-label="通知筛选">
-      <button type="button" class="notification-filter" :class="{ active: !unreadOnly }" @click="unreadOnly = false">全部 <span>{{ notifications.length }}</span></button>
+    <p class="notification-scope-note">{{ copy.scopeHint }}</p>
+    <div class="notification-toolbar" aria-label="消息筛选">
+      <button type="button" class="notification-filter" :class="{ active: !unreadOnly }" @click="unreadOnly = false">全部 <span>{{ personal.length }}</span></button>
       <button type="button" class="notification-filter" :class="{ active: unreadOnly }" @click="unreadOnly = true">未读 <span>{{ unreadCount }}</span></button>
     </div>
     <section v-if="!loading && visible.length" class="paper-card notification-list">
@@ -107,12 +112,13 @@ onMounted(() => { void load() })
         <span class="notification-row__state">{{ item.is_read ? '已读' : '未读' }}</span>
       </button>
     </section>
-    <EmptyState v-else-if="!loading" title="暂无通知" :description="unreadOnly ? '当前没有未读通知。' : copy.empty" />
+    <EmptyState v-else-if="!loading" title="暂无消息" :description="unreadOnly ? '当前没有未读消息。' : copy.empty" />
   </div>
 </template>
 
 <style scoped>
 .notification-toolbar { display: flex; gap: 6px; margin-bottom: 16px; }
+.notification-scope-note { margin: -7px 0 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .notification-filter { min-height: 34px; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--muted); cursor: pointer; font-size: 12px; }
 .notification-filter.active { border-color: var(--moss); background: var(--sage-soft); color: var(--moss-dark); font-weight: 700; }
 .notification-filter span { margin-left: 4px; font-size: 11px; }

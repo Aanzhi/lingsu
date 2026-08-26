@@ -35,7 +35,7 @@ const headings = computed<Record<string, [string, string, string]>>(() => ({
   home: ['概览', '平台概览', '查看学校授权、项目活跃度和服务状态，具体管理操作进入对应工作页。'],
   schools: ['学校空间', '学校空间', '管理学校空间和授权状态；进入详情查看数据，开关只控制授权。'],
   competitions: ['运营内容', '赛事管理', '创建、发布或撤回面向师生的赛事信息。'],
-  announcements: ['运营内容', '系统公告', '发布平台公告，并让学校端在通知中心查看。'],
+  announcements: ['运营内容', '系统公告', '发布平台公告，并让学校端在内容资源中查看。'],
 }))
 const heading = computed(() => headings.value[surface.value] ?? headings.value.home)
 const valid = computed(() => platformStore.state.schools.filter((item) => item.is_authorized).length)

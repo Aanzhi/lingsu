@@ -37,11 +37,12 @@ const heading = computed(() => surface.value === 'cases'
   ? ['案例库', '案例库', isTeacher.value ? '浏览已公开案例，为指导和选题提供参考。' : '浏览已公开的学生项目案例，按研究方向参考过程和成果。']
   : surface.value === 'competitions'
     ? ['赛事信息', '赛事信息', isTeacher.value ? '查看平台赛事信息，为学生提供参赛建议。' : '查看平台发布的赛事和截止时间，判断当前项目是否适合参加。']
-    : [isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '学生公告' : '平台公告', '查看平台公告和学校通知，优先处理与项目进度相关的消息。'])
+    : [isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '浏览学校与平台发布的公开公告；需要处理的项目动态请进入教师通知中心。' : '浏览平台发布的公告和学校公开通知；需要处理的个人事项请进入消息中心。'])
 const filteredCases = computed(() => cases.value.filter((item) => (
   item.status === 'published' || (isTeacher.value && item.status === 'pending_teacher')
 ) && `${item.project_title}${item.tags.join('')}${item.discipline}${item.application_scene}`.toLowerCase().includes(appliedKeyword.value.toLowerCase())))
 const filteredCompetitions = computed(() => competitions.value.filter((item) => `${item.title}${item.description}`.toLowerCase().includes(appliedKeyword.value.toLowerCase())))
+const filteredNotices = computed(() => notices.value.filter((item) => `${item.title}${item.body}`.toLowerCase().includes(appliedKeyword.value.toLowerCase())))
 
 function runSearch() {
   appliedKeyword.value = keyword.value.trim()
@@ -127,8 +128,9 @@ watch(surface, () => {
     <PageHeader :eyebrow="heading[0]" :title="heading[1]" :description="heading[2]" />
     <FeedbackBanner v-model="feedback" @action="load" />
     <p v-if="error && !feedback" class="form-error" role="alert">{{ error }}</p>
-    <div v-if="surface !== 'announcements'" class="filter-bar demo-content-filter">
-      <el-icon><Search /></el-icon><input v-model="keyword" class="input" type="search" aria-label="搜索内容" :placeholder="surface === 'cases' ? '搜索案例、学科或关键词' : '搜索赛事名称'" @keydown.enter="runSearch">
+    <p v-if="surface === 'announcements'" class="content-scope-note">这里是公开内容浏览区；需要处理的个人动态请进入消息中心。</p>
+    <div class="filter-bar demo-content-filter">
+      <el-icon><Search /></el-icon><input v-model="keyword" class="input" type="search" aria-label="搜索内容" :placeholder="surface === 'cases' ? '搜索案例、学科或关键词' : surface === 'competitions' ? '搜索赛事名称' : '搜索公告标题或内容'" @keydown.enter="runSearch">
       <button class="secondary-button" type="button" @click="runSearch">筛选</button>
     </div>
 
@@ -148,8 +150,8 @@ watch(surface, () => {
       <EmptyState v-if="!loading && !filteredCompetitions.length" title="暂无赛事" />
     </div>
     <div v-else class="demo-content-grid">
-      <article v-for="item in notices.slice(0, 3)" :key="item.id" class="demo-content-card paper-card"><p class="eyebrow">{{ item.audience === 'all' ? '平台公告' : '本校公告' }}</p><h3>{{ item.title }}</h3><p class="muted">{{ item.body }}</p><p class="demo-content-meta">{{ item.published_at?.slice(0, 10) }}</p></article>
-      <EmptyState v-if="!loading && !notices.length" :title="isTeacher ? '暂无学生公告' : '暂无平台公告'" />
+      <article v-for="item in filteredNotices" :key="item.id" class="demo-content-card paper-card"><p class="eyebrow">{{ item.audience === 'all' ? '平台公告' : '本校公告' }}</p><h3>{{ item.title }}</h3><p class="muted">{{ item.body }}</p><p class="demo-content-meta">{{ item.published_at?.slice(0, 10) }}</p></article>
+      <EmptyState v-if="!loading && !filteredNotices.length" :title="appliedKeyword ? '没有匹配的公告' : (isTeacher ? '暂无学生公告' : '暂无平台公告')" />
     </div>
 
     <el-dialog :model-value="Boolean(rejecting)" title="驳回公开申请" width="520px" @close="rejecting = null">
@@ -167,6 +169,7 @@ watch(surface, () => {
 
 <style scoped>
 .demo-content-filter { position: relative; margin-bottom: 20px; }
+.content-scope-note { margin: -7px 0 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .demo-content-filter > .el-icon { position: absolute; z-index: 1; left: 13px; top: 50%; transform: translateY(-50%); color: var(--muted); }
 .demo-content-filter .input { padding-left: 36px; }
 .demo-content-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }

@@ -5,6 +5,7 @@ import { RouterLink, useRouter } from 'vue-router'
 
 import { errorMessage, getNotifications, markAllNotificationsRead, markNotificationRead, type AppNotification } from '../api'
 import { auth } from '../stores/auth'
+import { personalNotifications } from '../stores/notificationModel'
 import ChangePasswordDialog from './ChangePasswordDialog.vue'
 import SchoolBadge from './SchoolBadge.vue'
 
@@ -20,7 +21,9 @@ const notificationError = ref('')
 const notifications = ref<AppNotification[]>([])
 const notificationsLoaded = ref(false)
 const passwordOpen = ref(false)
-const unreadCount = computed(() => notifications.value.filter((item) => !item.is_read).length)
+const personal = computed(() => personalNotifications(notifications.value))
+const unreadCount = computed(() => personal.value.filter((item) => !item.is_read).length)
+const notificationTitle = computed(() => props.roleTone === 'student' ? '消息中心' : props.roleTone === 'teacher' ? '教师消息' : '工作台消息')
 const homePath = computed(() => {
   const role = auth.user.value?.role
   if (!role) return '/login'
@@ -96,7 +99,7 @@ function notificationKind(kind: string) {
     school_announcement: '学校通知', platform_announcement: '平台公告', case_published: '成果展示', case_rejected: '成果展示',
     case_consent_required: '成果申请', case_pending_platform: '成果申请',
   }
-  return labels[kind] ?? '工作台通知'
+  return labels[kind] ?? '工作台消息'
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -128,18 +131,18 @@ onBeforeUnmount(() => {
       <SchoolBadge class="topbar-school" />
       <RouterLink v-if="props.homeMode" class="topbar-workspace-link" :to="workspacePath">进入工作台</RouterLink>
       <div class="topbar-popover-anchor">
-        <button class="icon-button" type="button" aria-label="通知" :aria-expanded="notificationsOpen" @click="void toggleNotifications()"><el-icon><Bell /></el-icon><i v-if="unreadCount" /></button>
-        <section v-if="notificationsOpen" class="topbar-popover notification-popover" role="dialog" aria-modal="false" aria-label="通知中心">
+        <button class="icon-button" type="button" aria-label="消息" :aria-expanded="notificationsOpen" @click="void toggleNotifications()"><el-icon><Bell /></el-icon><i v-if="unreadCount" /></button>
+        <section v-if="notificationsOpen" class="topbar-popover notification-popover" role="dialog" aria-modal="false" :aria-label="notificationTitle">
           <header>
-            <strong>通知中心</strong>
+            <strong>{{ notificationTitle }}</strong>
             <button class="mark-all" type="button" :disabled="notificationBusy || !unreadCount" @click="void markAllRead()">全部已读</button>
-            <button type="button" aria-label="关闭通知" @click="notificationsOpen = false">×</button>
+            <button type="button" aria-label="关闭消息" @click="notificationsOpen = false">×</button>
           </header>
-          <p v-if="notificationLoading" class="popover-muted">正在读取通知…</p>
+          <p v-if="notificationLoading" class="popover-muted">正在读取消息…</p>
           <p v-else-if="notificationError" class="popover-error">{{ notificationError }}</p>
-          <p v-else-if="!notifications.length" class="popover-muted">暂无新通知</p>
+          <p v-else-if="!personal.length" class="popover-muted">暂无新的个人消息</p>
           <template v-else>
-            <button v-for="item in notifications.slice(0, 6)" :key="item.id" class="notification-item" :class="{ unread: !item.is_read }" type="button" @click="void openNotification(item)">
+            <button v-for="item in personal.slice(0, 6)" :key="item.id" class="notification-item" :class="{ unread: !item.is_read }" type="button" @click="void openNotification(item)">
               <span>
                 <small class="note-kind">{{ notificationKind(item.kind) }}</small>
                 <strong>{{ item.title }}</strong>
@@ -148,7 +151,7 @@ onBeforeUnmount(() => {
               <el-icon v-if="item.is_read"><CircleCheck /></el-icon>
             </button>
             <footer class="notification-popover__footer">
-              <button type="button" class="text-link" @click="openNotificationCenter">查看全部通知</button>
+              <button type="button" class="text-link" @click="openNotificationCenter">查看全部消息</button>
             </footer>
           </template>
         </section>

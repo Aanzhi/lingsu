@@ -126,7 +126,7 @@ export function utilityNavigation(role: NavigationRole, primaryProject: number |
   }
   if (role === 'teacher') return [
     { key: 'members', label: '成员确认', to: '/teacher/members', icon: 'members' },
-    { key: 'notifications', label: '通知中心', to: '/teacher/notifications', icon: 'bell' },
+    { key: 'notifications', label: '消息中心', to: '/teacher/notifications', icon: 'bell' },
   ]
   return []
 }

@@ -24,12 +24,15 @@ describe('page copy and entry contracts', () => {
     const entry = source('./pages/public/EntryPage.vue')
     const register = source('./pages/public/RegisterPage.vue')
     const platformLogin = source('./pages/public/PlatformLoginPage.vue')
+    const notifications = source('./components/NotificationCenter.vue')
 
     expect(entry).toContain('id="platform"')
     expect(entry).not.toContain('to="/login">查看平台介绍</')
     expect(register).toContain('route.query.role')
     expect(register).not.toContain('role-segment')
     expect(platformLogin.match(/to="\/login"/g)?.length ?? 0).toBe(1)
+    expect(notifications).toContain("title: '消息中心'")
+    expect(notifications).toContain('个人动态')
   })
 
   it('does not keep known no-op or duplicate page controls', () => {

@@ -24,8 +24,8 @@ describe('AppTopbar notification center', () => {
   })
 
   it('keeps the popover compact and bounded to the shared notification list', () => {
-    expect(source).toContain('notifications.slice(0, 6)')
-    expect(source).toContain('查看全部通知')
+    expect(source).toContain('personal.slice(0, 6)')
+    expect(source).toContain('查看全部消息')
     expect(source).toContain('全部已读')
   })
 })
