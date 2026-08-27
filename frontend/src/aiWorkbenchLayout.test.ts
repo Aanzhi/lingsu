@@ -11,6 +11,8 @@ describe('simple AI workbench layout', () => {
     expect(page).toContain('ai-workbench-mode-region')
     expect(page).not.toContain('ai-workbench-agent-region')
     expect(tabs).toContain('showAgentRail')
+    expect(tabs).toContain('showModeDescriptions')
+    expect(tabs).toContain('v-if="props.showModeDescriptions"')
     expect(tabs).toContain('开题')
     expect(tabs).toContain('研究')
     expect(tabs).toContain('成果表达')
@@ -36,6 +38,12 @@ describe('simple AI workbench layout', () => {
     expect(page).not.toContain('ai-workbench-context-strip')
     expect(page).not.toContain('先选择研究方式')
     expect(page).not.toContain('填写后可让 AI 工具更准确')
+  })
+
+  it('does not duplicate project context between the header and composer', () => {
+    expect(page).not.toContain(':project-label="workspaceContextLabel"')
+    expect(page).not.toContain('ai-workbench-mode-heading')
+    expect(page).toContain('class="ai-workbench-context-pill"')
   })
 
   it('places the new-state mode selector before one composer and active chat before its composer', () => {

@@ -59,6 +59,15 @@ describe('AI workbench information architecture', () => {
     expect(source).toContain('workspaceContextLabel')
   })
 
+  it('keeps the new conversation hierarchy single-layered', () => {
+    expect(source).not.toContain('ai-workbench-mode-heading')
+    expect(source).not.toContain('modeDescription')
+    expect(source).not.toContain('aiPageDescription')
+    expect(source).not.toContain('围绕当前项目直接聊天，处理任务、材料和研究推进')
+    expect(source).toContain(':show-mode-descriptions="false"')
+    expect(source).not.toContain(':project-label="workspaceContextLabel"')
+  })
+
   it('uses a compact result surface only for confirmed writes', () => {
     expect(source).toContain('AIResultCard')
     expect(source).toContain('createProjectFromOpening')

@@ -112,16 +112,6 @@ const workspaceContextLabel = computed(() => {
   const modeLabel = workbenchMode.value === 'defense' ? '成果表达' : '研究'
   return currentProject.value ? `当前项目 · ${currentProject.value.title}` : `${modeLabel} · 尚未选择项目`
 })
-const aiPageDescription = computed(() => {
-  if (workbenchMode.value === 'opening') return '把观察和想法整理成开题草稿，确认后再创建项目。'
-  if (workbenchMode.value === 'defense') return '围绕已完成成果准备摘要、展示提纲和答辩表达。'
-  return currentProject.value ? '围绕当前项目直接聊天，处理任务、材料和研究推进。' : '选择一个项目后，灵思 AI 才会进入项目研究语境。'
-})
-const modeDescription = computed(() => {
-  if (workbenchMode.value === 'opening') return '不绑定项目，从问题和观察开始。'
-  if (workbenchMode.value === 'defense') return '绑定项目，把已完成内容整理成可表达的成果。'
-  return '绑定当前项目，直接讨论下一项研究工作。'
-})
 const composerDisabled = computed(() => loading.value || conversationLoading.value || sending.value || Boolean(current.value?.is_archived) || !currentAgent.value || (projectRequired.value && !currentProject.value))
 const composerCanSend = computed(() => Boolean(draft.value.trim() && !composerDisabled.value))
 const pendingMaterialMessage = computed(() => messages.value.find((message) => message.id === pendingMaterialMessageId.value) || null)
@@ -684,9 +674,18 @@ async function bootstrapWorkbench() {
   loading.value = true
   error.value = ''
   try {
-    await Promise.all([loadProjectsResource(), loadAgentsResource()])
+    const projectsPromise = loadProjectsResource()
+    const agentsPromise = loadAgentsResource()
+    await projectsPromise
+    // The shell and the direct input can render as soon as project context is
+    // known. Agent templates continue loading in the background and only
+    // affect send availability, so a slow template request does not blank the
+    // workbench.
+    loading.value = false
     normalizeSelectedAgent()
     await loadConversations()
+    await agentsPromise
+    normalizeSelectedAgent()
   } catch (reason) {
     error.value = errorMessage(reason, '工作台资源加载失败，请重试。')
   } finally {
@@ -742,7 +741,6 @@ onBeforeUnmount(() => {
           <div class="ai-workbench-heading">
             <span class="eyebrow">研究工作台</span>
             <h1 id="ai-workbench-title">灵思 AI</h1>
-            <p>{{ aiPageDescription }}</p>
           </div>
           <div class="ai-workbench-header__actions">
             <span class="ai-workbench-context-pill">{{ workspaceContextLabel }}</span>
@@ -751,15 +749,11 @@ onBeforeUnmount(() => {
         </header>
 
         <section class="ai-workbench-mode-region" aria-label="灵思 AI 模式">
-          <div class="ai-workbench-mode-heading">
-            <span class="eyebrow">工作模式</span>
-            <p>{{ modeDescription }}</p>
-          </div>
-          <AIModeTabs :model-value="workbenchMode" :disabled="sending || agentsLoading" :show-agent-rail="false" @update:model-value="selectWorkbenchMode" />
+          <AIModeTabs :model-value="workbenchMode" :disabled="sending" :show-agent-rail="false" :show-mode-descriptions="false" @update:model-value="selectWorkbenchMode" />
         </section>
 
-        <section v-if="loading || agentsLoading || projectsLoading" class="ai-workbench-skeleton" role="status" aria-label="正在准备灵思 AI"><i /><i /><i /></section>
-        <section v-else-if="(projectRequired && !currentProject) || !currentAgent" class="ai-workbench-context-note" role="status">
+        <section v-if="loading || projectsLoading" class="ai-workbench-skeleton" role="status" aria-label="正在准备灵思 AI"><i /><i /><i /></section>
+        <section v-else-if="(projectRequired && !currentProject) || (!agentsLoading && !currentAgent)" class="ai-workbench-context-note" role="status">
           <span v-if="projectRequired && !currentProject">研究和成果表达默认绑定你的主项目，请先在“我的项目”创建或设置主项目。</span>
           <span v-else>当前模式暂未配置 AI 助手，请联系平台管理员。</span>
           <button v-if="projectRequired && !currentProject" class="secondary-button" type="button" @click="chooseProject">去我的项目</button>
@@ -820,7 +814,6 @@ onBeforeUnmount(() => {
       <AIWorkbenchComposer
         :draft="draft"
         :mode="workbenchMode"
-        :project-label="workspaceContextLabel"
         :disabled="composerDisabled"
         :can-send="composerCanSend"
         :sending="sending"
@@ -862,7 +855,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .ai-center-page { display: flex; width: 100%; max-width: var(--content-max); min-width: 0; min-height: calc(100vh - var(--topbar-height)); flex-direction: column; box-sizing: border-box; margin: 0 auto; padding: 28px 0 24px; overflow: visible; }
-.ai-workbench-page--new { min-height: 0; }
+.ai-workbench-page--new { min-height: calc(100vh - var(--topbar-height) - 52px); }
 .ai-workbench-new-state { display: flex; min-width: 0; min-height: 0; flex: 0 0 auto; flex-direction: column; }
 .ai-workbench-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
 .ai-workbench-heading { min-width: 0; }
@@ -873,10 +866,7 @@ onBeforeUnmount(() => {
 .text-button { min-height: 32px; padding: 6px 10px; border: 1px solid var(--line-dark); border-radius: var(--radius-sm); background: var(--paper); color: var(--moss-dark); font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 .text-button:hover:not(:disabled), .text-button:focus-visible { border-color: var(--moss); background: var(--sage-soft); }
 .text-button:disabled { cursor: not-allowed; opacity: .48; }
-.ai-workbench-mode-region { display: grid; gap: 10px; width: min(100%, 900px); margin: 22px auto 0; }
-.ai-workbench-mode-heading { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.ai-workbench-mode-heading .eyebrow { flex: 0 0 auto; margin: 0; }
-.ai-workbench-mode-heading p { min-width: 0; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.ai-workbench-mode-region { width: min(100%, 900px); margin: 22px auto 0; }
 .ai-workbench-skeleton { display: grid; gap: 10px; width: min(100%, 900px); margin: 28px auto 0; }
 .ai-workbench-skeleton i { display: block; height: 10px; border-radius: 999px; background: var(--paper-muted); animation: ai-workbench-pulse 1.2s ease-in-out infinite alternate; }
 .ai-workbench-skeleton i:nth-child(1) { width: 42%; }.ai-workbench-skeleton i:nth-child(2) { width: 68%; animation-delay: .12s; }.ai-workbench-skeleton i:nth-child(3) { width: 54%; animation-delay: .24s; }
@@ -903,7 +893,8 @@ onBeforeUnmount(() => {
 .ai-stream-loading { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
 .ai-loading-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); animation: ai-workbench-pulse 1s ease-in-out infinite alternate; }
 .jump-latest { justify-self: center; border: 1px solid var(--line-dark); border-radius: 999px; padding: 6px 11px; background: var(--paper); color: var(--moss-dark); font: inherit; font-size: 10px; cursor: pointer; }
-.ai-workbench-composer-host { width: min(100%, 900px); min-width: 0; margin: 14px auto 0; }
+.ai-workbench-composer-host { width: min(100%, 900px); min-width: 0; margin: 24px auto 0; }
+.ai-workbench-page--new .ai-workbench-composer-host { margin-top: clamp(48px, 8vh, 88px); }
 .ai-workbench-page--active .ai-workbench-composer-host { position: sticky; bottom: 0; z-index: 2; padding-top: 8px; background: linear-gradient(to bottom, rgba(243, 244, 240, 0), var(--ivory) 26%); }
 .ai-center-page :deep(.ai-workbench-composer) { width: 100%; box-sizing: border-box; border-color: var(--line-dark); box-shadow: 0 12px 30px rgba(42, 70, 47, .09); }
 .ai-center-page :deep(.ai-workbench-composer__textarea) { min-height: 78px; }
@@ -914,5 +905,5 @@ onBeforeUnmount(() => {
 .primary-button, .secondary-button { min-height: 34px; padding: 7px 13px; border-radius: var(--radius-sm); font: inherit; font-size: 11px; cursor: pointer; }.primary-button { border: 1px solid var(--moss-dark); background: var(--moss); color: #fff; font-weight: 700; }.primary-button:hover:not(:disabled), .primary-button:focus-visible { background: var(--moss-dark); }.secondary-button { border: 1px solid var(--line-dark); background: var(--paper); color: var(--moss-dark); }.secondary-button:hover:not(:disabled), .secondary-button:focus-visible { border-color: var(--moss); background: var(--paper-soft); }.primary-button:disabled, .secondary-button:disabled { cursor: wait; opacity: .55; }
 .ai-confirm-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(32, 47, 38, .22); }.ai-material-dialog { display: grid; gap: 14px; width: min(100%, 480px); box-sizing: border-box; padding: 22px; border: 1px solid var(--line-dark); border-radius: var(--radius-md); background: var(--paper); box-shadow: var(--shadow-hover); }.ai-material-dialog header, .ai-material-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.ai-material-dialog h2 { margin: 4px 0 0; color: var(--ink); font: 700 22px/1.2 var(--sans); }.ai-material-dialog > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }.ai-dialog-close { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }.ai-dialog-close:hover, .ai-dialog-close:focus-visible { background: var(--paper-soft); color: var(--ink); }.ai-material-target { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }.ai-material-target select { width: 100%; box-sizing: border-box; border: 1px solid var(--line-dark); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--paper-soft); color: var(--ink); font: inherit; font-size: 12px; }.ai-dialog-error { padding: 9px 10px; border-radius: var(--radius-sm); background: #fff7f4; color: #8e4438; font-size: 11px; }.ai-dialog-loading, .ai-dialog-empty { color: var(--muted); font-size: 11px; }.ai-material-dialog footer { justify-content: flex-end; }
 @media (max-width: 1279px) { .ai-center-page { padding-inline: 20px; } }
-@media (max-width: 720px) { .ai-workbench-header, .ai-workbench-mode-heading { align-items: flex-start; flex-direction: column; }.ai-workbench-header__actions { align-items: flex-start; justify-content: flex-start; flex-wrap: wrap; padding-top: 0; }.ai-workbench-context-pill { max-width: 100%; }.ai-workbench-context-note { align-items: stretch; flex-direction: column; }.ai-message.user { width: 86%; }.ai-confirm-backdrop { padding: 14px; } }
+@media (max-width: 720px) { .ai-workbench-header { align-items: flex-start; flex-direction: column; }.ai-workbench-header__actions { align-items: flex-start; justify-content: flex-start; flex-wrap: wrap; padding-top: 0; }.ai-workbench-context-pill { max-width: 100%; }.ai-workbench-context-note { align-items: stretch; flex-direction: column; }.ai-message.user { width: 86%; }.ai-confirm-backdrop { padding: 14px; } }
 </style>

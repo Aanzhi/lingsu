@@ -11,10 +11,12 @@ const props = withDefaults(defineProps<{
   modes?: AIWorkspaceMode[]
   showAgentRail?: boolean
   showMoreAgents?: boolean
+  showModeDescriptions?: boolean
 }>(), {
   agents: () => [],
   showAgentRail: true,
   showMoreAgents: true,
+  showModeDescriptions: true,
 })
 
 const emit = defineEmits<{
@@ -48,7 +50,7 @@ function goalLabel(agent: AIAgent) {
 
 <template>
   <section class="ai-mode-tabs" aria-label="灵思 AI 工作模式" data-mode-labels="开题 / 研究 / 成果表达">
-    <div class="ai-mode-tabs__row ai-mode-tabs__row--segmented" :class="{ 'ai-mode-tabs__row--two': props.modes?.length === 2 }" role="tablist" aria-label="选择 AI 模式">
+    <div class="ai-mode-tabs__row ai-mode-tabs__row--segmented" :class="{ 'ai-mode-tabs__row--two': props.modes?.length === 2, 'ai-mode-tabs__row--compact': !props.showModeDescriptions }" role="tablist" aria-label="选择 AI 模式">
       <button
         v-for="mode in AI_WORKBENCH_MODES.filter((item) => !props.modes || props.modes.includes(item.key))"
         :key="mode.key"
@@ -61,7 +63,7 @@ function goalLabel(agent: AIAgent) {
         @click="emit('update:modelValue', mode.key)"
       >
         <strong>{{ mode.label }}</strong>
-        <small>{{ mode.description }}</small>
+        <small v-if="props.showModeDescriptions">{{ mode.description }}</small>
       </button>
     </div>
     <div v-if="props.showAgentRail" class="ai-agent-rail" data-agent-rail aria-label="当前模式的 Agent（平台模板）" title="Agent 由平台 AI 助手模板管理">
@@ -95,6 +97,7 @@ function goalLabel(agent: AIAgent) {
 .ai-mode-tabs__row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; overflow: hidden; border: 1px solid var(--line-dark); border-radius: var(--radius-md); background: var(--paper); }
 .ai-mode-tabs__row--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ai-mode-tab { display: grid; align-content: center; gap: 2px; min-width: 0; min-height: 48px; padding: 8px 15px; border: 0; border-right: 1px solid var(--line); background: var(--paper); color: var(--muted); text-align: left; cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
+.ai-mode-tabs__row--compact .ai-mode-tab { min-height: 42px; place-items: center start; padding-block: 6px; }
 .ai-mode-tab:last-child { border-right: 0; }
 .ai-mode-tab strong { color: var(--ink); font: 700 13px/1.25 var(--sans); }
 .ai-mode-tab small { overflow: hidden; color: var(--muted-light); font-size: 9px; line-height: 1.3; text-overflow: ellipsis; white-space: nowrap; }
