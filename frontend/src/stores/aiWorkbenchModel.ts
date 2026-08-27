@@ -8,6 +8,16 @@ export const AI_WORKBENCH_MODES: Array<{ key: AIWorkspaceMode; label: string; de
   { key: 'defense', label: '成果表达', description: '整理成果、演练问答和表达项目价值' },
 ]
 
+const AI_STARTER_PROMPTS: Record<AIWorkspaceMode, readonly string[]> = {
+  opening: ['把我的观察整理成研究问题', '哪些变量值得先记录？', '给我一个可执行的开题思路'],
+  research: ['帮我拆解今天的研究任务', '如何设计下一步实验？', '怎样整理现有证据？'],
+  defense: ['帮我提炼项目亮点', '给我一个展示提纲', '模拟一次答辩提问'],
+}
+
+export function starterPrompts(mode: AIWorkspaceMode): string[] {
+  return [...AI_STARTER_PROMPTS[mode]]
+}
+
 export type AIContextScope = 'none' | 'current_project'
 
 export function resolveAIContext(mode: AIWorkspaceMode, currentProjectId: number | null): { projectId: number | null; scope: AIContextScope } {

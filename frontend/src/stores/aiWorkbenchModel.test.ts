@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AIAgent } from '../api'
-import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, resolveStudentAgent, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
+import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, resolveStudentAgent, starterPrompts, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
 
 const agent = (overrides: Partial<AIAgent>): AIAgent => ({
   id: 1,
@@ -23,6 +23,23 @@ const agent = (overrides: Partial<AIAgent>): AIAgent => ({
 describe('AI workbench model', () => {
   it('exposes the three student AI modes in product order', () => {
     expect(AI_WORKBENCH_MODES.map((item) => item.key)).toEqual(['opening', 'research', 'defense'])
+  })
+
+  it('returns three starter prompts for each workbench mode', () => {
+    for (const { key: mode } of AI_WORKBENCH_MODES) {
+      const prompts = starterPrompts(mode)
+      const expectedPrompts = [...prompts]
+      expect(prompts).toHaveLength(3)
+      expect(prompts.every((prompt) => prompt.length > 6)).toBe(true)
+      expect(starterPrompts(mode)).not.toBe(prompts)
+      prompts[0] = '本地修改不应污染默认提示'
+      expect(starterPrompts(mode)).toEqual(expectedPrompts)
+    }
+    expect(starterPrompts('research')).toEqual([
+      '帮我拆解今天的研究任务',
+      '如何设计下一步实验？',
+      '怎样整理现有证据？',
+    ])
   })
 
   it('maps research and defense to the current project', () => {
