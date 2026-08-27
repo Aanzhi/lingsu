@@ -53,16 +53,25 @@ def configured_env_flag(name, default=True):
 
 
 CLAMAV_ENABLED = configured_env_flag("CLAMAV_ENABLED", True)
+CELERY_ENABLED = configured_env_flag("CELERY_ENABLED", False)
+DOCUMENT_CONVERTER_ENABLED = configured_env_flag("DOCUMENT_CONVERTER_ENABLED", False)
 COMPOSE = ["docker", "compose"] + (["--env-file", COMPOSE_ENV_FILE] if os.path.isfile(COMPOSE_ENV_FILE) else []) + ["-p", os.environ.get("COMPOSE_PROJECT_NAME", "lingsu")]
 FRONTEND_PORT = 5173
 FRONTEND_LOG = "/tmp/lingsu-frontend.log"
 FRONTEND_PID = "/tmp/lingsu-frontend.pid"
 CONSOLE_PORT = int(os.environ.get("PORT", "8800"))
-COMPOSE_SERVICES = ["postgres", "redis"]
-if CLAMAV_ENABLED:
-    COMPOSE_SERVICES.append("clamav")
-COMPOSE_SERVICES.extend(["backend", "celery", "celery_beat", "gotenberg"])
 PROFILE_SERVICES = {"frontend": "dev", "nginx": "production"}
+OPTIONAL_PROFILE_SERVICES = {
+    "clamav": ("scanner", CLAMAV_ENABLED),
+    "celery": ("async", CELERY_ENABLED),
+    "celery_beat": ("async", CELERY_ENABLED),
+    "gotenberg": ("documents", DOCUMENT_CONVERTER_ENABLED),
+}
+COMPOSE_SERVICES = ["postgres", "redis", "backend"]
+for service, (profile, enabled) in OPTIONAL_PROFILE_SERVICES.items():
+    if enabled:
+        COMPOSE_SERVICES.append(service)
+        PROFILE_SERVICES[service] = profile
 ALL_PROJECT_SERVICES = COMPOSE_SERVICES + list(PROFILE_SERVICES)
 SERVICE_TARGETS = set(ALL_PROJECT_SERVICES + ["all", "colima", "demo"])
 LOG_SERVICES = set(ALL_PROJECT_SERVICES + ["action"])
@@ -133,14 +142,23 @@ def compose_service_args(service, *args):
     return tuple(prefix) + tuple(args)
 
 
+def compose_enabled_service_args(*args):
+    """Add every opt-in profile needed by the configured backend service set."""
+    profiles = []
+    for service in COMPOSE_SERVICES:
+        profile = PROFILE_SERVICES.get(service)
+        if profile and profile not in profiles:
+            profiles.append(profile)
+    prefix = tuple(item for profile in profiles for item in ("--profile", profile))
+    return prefix + tuple(args)
+
+
 def compose_all_profiles_args(*args):
     """Build a read-only Compose command that can see dev and production services."""
     profiles = []
     for profile in PROFILE_SERVICES.values():
         if profile not in profiles:
             profiles.append(profile)
-    if CLAMAV_ENABLED:
-        profiles.append("scanner")
     prefix = tuple(item for profile in profiles for item in ("--profile", profile))
     return prefix + tuple(args)
 
@@ -489,6 +507,8 @@ def collect_checks(services=None):
     else:
         checks.append(check_item("migrations", "数据库迁移", "blocked", "后端容器未运行，暂无法检查"))
     for svc, label in (("redis", "Redis 缓存"), ("celery", "Celery Worker"), ("celery_beat", "Celery Beat"), ("clamav", "ClamAV 文件扫描"), ("gotenberg", "Gotenberg 文档转换"), ("postgres", "PostgreSQL 数据库")):
+        if svc not in COMPOSE_SERVICES:
+            continue
         item = service_map.get(svc, {})
         running = item.get("state") == "running"
         healthy = running and (item.get("health") in ("", "healthy") or svc in ("celery", "celery_beat", "gotenberg"))
@@ -611,8 +631,9 @@ def e2e_login_check(force: bool = False, host: str = "127.0.0.1"):
 def backend_start():
     if not ensure_docker():
         return False
-    _log("启动后端服务栈：docker compose up -d %s" % " ".join(COMPOSE_SERVICES))
-    rc, out, err = compose("up", "-d", *COMPOSE_SERVICES, timeout=240)
+    compose_args = compose_enabled_service_args("up", "-d", *COMPOSE_SERVICES)
+    _log("启动后端服务栈：docker compose %s" % " ".join(compose_args))
+    rc, out, err = compose(*compose_args, timeout=240)
     _log(out.strip() or err.strip() or "done (rc=%d)" % rc)
     if rc != 0:
         return False
@@ -620,8 +641,9 @@ def backend_start():
 
 
 def backend_stop():
-    _log("停止后端栈：docker compose stop")
-    rc, out, err = compose("stop", *COMPOSE_SERVICES, timeout=120)
+    compose_args = compose_enabled_service_args("stop", *COMPOSE_SERVICES)
+    _log("停止后端栈：docker compose %s" % " ".join(compose_args))
+    rc, out, err = compose(*compose_args, timeout=120)
     _log(out.strip() or err.strip() or "done (rc=%d)" % rc)
     return rc == 0
 

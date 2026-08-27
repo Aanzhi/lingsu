@@ -67,6 +67,46 @@ class ProjectConsoleTests(unittest.TestCase):
         backend_block = content.split("\n  celery:\n", 1)[0]
         self.assertNotIn("      clamav:\n        condition: service_healthy", backend_block)
 
+    def test_heavy_async_and_document_services_are_opt_in_profiles(self):
+        with open("docker-compose.yml", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertRegex(content, r"(?ms)^  celery:\n.*?profiles: \[\"async\"\]")
+        self.assertRegex(content, r"(?ms)^  celery_beat:\n.*?profiles: \[\"async\"\]")
+        self.assertRegex(content, r"(?ms)^  gotenberg:\n.*?profiles: \[\"documents\"\]")
+        self.assertIn("--workers ${GUNICORN_WORKERS:-1}", content)
+
+    def test_console_core_mode_excludes_scanner_async_and_documents(self):
+        probe = (
+            "import importlib.util; "
+            "spec=importlib.util.spec_from_file_location('console', 'scripts/project-console.py'); "
+            "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+            "print(','.join(module.COMPOSE_SERVICES))"
+        )
+        env = os.environ.copy()
+        env.update({
+            "CLAMAV_ENABLED": "0",
+            "CELERY_ENABLED": "0",
+            "DOCUMENT_CONVERTER_ENABLED": "0",
+            "COMPOSE_ENV_FILE": "/tmp/lingsu-test-env-does-not-exist",
+        })
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True,
+        )
+        self.assertEqual(result.stdout.strip(), "postgres,redis,backend")
+
+    def test_console_adds_profiles_when_starting_optional_services(self):
+        with patch.object(console, "COMPOSE_SERVICES", ["postgres", "redis", "backend", "celery", "gotenberg"]), \
+             patch.object(console, "PROFILE_SERVICES", {"celery": "async", "gotenberg": "documents"}):
+            args = console.compose_enabled_service_args("up", "-d", *console.COMPOSE_SERVICES)
+        self.assertEqual(
+            args,
+            ("--profile", "async", "--profile", "documents", "up", "-d", "postgres", "redis", "backend", "celery", "gotenberg"),
+        )
+
     def test_console_omits_clamav_when_scanner_is_disabled(self):
         probe = (
             "import importlib.util; "

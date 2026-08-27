@@ -59,7 +59,7 @@ services:
       sh -c "python manage.py migrate --noinput &&
       python manage.py seed_ai_agents --reset &&
       python manage.py collectstatic --noinput &&
-      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-3} --timeout 120 --access-logfile - --error-logfile -"
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-1} --timeout 120 --access-logfile - --error-logfile -"
     volumes:
       - media_data:/app/media
     ports:
@@ -76,6 +76,7 @@ services:
       retries: 12
 
   celery:
+    profiles: ["async"]
     build:
       context: ./backend
       args:
@@ -101,6 +102,7 @@ services:
         condition: service_healthy
 
   celery_beat:
+    profiles: ["async"]
     build:
       context: ./backend
       args:
@@ -125,6 +127,7 @@ services:
   # Gotenberg packages LibreOffice as an HTTP conversion service. Export tasks
   # call DOCUMENT_CONVERTER_URL instead of shelling out in the Django container.
   gotenberg:
+    profiles: ["documents"]
     image: gotenberg/gotenberg:8
     command:
       - gotenberg
