@@ -87,14 +87,13 @@ describe('remaining Demo B page parity', () => {
   it('uses the Demo B compact list and card compositions for student secondary pages', () => {
     const library = read('./pages/shared/ContentLibrary.vue')
     const invitations = read('./pages/student/StudentInvitations.vue')
-    const applications = read('./pages/student/PublicCaseApplication.vue')
 
     expect(library).toContain('class="demo-content-grid"')
     expect(library).toContain('class="demo-content-card paper-card"')
+    expect(library).toContain('我的公开申请')
+    expect(library).toContain('PublicCaseDialog')
     expect(invitations).toContain('eyebrow="项目协作"')
     expect(invitations).toContain('class="demo-invitation-list paper-card"')
-    expect(applications).toContain('eyebrow="成果" title="公开成果申请"')
-    expect(applications).toContain('class="demo-application-list paper-card"')
   })
 
   it('uses the unified research progress and report compositions', () => {

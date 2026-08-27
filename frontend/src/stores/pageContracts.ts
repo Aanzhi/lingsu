@@ -42,8 +42,7 @@ export const PAGE_CONTRACTS: PageContract[] = [
   { key: 'student.ai', role: 'student', path: '/student/ai', title: '灵思 AI', description: '围绕开题、研究推进和成果表达提供可核对的辅助建议。', primaryAction: { label: '发送问题', kind: 'submit' }, allowedQuery: ['mode', 'projectId', 'taskId', 'agent', 'researchQuestion'] },
   { key: 'student.notifications', role: 'student', path: '/student/notifications', title: '消息', description: '查看审核结果、项目邀请、成员变化和成果状态等与你有关的动态。' },
   { key: 'student.invitations', role: 'student', path: '/student/invitations', title: '项目邀请', description: '处理同学或教师发来的项目邀请；新邀请从具体项目的成员区域发起。' },
-  { key: 'student.public-applications', role: 'student', path: '/student/public-applications', title: '公开成果申请', description: '查看校内展示申请和教师发起的全平台展示邀请，确认公开材料范围后再提交。', allowedQuery: ['projectId'] },
-  { key: 'student.cases', role: 'student', path: '/student/cases', title: '案例库', description: '浏览已公开的学生项目案例，按研究方向参考过程和成果。' },
+  { key: 'student.cases', role: 'student', path: '/student/cases', title: '案例库', description: '浏览公开案例，并在同一页面管理项目公开展示申请。', allowedQuery: ['view', 'projectId'] },
   { key: 'student.competitions', role: 'student', path: '/student/competitions', title: '赛事信息', description: '查看平台发布的赛事和截止时间，判断当前项目是否适合参加。' },
   { key: 'student.announcements', role: 'student', path: '/student/announcements', title: '校内通知', description: '查看学校和平台发布的通知，了解与研究、活动和项目相关的安排。' },
 
@@ -98,10 +97,12 @@ export function studentTaskRoute(projectId: number | string, taskId: number | st
 }
 
 export function studentProjectsLocation(focus?: StudentProjectFocus): RouteLocationTarget {
+  if (focus === 'apply') return { path: '/student/cases', query: { view: 'applications' } }
   return focus ? { path: '/student/projects', query: { focus: focus === 'materials' ? 'journey' : focus } } : { path: '/student/projects' }
 }
 
 export function studentProjectsPath(focus?: StudentProjectFocus) {
+  if (focus === 'apply') return '/student/cases?view=applications'
   return focus ? `/student/projects?focus=${focus === 'materials' ? 'journey' : focus}` : '/student/projects'
 }
 

@@ -24,7 +24,11 @@ export const routeRecords: RouteRecordRaw[] = [
       { path: 'ai', name: 'student-ai', component: () => import('./pages/shared/AICenter.vue') },
       { path: 'notifications', name: 'student-notifications', component: () => import('./pages/student/StudentNotifications.vue') },
       { path: 'cases', name: 'student-cases', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'cases' } },
-      { path: 'public-applications', name: 'student-public-applications', component: () => import('./pages/student/PublicCaseApplication.vue') },
+      {
+        path: 'public-applications',
+        name: 'student-public-applications-redirect',
+        redirect: (to) => ({ name: 'student-cases', query: { ...to.query, view: 'applications' } }),
+      },
       { path: 'invitations', name: 'student-invitations', component: () => import('./pages/student/StudentInvitations.vue') },
       { path: 'competitions', name: 'student-competitions', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'competitions' } },
       { path: 'announcements', name: 'student-announcements', component: () => import('./pages/shared/ContentLibrary.vue'), meta: { surface: 'announcements' } },

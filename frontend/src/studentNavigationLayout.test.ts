@@ -52,7 +52,7 @@ describe('shared Demo B workspace layout contract', () => {
 
   it('keeps the shared navigation registry complete for the student workspace sidebar', () => {
     const studentNavigation = primaryNavigation('student')
-    for (const label of ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请', '案例库', '赛事信息', '校内通知']) {
+    for (const label of ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '案例库', '赛事信息', '校内通知']) {
       expect(studentNavigation.some((item) => item.label === label)).toBe(true)
     }
     expect(studentNavigation.some((item) => item.label === '工作通知')).toBe(false)

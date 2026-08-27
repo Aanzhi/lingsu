@@ -66,12 +66,24 @@ describe('student project workflow UI contracts', () => {
   it('exposes student public pages as direct sidebar entries and keeps grouped tools compatible', () => {
     const student = primaryNavigation('student')
     expect(student.map((item) => item.key)).toEqual([
-      'home', 'projects', 'ai', 'journey', 'invitations', 'public-applications',
+      'home', 'projects', 'ai', 'journey', 'invitations',
       'cases', 'competitions', 'announcements',
     ])
+    expect(student.find((item) => item.key === 'public-applications')).toBeUndefined()
     expect(student.find((item) => item.key === 'content')).toBeUndefined()
     expect(student.every((item) => !item.children?.length)).toBe(true)
     expect(read('./components/ai/AIToolPicker.vue')).toContain('agent-menu--wide')
+  })
+
+  it('redirects the legacy public application URL into the case library application view', () => {
+    const student = routeRecords.find((route) => route.path === '/student')!
+    const legacy = student.children?.find((route) => route.path === 'public-applications')
+    expect(typeof legacy?.redirect).toBe('function')
+    const redirect = legacy?.redirect as (to: { query: Record<string, unknown> }) => unknown
+    expect(redirect({ query: { projectId: '91' } })).toEqual({
+      name: 'student-cases',
+      query: { projectId: '91', view: 'applications' },
+    })
   })
 
   it('gives the task editor a structured main column and sticky context column', () => {

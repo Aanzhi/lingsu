@@ -10,7 +10,7 @@ import AppTopbar from './AppTopbar.vue'
 
 const route = useRoute()
 const router = useRouter()
-const studentTopNavigationLabels = ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请', '案例库', '赛事信息', '校内通知']
+const studentTopNavigationLabels = ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '案例库', '赛事信息', '校内通知']
 const navItems = computed(() => studentTopNavigation(auth.user.value?.primaryProject)
   .filter((item) => studentTopNavigationLabels.includes(item.label)))
 const projectTarget = computed(() => auth.user.value?.primaryProject ? studentProjectRoute(auth.user.value.primaryProject) : '/student/projects')
@@ -34,10 +34,6 @@ function isActive(to: string) {
   if (path === '/student/projects') {
     const focus = new URLSearchParams(queryString || '').get('focus')
     return route.path === path && (focus ? route.query.focus === focus : !route.query.focus)
-  }
-  if (path === '/student/public-applications') {
-    const projectId = new URLSearchParams(queryString || '').get('projectId')
-    return route.path === path && (projectId ? String(route.query.projectId) === projectId : true)
   }
   return route.path === path || route.path.startsWith(`${path}/`)
 }

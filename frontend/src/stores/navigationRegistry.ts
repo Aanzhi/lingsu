@@ -77,7 +77,6 @@ function studentProjectNavigation(primaryProject?: number | null): NavigationIte
     { key: 'ai', label: '灵思 AI', to: '/student/ai', icon: 'ai' },
     { key: 'journey', label: '研究进程', to: projectBase ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
-    { key: 'public-applications', label: '成果申请', to: projectBase ? `/student/public-applications?projectId=${primaryProject}` : studentProjectsPath('apply'), icon: 'review' },
     { key: 'cases', label: '案例库', to: '/student/cases', icon: 'content' },
     { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'content' },
     { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'content' },
@@ -92,7 +91,6 @@ export function studentTopNavigation(primaryProject: number | null | undefined):
     { key: 'ai', label: '灵思 AI', to: '/student/ai', icon: 'ai' },
     { key: 'journey', label: '研究进程', to: primaryProject ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
-    { key: 'public-applications', label: '成果申请', to: primaryProject ? `/student/public-applications?projectId=${primaryProject}` : studentProjectsPath('apply'), icon: 'review' },
     { key: 'cases', label: '案例库', to: '/student/cases', icon: 'content' },
     { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'content' },
     { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'content' },
@@ -115,10 +113,6 @@ export function isNavigationActive(role: NavigationRole, item: NavigationItem, p
     if (item.key === 'journey') {
       return /^\/student\/projects\/\d+\/(?:map|materials|tasks\/\d+)$/.test(path)
         || (path === '/student/projects' && ['journey', 'materials'].includes(String(query.focus ?? '')))
-    }
-    if (item.key === 'public-applications') {
-      return path === '/student/public-applications'
-        || (path === '/student/projects' && String(query.focus ?? '') === 'apply')
     }
   }
   const base = roleBasePath[role]

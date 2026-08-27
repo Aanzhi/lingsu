@@ -5,21 +5,21 @@ import { isNavigationActive, navigationChildren, primaryNavigation, resolveStude
 describe('primary navigation registry', () => {
   it('registers one primary entry per capability and role', () => {
     expect(primaryNavigation('student').map((item) => item.key))
-      .toEqual(['home', 'projects', 'ai', 'journey', 'invitations', 'public-applications', 'cases', 'competitions', 'announcements'])
+      .toEqual(['home', 'projects', 'ai', 'journey', 'invitations', 'cases', 'competitions', 'announcements'])
     expect(primaryNavigation('teacher').map((item) => item.key))
       .toEqual(['home', 'pool', 'projects', 'ai', 'reviews', 'content'])
     expect(primaryNavigation('platform_admin').map((item) => item.key))
       .toEqual(['home', 'schools', 'ai-agents', 'content', 'settings'])
   })
 
-  it('keeps student workflow and public pages as separate primary entries', () => {
+  it('keeps the case library as the single student public-results entry', () => {
     const student = primaryNavigation('student')
     expect(student.every((item) => !item.children?.length)).toBe(true)
     expect(student.map((item) => item.label)).toEqual([
-      '首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请',
-      '案例库', '赛事信息', '校内通知',
+      '首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '案例库', '赛事信息', '校内通知',
     ])
     expect(student.find((item) => item.key === 'notifications')).toBeUndefined()
+    expect(student.find((item) => item.key === 'public-applications')).toBeUndefined()
     expect(student.find((item) => item.key === 'content')).toBeUndefined()
     expect(student.find((item) => item.key === 'cases')?.to).toBe('/student/cases')
     expect(student.find((item) => item.key === 'competitions')?.to).toBe('/student/competitions')
@@ -38,7 +38,7 @@ describe('primary navigation registry', () => {
     expect(entries.find((item) => item.key === 'projects')?.to).toBe('/student/projects')
     expect(entries.find((item) => item.key === 'journey')?.to).toBe('/student/projects?focus=journey')
     expect(entries.find((item) => item.key === 'materials')).toBeUndefined()
-    expect(entries.find((item) => item.key === 'public-applications')?.to).toBe('/student/projects?focus=apply')
+    expect(entries.find((item) => item.key === 'cases')?.to).toBe('/student/cases')
     expect(new Set(entries.map((item) => item.to)).size).toBe(entries.length)
   })
 
@@ -47,7 +47,7 @@ describe('primary navigation registry', () => {
     expect(entries.find((item) => item.key === 'projects')?.to).toBe('/student/projects')
     expect(entries.find((item) => item.key === 'journey')?.to).toBe('/student/projects/8/map')
     expect(entries.find((item) => item.key === 'materials')).toBeUndefined()
-    expect(entries.find((item) => item.key === 'public-applications')?.to).toBe('/student/public-applications?projectId=8')
+    expect(entries.find((item) => item.key === 'cases')?.to).toBe('/student/cases')
   })
 
   it('exposes content child pages from the same sidebar section', () => {
@@ -74,7 +74,7 @@ describe('primary navigation registry', () => {
     const student = primaryNavigation('student', 8)
     const projects = student.find((item) => item.key === 'projects')!
     const journey = student.find((item) => item.key === 'journey')!
-    const applications = student.find((item) => item.key === 'public-applications')!
+    const cases = student.find((item) => item.key === 'cases')!
     const settings = primaryNavigation('platform_admin').find((item) => item.key === 'settings')!
 
     expect(isNavigationActive('student', projects, '/student/projects/8')).toBe(true)
@@ -84,8 +84,8 @@ describe('primary navigation registry', () => {
     expect(isNavigationActive('student', journey, '/student/projects', { focus: 'journey' })).toBe(true)
     expect(isNavigationActive('student', journey, '/student/projects/8/materials')).toBe(true)
     expect(isNavigationActive('student', journey, '/student/projects/8/map')).toBe(true)
-    expect(isNavigationActive('student', applications, '/student/public-applications', { projectId: 8 })).toBe(true)
-    expect(isNavigationActive('student', applications, '/student/projects', { focus: 'apply' })).toBe(true)
+    expect(isNavigationActive('student', cases, '/student/cases')).toBe(true)
+    expect(isNavigationActive('student', cases, '/student/cases', { view: 'applications' })).toBe(true)
     expect(isNavigationActive('student', projects, '/student/projects', { focus: 'journey' })).toBe(false)
     expect(isNavigationActive('student', projects, '/student/projects', { focus: 'materials' })).toBe(false)
     expect(isNavigationActive('student', projects, '/student/projects', { focus: 'apply' })).toBe(false)

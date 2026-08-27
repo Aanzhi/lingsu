@@ -31,7 +31,7 @@ describe('page contracts and route locations', () => {
       'student.ai',
       'student.notifications',
       'student.invitations',
-      'student.public-applications',
+      'student.cases',
       'teacher.home',
       'teacher.pool',
       'teacher.projects',
@@ -84,7 +84,14 @@ describe('page contracts and route locations', () => {
     expect(studentTaskRoute(8, 21)).toBe('/student/projects/8/tasks/21')
     expect(studentProjectsLocation('journey')).toEqual({ path: '/student/projects', query: { focus: 'journey' } })
     expect(studentProjectsLocation('materials')).toEqual({ path: '/student/projects', query: { focus: 'journey' } })
-    expect(studentProjectsLocation('apply')).toEqual({ path: '/student/projects', query: { focus: 'apply' } })
+    expect(studentProjectsLocation('apply')).toEqual({ path: '/student/cases', query: { view: 'applications' } })
+  })
+
+  it('keeps case browsing and public applications under one canonical page contract', () => {
+    const cases = PAGE_CONTRACTS.find((contract) => contract.key === 'student.cases')!
+    expect(cases.path).toBe('/student/cases')
+    expect(cases.allowedQuery).toEqual(['view', 'projectId'])
+    expect(PAGE_CONTRACTS.find((contract) => contract.key === 'student.public-applications')).toBeUndefined()
   })
 
   it('keeps teacher and platform detail context in query parameters', () => {
