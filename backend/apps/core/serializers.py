@@ -412,6 +412,7 @@ class AIConversationMessageSerializer(serializers.ModelSerializer):
 
 class AIConversationSerializer(serializers.ModelSerializer):
     current_agent = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    paper_type = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     message_count = serializers.SerializerMethodField()
     project_title = serializers.CharField(source="project.title", read_only=True, allow_null=True)
 
@@ -426,6 +427,11 @@ class AIConversationSerializer(serializers.ModelSerializer):
     def validate_current_agent(self, value):
         # The model stores an empty string for an unselected Agent, while the
         # public API may receive null from a newly opened workbench.
+        return value or ""
+
+    def validate_paper_type(self, value):
+        # Opening conversations do not have a paper type yet. Keep the model's
+        # non-null storage contract while accepting null from older clients.
         return value or ""
 
     def validate_project(self, project):

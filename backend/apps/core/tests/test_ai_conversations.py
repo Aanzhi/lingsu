@@ -35,6 +35,15 @@ class AIConversationAPITests(TestCase):
         self.assertEqual(unselected_agent.status_code, 201)
         self.assertEqual(unselected_agent.data["current_agent"], "")
 
+    def test_opening_conversation_accepts_null_optional_paper_type(self):
+        response = self.api_client(self.student).post(
+            "/api/ai-conversations/",
+            {"workspace_mode": "opening", "paper_type": None},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["paper_type"], "")
+
     def test_teacher_and_other_student_cannot_read_conversation(self):
         conversation = AIConversation.objects.create(owner=self.student, project=self.project)
         self.assertEqual(self.api_client(self.other).get(f"/api/ai-conversations/{conversation.id}/").status_code, 404)
