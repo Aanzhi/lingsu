@@ -49,7 +49,7 @@ describe('shared Demo B workspace layout contract', () => {
   })
 
   it('keeps the shared navigation registry complete for the student workspace sidebar', () => {
-    for (const label of ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请', '消息中心']) {
+    for (const label of ['首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请', '工作通知', '公开内容']) {
       expect(navigationRegistry).toContain(`label: '${label}'`)
     }
     expect(navigationRegistry).not.toContain("label: '材料档案'")

@@ -58,7 +58,7 @@ export function primaryNavigation(role: NavigationRole, primaryProject?: number 
     { key: 'projects', label: '指导项目', to: '/teacher/projects', icon: 'projects' },
     { key: 'ai', label: '灵思 AI', to: '/teacher/ai', icon: 'ai' },
     { key: 'reviews', label: '材料审核', to: '/teacher/reviews', icon: 'review' },
-    { key: 'content', label: '内容资源', to: '/teacher/cases', icon: 'content', children: ['cases', 'competitions', 'announcements'] },
+    { key: 'content', label: '公开内容', to: '/teacher/cases', icon: 'content', children: ['cases', 'competitions', 'announcements'] },
   ]
   return [
     { key: 'home', label: '平台概览', to: '/platform/home', icon: 'home' },
@@ -78,8 +78,8 @@ function studentProjectNavigation(primaryProject?: number | null): NavigationIte
     { key: 'journey', label: '研究进程', to: projectBase ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
     { key: 'public-applications', label: '成果申请', to: projectBase ? `/student/public-applications?projectId=${primaryProject}` : studentProjectsPath('apply'), icon: 'review' },
-    { key: 'notifications', label: '消息中心', to: '/student/notifications', icon: 'bell' },
-    { key: 'content', label: '内容资源', to: '/student/cases', icon: 'content', children: ['cases', 'competitions', 'announcements'] },
+    { key: 'notifications', label: '工作通知', to: '/student/notifications', icon: 'bell' },
+    { key: 'content', label: '公开内容', to: '/student/cases', icon: 'content', children: ['cases', 'competitions', 'announcements'] },
   ]
 }
 
@@ -92,7 +92,7 @@ export function studentTopNavigation(primaryProject: number | null | undefined):
     { key: 'journey', label: '研究进程', to: primaryProject ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
     { key: 'public-applications', label: '成果申请', to: primaryProject ? `/student/public-applications?projectId=${primaryProject}` : studentProjectsPath('apply'), icon: 'review' },
-    { key: 'notifications', label: '消息中心', to: '/student/notifications', icon: 'bell' },
+    { key: 'notifications', label: '工作通知', to: '/student/notifications', icon: 'bell' },
   ]
 }
 
@@ -154,7 +154,7 @@ export function utilityNavigation(role: NavigationRole, primaryProject: number |
   }
   if (role === 'teacher') return [
     { key: 'members', label: '成员确认', to: '/teacher/members', icon: 'members' },
-    { key: 'notifications', label: '消息中心', to: '/teacher/notifications', icon: 'bell' },
+    { key: 'notifications', label: '工作通知', to: '/teacher/notifications', icon: 'bell' },
   ]
   return []
 }

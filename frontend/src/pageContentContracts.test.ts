@@ -31,8 +31,9 @@ describe('page copy and entry contracts', () => {
     expect(register).toContain('route.query.role')
     expect(register).not.toContain('role-segment')
     expect(platformLogin.match(/to="\/login"/g)?.length ?? 0).toBe(1)
-    expect(notifications).toContain("title: '消息中心'")
-    expect(notifications).toContain('个人动态')
+    expect(notifications).toContain("title: '工作通知'")
+    expect(notifications).toContain('项目工作流动态')
+    expect(notifications).not.toContain('平台公告与学校通知请到内容资源查看')
   })
 
   it('does not keep known no-op or duplicate page controls', () => {

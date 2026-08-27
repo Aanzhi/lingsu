@@ -37,7 +37,7 @@ const heading = computed(() => surface.value === 'cases'
   ? ['案例库', '案例库', isTeacher.value ? '浏览已公开案例，为指导和选题提供参考。' : '浏览已公开的学生项目案例，按研究方向参考过程和成果。']
   : surface.value === 'competitions'
     ? ['赛事信息', '赛事信息', isTeacher.value ? '查看平台赛事信息，为学生提供参赛建议。' : '查看平台发布的赛事和截止时间，判断当前项目是否适合参加。']
-    : [isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '浏览学校与平台发布的公开公告；需要处理的项目动态请进入教师通知中心。' : '浏览平台发布的公告和学校公开通知；需要处理的个人事项请进入消息中心。'])
+    : [isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '浏览学校与平台发布的公开公告；需要处理的项目动态请进入工作通知。' : '浏览平台发布的公告和学校公开通知；需要处理的个人事项请进入工作通知。'])
 const filteredCases = computed(() => cases.value.filter((item) => (
   item.status === 'published' || (isTeacher.value && item.status === 'pending_teacher')
 ) && `${item.project_title}${item.tags.join('')}${item.discipline}${item.application_scene}`.toLowerCase().includes(appliedKeyword.value.toLowerCase())))
@@ -128,7 +128,7 @@ watch(surface, () => {
     <PageHeader :eyebrow="heading[0]" :title="heading[1]" :description="heading[2]" />
     <FeedbackBanner v-model="feedback" @action="load" />
     <p v-if="error && !feedback" class="form-error" role="alert">{{ error }}</p>
-    <p v-if="surface === 'announcements'" class="content-scope-note">这里是公开内容浏览区；需要处理的个人动态请进入消息中心。</p>
+    <p v-if="surface === 'announcements'" class="content-scope-note">这里只展示公开发布的内容；需要处理的项目动态请进入工作通知。</p>
     <div class="filter-bar demo-content-filter">
       <el-icon><Search /></el-icon><input v-model="keyword" class="input" type="search" aria-label="搜索内容" :placeholder="surface === 'cases' ? '搜索案例、学科或关键词' : surface === 'competitions' ? '搜索赛事名称' : '搜索公告标题或内容'" @keydown.enter="runSearch">
       <button class="secondary-button" type="button" @click="runSearch">筛选</button>

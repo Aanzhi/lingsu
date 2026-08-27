@@ -19,20 +19,18 @@ const loading = ref(false)
 const busy = ref(false)
 const copy = computed(() => props.role === 'teacher'
   ? {
-      title: '教师通知中心',
-      description: '查看与你负责项目有关的审核、项目池和成员动态；学校公告请到内容资源查看。',
-      loading: '正在读取教师通知…',
+      title: '教师工作通知',
+      description: '只显示与你负责项目有关且需要处理的审核、项目池和成员动态。',
+      loading: '正在读取教师工作通知…',
       empty: '新的项目池、审核和成员动态会显示在这里。',
-      success: '已将全部个人消息标记为已读。',
-      scopeHint: '这里只显示与你负责项目有关的个人动态；学校公告请到内容资源查看。',
+      success: '已将全部工作通知标记为已读。',
     }
   : {
-      title: '消息中心',
-      description: '查看与你有关的审核结果、项目邀请、成员变化和成果状态；平台公告与学校通知请到内容资源查看。',
-      loading: '正在读取通知…',
+      title: '工作通知',
+      description: '只显示与你有关且需要处理的项目工作流动态：审核结果、邀请、成员变化和成果状态。',
+      loading: '正在读取工作通知…',
       empty: '新的审核、邀请、成员和成果动态会显示在这里。',
-      success: '已将全部个人消息标记为已读。',
-      scopeHint: '这里只显示需要你处理或与你有关的个人动态；平台公告与学校通知请到内容资源查看。',
+      success: '已将全部工作通知标记为已读。',
     })
 const personal = computed(() => personalNotifications(notifications.value))
 const visible = computed(() => unreadOnly.value ? personal.value.filter((item) => !item.is_read) : personal.value)
@@ -45,7 +43,7 @@ async function load() {
   try { notifications.value = (await getNotifications()).data }
   catch (reason) {
     error.value = errorMessage(reason)
-    feedback.value = makeFeedback('error', error.value, '通知没有加载完成，可以重试。', '重试')
+    feedback.value = makeFeedback('error', error.value, '工作通知没有加载完成，可以重试。', '重试')
   }
   finally { loading.value = false }
 }
@@ -68,7 +66,7 @@ async function open(item: AppNotification) {
       const response = await markNotificationRead(item.id)
       notifications.value = notifications.value.map((entry) => entry.id === item.id ? response.data : entry)
       emitNotificationsChanged()
-    } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '通知已打开，但已读状态没有同步，可以稍后重试。') }
+    } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '工作通知已打开，但已读状态没有同步，可以稍后重试。') }
   }
   if (item.link) void router.push(item.link)
 }
@@ -89,14 +87,13 @@ onMounted(() => { void load() })
 
 <template>
   <div class="page notification-center-page" :class="`notification-center-page--${role}`">
-    <PageHeader eyebrow="消息" :title="copy.title" :description="copy.description">
+    <PageHeader eyebrow="工作流" :title="copy.title" :description="copy.description">
       <template #actions><button class="secondary-button" type="button" :disabled="busy || !unreadCount" @click="void markAllRead()">全部已读</button></template>
     </PageHeader>
     <FeedbackBanner v-model="feedback" @action="() => void load()" />
     <p v-if="error && !feedback" class="form-error" role="alert">{{ error }}</p>
     <p v-if="loading" class="loading-state" role="status">{{ copy.loading }}</p>
-    <p class="notification-scope-note">{{ copy.scopeHint }}</p>
-    <div class="notification-toolbar" aria-label="消息筛选">
+    <div class="notification-toolbar" aria-label="工作通知筛选">
       <button type="button" class="notification-filter" :class="{ active: !unreadOnly }" @click="unreadOnly = false">全部 <span>{{ personal.length }}</span></button>
       <button type="button" class="notification-filter" :class="{ active: unreadOnly }" @click="unreadOnly = true">未读 <span>{{ unreadCount }}</span></button>
     </div>
@@ -112,13 +109,12 @@ onMounted(() => { void load() })
         <span class="notification-row__state">{{ item.is_read ? '已读' : '未读' }}</span>
       </button>
     </section>
-    <EmptyState v-else-if="!loading" title="暂无消息" :description="unreadOnly ? '当前没有未读消息。' : copy.empty" />
+    <EmptyState v-else-if="!loading" title="暂无工作通知" :description="unreadOnly ? '当前没有未读工作通知。' : copy.empty" />
   </div>
 </template>
 
 <style scoped>
 .notification-toolbar { display: flex; gap: 6px; margin-bottom: 16px; }
-.notification-scope-note { margin: -7px 0 16px; color: var(--muted); font-size: 12px; line-height: 1.6; }
 .notification-filter { min-height: 34px; padding: 0 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--muted); cursor: pointer; font-size: 12px; }
 .notification-filter.active { border-color: var(--moss); background: var(--sage-soft); color: var(--moss-dark); font-weight: 700; }
 .notification-filter span { margin-left: 4px; font-size: 11px; }

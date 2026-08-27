@@ -17,14 +17,14 @@ describe('primary navigation registry', () => {
     expect(student.filter((item) => item.key !== 'content').every((item) => !item.children?.length)).toBe(true)
     expect(student.map((item) => item.label)).toEqual([
       '首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请',
-      '消息中心', '内容资源',
+      '工作通知', '公开内容',
     ])
     expect(student.find((item) => item.key === 'content')?.children).toEqual(['cases', 'competitions', 'announcements'])
   })
 
   it('surfaces the notification center in the student top navigation', () => {
     expect(studentTopNavigation(8).find((item) => item.key === 'notifications')).toEqual({
-      key: 'notifications', label: '消息中心', to: '/student/notifications', icon: 'bell',
+      key: 'notifications', label: '工作通知', to: '/student/notifications', icon: 'bell',
     })
   })
 

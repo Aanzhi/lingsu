@@ -56,12 +56,13 @@ describe('progressive first paint contracts', () => {
     const navigation = read('./stores/navigationRegistry.ts')
     const content = read('./pages/shared/ContentLibrary.vue')
     const notifications = read('./components/NotificationCenter.vue')
-    expect(navigation).toContain("key: 'notifications', label: '消息中心'")
+    expect(navigation).toContain("key: 'notifications', label: '工作通知'")
+    expect(navigation).toContain("key: 'content', label: '公开内容'")
     expect(navigation).toContain("announcements: '平台公告'")
     expect(content).toContain('平台公告')
-    expect(content).toContain('需要处理的个人事项请进入消息中心')
+    expect(content).toContain('需要处理的个人事项请进入工作通知')
     expect(notifications).toContain('personalNotifications')
-    expect(notifications).toContain('平台公告与学校通知请到内容资源查看')
+    expect(notifications).toContain('项目工作流动态')
   })
 
   it('renders the supervising teacher display name when the project API provides it', () => {

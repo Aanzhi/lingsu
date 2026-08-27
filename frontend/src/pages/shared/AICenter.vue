@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { createAIConversation, createAIConversationMessage, createProjectFromOpening, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, retryAIConversationMessage, saveAIGenerationAsMaterial, streamAIConversationMessage, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
 import { auth } from '../../stores/auth'
 import { isNearBottom, isTerminalSSEEvent, normalizeResearchQuestionArtifact, researchProjectDraftFromArtifact } from '../../stores/aiConversationModel'
-import { normalizeAIWorkspaceMode, resolveStudentAgent, starterPrompts, visibleAgents, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
+import { normalizeAIWorkspaceMode, resolveStudentAgent, starterPrompts, visibleAgents, workspaceModeDescription, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
 import { PAPER_TYPES, type PaperType } from '../../stores/aiModel'
 import { studentProjectRoute } from '../../stores/pageContracts'
 import { filterConversationSummaries, groupConversationSummaries } from '../../stores/presentationModel'
@@ -104,7 +104,7 @@ const modeAgents = computed(() => visibleAgents(workbenchMode.value, agents.valu
 const currentAgent = computed(() => resolveStudentAgent(workbenchMode.value, agents.value, selectedAgent.value, current.value?.current_agent))
 const modeStarterPrompts = computed(() => starterPrompts(workbenchMode.value))
 const assistantName = computed(() => currentAgent.value?.name || (agentsLoading.value ? '正在加载助手…' : '灵思 AI'))
-const assistantDescription = computed(() => currentAgent.value?.description || '围绕当前研究阶段，帮助你梳理问题、证据和下一步行动。')
+const assistantDescription = computed(() => workspaceModeDescription(workbenchMode.value))
 const assistantStage = computed(() => workbenchMode.value === 'opening' ? '开题' : workbenchMode.value === 'research' ? '研究' : '成果表达')
 const projectRequired = computed(() => workbenchMode.value !== 'opening')
 const isConversationStarted = computed(() => messages.value.some((message) => Boolean(message.content?.trim()) || message.status === 'queued' || message.status === 'streaming'))

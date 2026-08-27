@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AIAgent } from '../api'
-import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, resolveStudentAgent, starterPrompts, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
+import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, resolveStudentAgent, starterPrompts, visibleAgents, workspaceModeDescription, type AIWorkspaceMode } from './aiWorkbenchModel'
 
 const agent = (overrides: Partial<AIAgent>): AIAgent => ({
   id: 1,
@@ -45,6 +45,12 @@ describe('AI workbench model', () => {
   it('maps research and defense to the current project', () => {
     expect(resolveAIContext('research', 8)).toEqual({ projectId: 8, scope: 'current_project' })
     expect(resolveAIContext('defense', 8)).toEqual({ projectId: 8, scope: 'current_project' })
+  })
+
+  it('uses mode responsibilities for the assistant bar copy', () => {
+    expect(workspaceModeDescription('opening')).toBe('整理观察和研究问题，形成可以确认的开题草稿。')
+    expect(workspaceModeDescription('research')).toBe('围绕当前项目的任务、材料和进度，推进下一步研究工作。')
+    expect(workspaceModeDescription('defense')).toBe('围绕已完成成果整理展示内容，练习清晰、可核验地表达研究结论。')
   })
 
   it('keeps opening project-free even when a current project exists', () => {

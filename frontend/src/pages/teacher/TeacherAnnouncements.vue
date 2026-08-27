@@ -31,17 +31,17 @@ async function publish() {
   try {
     await createAnnouncement({ title: form.title.trim(), body: form.body.trim(), audience: 'students', status: 'published' })
     Object.assign(form, { title: '', body: '' }); open.value = false; await load()
-    feedback.value = makeFeedback('success', '学生公告已发布。', '本校学生会在内容资源中查看这条公告。')
+    feedback.value = makeFeedback('success', '学生公告已发布。', '本校学生会在公开内容中查看这条公告。')
   } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '公告没有发布，填写内容仍保留在弹窗中，可以重试。', '重试') }
   finally { loading.value = false }
 }
 </script>
 
 <template>
-  <div class="page"><PageHeader eyebrow="校内沟通" title="学生通知公告" description="面向本校学生发布研究、活动和项目相关通知；平台公告由平台管理员发布。"><template #actions><button class="primary-button" type="button" @click="open = true"><el-icon><Plus /></el-icon> 创建公告</button></template></PageHeader>
+  <div class="page"><PageHeader eyebrow="公开内容" title="学生通知公告" description="面向本校学生发布研究、活动和项目相关通知；平台公告由平台管理员发布。"><template #actions><button class="primary-button" type="button" @click="open = true"><el-icon><Plus /></el-icon> 创建公告</button></template></PageHeader>
     <FeedbackBanner v-model="feedback" @action="() => void load().catch(() => undefined)" /><p v-if="error" class="form-error" role="alert">{{ error }}</p>
     <p v-if="loading" class="loading-state" role="status">正在读取学生公告…</p>
-    <div v-else class="announcement-list"><article v-for="item in items" :key="item.id" class="announcement-card"><div><span>{{ item.audience === 'students' ? '本校公告' : '系统公告' }}</span><small>{{ item.published_at?.slice(0, 10) }}</small></div><h2>{{ item.title }}</h2><p>{{ item.body }}</p></article><EmptyState v-if="!items.length" title="暂无学生公告" description="创建一条公告后，本校学生会在内容资源中看到它。" /></div>
+    <div v-else class="announcement-list"><article v-for="item in items" :key="item.id" class="announcement-card"><div><span>{{ item.audience === 'students' ? '本校公告' : '系统公告' }}</span><small>{{ item.published_at?.slice(0, 10) }}</small></div><h2>{{ item.title }}</h2><p>{{ item.body }}</p></article><EmptyState v-if="!items.length" title="暂无学生公告" description="创建一条公告后，本校学生会在公开内容中看到它。" /></div>
     <el-dialog v-model="open" title="发布本校学生公告" width="560px"><form class="dialog-form" @submit.prevent="publish"><label>公告标题<input v-model="form.title" /></label><label>公告正文<textarea v-model="form.body" rows="6" /></label><div class="dialog-actions"><button type="button" class="secondary-button" @click="open = false">取消</button><button class="primary-button" :disabled="loading" type="submit">{{ loading ? '正在发布…' : '发布公告' }}</button></div></form></el-dialog>
   </div>
 </template>
