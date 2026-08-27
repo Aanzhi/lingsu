@@ -23,7 +23,7 @@ const notificationsLoaded = ref(false)
 const passwordOpen = ref(false)
 const personal = computed(() => personalNotifications(notifications.value))
 const unreadCount = computed(() => personal.value.filter((item) => !item.is_read).length)
-const notificationTitle = computed(() => props.roleTone === 'student' ? '工作通知' : props.roleTone === 'teacher' ? '教师工作通知' : '工作台通知')
+const notificationTitle = computed(() => props.roleTone === 'student' ? '消息' : props.roleTone === 'teacher' ? '教师工作通知' : '工作台通知')
 const homePath = computed(() => {
   const role = auth.user.value?.role
   if (!role) return '/login'
@@ -140,7 +140,7 @@ onBeforeUnmount(() => {
           </header>
           <p v-if="notificationLoading" class="popover-muted">正在读取消息…</p>
           <p v-else-if="notificationError" class="popover-error">{{ notificationError }}</p>
-          <p v-else-if="!personal.length" class="popover-muted">暂无新的工作通知</p>
+          <p v-else-if="!personal.length" class="popover-muted">暂无新的消息</p>
           <template v-else>
             <button v-for="item in personal.slice(0, 6)" :key="item.id" class="notification-item" :class="{ unread: !item.is_read }" type="button" @click="void openNotification(item)">
               <span>

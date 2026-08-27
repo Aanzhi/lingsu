@@ -37,7 +37,7 @@ const heading = computed(() => surface.value === 'cases'
   ? ['案例库', '案例库', isTeacher.value ? '浏览已公开案例，为指导和选题提供参考。' : '浏览已公开的学生项目案例，按研究方向参考过程和成果。']
   : surface.value === 'competitions'
     ? ['赛事信息', '赛事信息', isTeacher.value ? '查看平台赛事信息，为学生提供参赛建议。' : '查看平台发布的赛事和截止时间，判断当前项目是否适合参加。']
-    : [isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '学生公告' : '平台公告', isTeacher.value ? '浏览学校与平台发布的公开公告；需要处理的项目动态请进入工作通知。' : '浏览平台发布的公告和学校公开通知；需要处理的个人事项请进入工作通知。'])
+    : [isTeacher.value ? '学生公告' : '校内通知', isTeacher.value ? '学生公告' : '校内通知', isTeacher.value ? '浏览学校与平台发布的公开公告；需要处理的项目动态请进入工作通知。' : '查看学校和平台发布的通知，了解与研究、活动和项目相关的安排。'])
 const filteredCases = computed(() => cases.value.filter((item) => (
   item.status === 'published' || (isTeacher.value && item.status === 'pending_teacher')
 ) && `${item.project_title}${item.tags.join('')}${item.discipline}${item.application_scene}`.toLowerCase().includes(appliedKeyword.value.toLowerCase())))
@@ -128,7 +128,7 @@ watch(surface, () => {
     <PageHeader :eyebrow="heading[0]" :title="heading[1]" :description="heading[2]" />
     <FeedbackBanner v-model="feedback" @action="load" />
     <p v-if="error && !feedback" class="form-error" role="alert">{{ error }}</p>
-    <p v-if="surface === 'announcements'" class="content-scope-note">这里只展示公开发布的内容；需要处理的项目动态请进入工作通知。</p>
+    <p v-if="surface === 'announcements'" class="content-scope-note">这里只展示公开发布的通知；需要处理的个人消息请查看顶部铃铛。</p>
     <div class="filter-bar demo-content-filter">
       <el-icon><Search /></el-icon><input v-model="keyword" class="input" type="search" aria-label="搜索内容" :placeholder="surface === 'cases' ? '搜索案例、学科或关键词' : surface === 'competitions' ? '搜索赛事名称' : '搜索公告标题或内容'" @keydown.enter="runSearch">
       <button class="secondary-button" type="button" @click="runSearch">筛选</button>
@@ -151,7 +151,7 @@ watch(surface, () => {
     </div>
     <div v-else class="demo-content-grid">
       <article v-for="item in filteredNotices" :key="item.id" class="demo-content-card paper-card"><p class="eyebrow">{{ item.audience === 'all' ? '平台公告' : '本校公告' }}</p><h3>{{ item.title }}</h3><p class="muted">{{ item.body }}</p><p class="demo-content-meta">{{ item.published_at?.slice(0, 10) }}</p></article>
-      <EmptyState v-if="!loading && !filteredNotices.length" :title="appliedKeyword ? '没有匹配的公告' : (isTeacher ? '暂无学生公告' : '暂无平台公告')" />
+      <EmptyState v-if="!loading && !filteredNotices.length" :title="appliedKeyword ? '没有匹配的公告' : (isTeacher ? '暂无学生公告' : '暂无校内通知')" />
     </div>
 
     <el-dialog :model-value="Boolean(rejecting)" title="驳回公开申请" width="520px" @close="rejecting = null">

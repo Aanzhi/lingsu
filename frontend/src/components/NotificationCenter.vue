@@ -26,11 +26,11 @@ const copy = computed(() => props.role === 'teacher'
       success: '已将全部工作通知标记为已读。',
     }
   : {
-      title: '工作通知',
-      description: '只显示与你有关且需要处理的项目工作流动态：审核结果、邀请、成员变化和成果状态。',
-      loading: '正在读取工作通知…',
+      title: '消息',
+      description: '查看审核结果、项目邀请、成员变化和成果状态等与你有关的动态。',
+      loading: '正在读取消息…',
       empty: '新的审核、邀请、成员和成果动态会显示在这里。',
-      success: '已将全部工作通知标记为已读。',
+      success: '已将全部消息标记为已读。',
     })
 const personal = computed(() => personalNotifications(notifications.value))
 const visible = computed(() => unreadOnly.value ? personal.value.filter((item) => !item.is_read) : personal.value)
@@ -43,7 +43,7 @@ async function load() {
   try { notifications.value = (await getNotifications()).data }
   catch (reason) {
     error.value = errorMessage(reason)
-    feedback.value = makeFeedback('error', error.value, '工作通知没有加载完成，可以重试。', '重试')
+    feedback.value = makeFeedback('error', error.value, `${copy.value.title}没有加载完成，可以重试。`, '重试')
   }
   finally { loading.value = false }
 }
@@ -66,7 +66,7 @@ async function open(item: AppNotification) {
       const response = await markNotificationRead(item.id)
       notifications.value = notifications.value.map((entry) => entry.id === item.id ? response.data : entry)
       emitNotificationsChanged()
-    } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '工作通知已打开，但已读状态没有同步，可以稍后重试。') }
+    } catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), `${copy.value.title}已打开，但已读状态没有同步，可以稍后重试。`) }
   }
   if (item.link) void router.push(item.link)
 }
@@ -93,7 +93,7 @@ onMounted(() => { void load() })
     <FeedbackBanner v-model="feedback" @action="() => void load()" />
     <p v-if="error && !feedback" class="form-error" role="alert">{{ error }}</p>
     <p v-if="loading" class="loading-state" role="status">{{ copy.loading }}</p>
-    <div class="notification-toolbar" aria-label="工作通知筛选">
+    <div class="notification-toolbar" :aria-label="`${copy.title}筛选`">
       <button type="button" class="notification-filter" :class="{ active: !unreadOnly }" @click="unreadOnly = false">全部 <span>{{ personal.length }}</span></button>
       <button type="button" class="notification-filter" :class="{ active: unreadOnly }" @click="unreadOnly = true">未读 <span>{{ unreadCount }}</span></button>
     </div>
@@ -109,7 +109,7 @@ onMounted(() => { void load() })
         <span class="notification-row__state">{{ item.is_read ? '已读' : '未读' }}</span>
       </button>
     </section>
-    <EmptyState v-else-if="!loading" title="暂无工作通知" :description="unreadOnly ? '当前没有未读工作通知。' : copy.empty" />
+    <EmptyState v-else-if="!loading" :title="`暂无${copy.title}`" :description="unreadOnly ? `当前没有未读${copy.title}。` : copy.empty" />
   </div>
 </template>
 

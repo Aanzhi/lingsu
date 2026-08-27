@@ -5,27 +5,32 @@ import { isNavigationActive, navigationChildren, primaryNavigation, resolveStude
 describe('primary navigation registry', () => {
   it('registers one primary entry per capability and role', () => {
     expect(primaryNavigation('student').map((item) => item.key))
-      .toEqual(['home', 'projects', 'ai', 'journey', 'invitations', 'public-applications', 'notifications', 'content'])
+      .toEqual(['home', 'projects', 'ai', 'journey', 'invitations', 'public-applications', 'cases', 'competitions', 'announcements'])
     expect(primaryNavigation('teacher').map((item) => item.key))
       .toEqual(['home', 'pool', 'projects', 'ai', 'reviews', 'content'])
     expect(primaryNavigation('platform_admin').map((item) => item.key))
       .toEqual(['home', 'schools', 'ai-agents', 'content', 'settings'])
   })
 
-  it('keeps the student primary entries stable and groups content pages in the sidebar', () => {
+  it('keeps student workflow and public pages as separate primary entries', () => {
     const student = primaryNavigation('student')
-    expect(student.filter((item) => item.key !== 'content').every((item) => !item.children?.length)).toBe(true)
+    expect(student.every((item) => !item.children?.length)).toBe(true)
     expect(student.map((item) => item.label)).toEqual([
       '首页', '我的项目', '灵思 AI', '研究进程', '项目邀请', '成果申请',
-      '工作通知', '公开内容',
+      '案例库', '赛事信息', '校内通知',
     ])
-    expect(student.find((item) => item.key === 'content')?.children).toEqual(['cases', 'competitions', 'announcements'])
+    expect(student.find((item) => item.key === 'notifications')).toBeUndefined()
+    expect(student.find((item) => item.key === 'content')).toBeUndefined()
+    expect(student.find((item) => item.key === 'cases')?.to).toBe('/student/cases')
+    expect(student.find((item) => item.key === 'competitions')?.to).toBe('/student/competitions')
+    expect(student.find((item) => item.key === 'announcements')?.to).toBe('/student/announcements')
+    expect(student.find((item) => item.key === 'announcements')?.label).toBe('校内通知')
   })
 
-  it('surfaces the notification center in the student top navigation', () => {
-    expect(studentTopNavigation(8).find((item) => item.key === 'notifications')).toEqual({
-      key: 'notifications', label: '工作通知', to: '/student/notifications', icon: 'bell',
-    })
+  it('does not surface the removed notification center in the student top navigation', () => {
+    expect(studentTopNavigation(8).find((item) => item.key === 'notifications')).toBeUndefined()
+    expect(studentTopNavigation(8).find((item) => item.key === 'competitions')?.to).toBe('/student/competitions')
+    expect(studentTopNavigation(8).find((item) => item.key === 'announcements')?.to).toBe('/student/announcements')
   })
 
   it('keeps project-dependent student entries distinct before a project exists', () => {

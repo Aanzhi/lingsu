@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
+import { primaryNavigation } from './stores/navigationRegistry'
+
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8')
 
 describe('progressive first paint contracts', () => {
@@ -56,13 +58,18 @@ describe('progressive first paint contracts', () => {
     const navigation = read('./stores/navigationRegistry.ts')
     const content = read('./pages/shared/ContentLibrary.vue')
     const notifications = read('./components/NotificationCenter.vue')
-    expect(navigation).toContain("key: 'notifications', label: '工作通知'")
-    expect(navigation).toContain("key: 'content', label: '公开内容'")
-    expect(navigation).toContain("announcements: '平台公告'")
+    const student = primaryNavigation('student')
+    expect(student.some((item) => item.key === 'notifications')).toBe(false)
+    expect(student.some((item) => item.key === 'content')).toBe(false)
+    expect(student.find((item) => item.key === 'competitions')?.to).toBe('/student/competitions')
+    expect(student.find((item) => item.key === 'announcements')?.to).toBe('/student/announcements')
+    expect(navigation).toContain("key: 'competitions', label: '赛事信息'")
+    expect(navigation).toContain("key: 'announcements', label: '校内通知'")
+    expect(navigation).toContain("announcements: '校内通知'")
     expect(content).toContain('平台公告')
-    expect(content).toContain('需要处理的个人事项请进入工作通知')
+    expect(content).toContain('需要处理的个人消息请查看顶部铃铛')
     expect(notifications).toContain('personalNotifications')
-    expect(notifications).toContain('项目工作流动态')
+    expect(notifications).toContain('审核结果、项目邀请、成员变化和成果状态')
   })
 
   it('renders the supervising teacher display name when the project API provides it', () => {

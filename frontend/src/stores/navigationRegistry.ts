@@ -78,8 +78,9 @@ function studentProjectNavigation(primaryProject?: number | null): NavigationIte
     { key: 'journey', label: '研究进程', to: projectBase ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
     { key: 'public-applications', label: '成果申请', to: projectBase ? `/student/public-applications?projectId=${primaryProject}` : studentProjectsPath('apply'), icon: 'review' },
-    { key: 'notifications', label: '工作通知', to: '/student/notifications', icon: 'bell' },
-    { key: 'content', label: '公开内容', to: '/student/cases', icon: 'content', children: ['cases', 'competitions', 'announcements'] },
+    { key: 'cases', label: '案例库', to: '/student/cases', icon: 'content' },
+    { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'content' },
+    { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'content' },
   ]
 }
 
@@ -92,7 +93,9 @@ export function studentTopNavigation(primaryProject: number | null | undefined):
     { key: 'journey', label: '研究进程', to: primaryProject ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
     { key: 'public-applications', label: '成果申请', to: primaryProject ? `/student/public-applications?projectId=${primaryProject}` : studentProjectsPath('apply'), icon: 'review' },
-    { key: 'notifications', label: '工作通知', to: '/student/notifications', icon: 'bell' },
+    { key: 'cases', label: '案例库', to: '/student/cases', icon: 'content' },
+    { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'content' },
+    { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'content' },
   ]
 }
 
@@ -128,7 +131,7 @@ export function isNavigationActive(role: NavigationRole, item: NavigationItem, p
 }
 
 const childLabels: Record<NavigationRole, Record<string, string>> = {
-  student: { cases: '案例库', competitions: '赛事信息', announcements: '平台公告' },
+  student: { cases: '案例库', competitions: '赛事信息', announcements: '校内通知' },
   teacher: { cases: '案例库', competitions: '赛事信息', announcements: '学生公告' },
   platform_admin: { cases: '案例治理', competitions: '赛事管理', announcements: '系统公告' },
 }

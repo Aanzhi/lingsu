@@ -63,9 +63,14 @@ describe('student project workflow UI contracts', () => {
     expect(modeTabs).not.toContain('overflow-x: auto')
   })
 
-  it('exposes student content pages from the sidebar and makes the picker wide enough for grouped tools', () => {
+  it('exposes student public pages as direct sidebar entries and keeps grouped tools compatible', () => {
     const student = primaryNavigation('student')
-    expect(student.find((item) => item.key === 'content')?.children).toEqual(['cases', 'competitions', 'announcements'])
+    expect(student.map((item) => item.key)).toEqual([
+      'home', 'projects', 'ai', 'journey', 'invitations', 'public-applications',
+      'cases', 'competitions', 'announcements',
+    ])
+    expect(student.find((item) => item.key === 'content')).toBeUndefined()
+    expect(student.every((item) => !item.children?.length)).toBe(true)
     expect(read('./components/ai/AIToolPicker.vue')).toContain('agent-menu--wide')
   })
 
