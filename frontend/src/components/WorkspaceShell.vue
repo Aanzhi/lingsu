@@ -2,8 +2,9 @@
 import { computed, type Component } from 'vue'
 import { Bell, Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick, Medal, Reading, Setting } from '@element-plus/icons-vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
-import { isNavigationActive, navigationChildren, primaryNavigation, utilityNavigation, type NavigationIcon, type NavigationRole } from '../stores/navigationRegistry'
+import { isNavigationActive, navigationChildren, primaryNavigation, resolveStudentNavigationProject, utilityNavigation, type NavigationIcon, type NavigationRole } from '../stores/navigationRegistry'
 import { auth } from '../stores/auth'
+import { student } from '../stores/student'
 import AppTopbar from './AppTopbar.vue'
 import WorkspaceFrame from './WorkspaceFrame.vue'
 
@@ -13,8 +14,11 @@ const props = defineProps<{
   sectionLabel: string
 }>()
 const route = useRoute()
-const nav = computed(() => primaryNavigation(props.role, auth.user.value?.primaryProject))
-const utilityNav = computed(() => utilityNavigation(props.role, auth.user.value?.primaryProject))
+const navigationProject = computed(() => props.role === 'student'
+  ? resolveStudentNavigationProject(auth.user.value?.primaryProject, student.state.projects)
+  : auth.user.value?.primaryProject ?? null)
+const nav = computed(() => primaryNavigation(props.role, navigationProject.value))
+const utilityNav = computed(() => utilityNavigation(props.role, navigationProject.value))
 const iconMap: Record<NavigationIcon, Component> = {
   home: House, projects: FolderOpened, journey: Collection, review: DocumentChecked,
   members: Briefcase, content: props.role === 'platform_admin' ? Medal : Reading,

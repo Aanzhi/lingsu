@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { isNavigationActive, navigationChildren, primaryNavigation, studentTopNavigation, utilityNavigation } from './navigationRegistry'
+import { isNavigationActive, navigationChildren, primaryNavigation, resolveStudentNavigationProject, studentTopNavigation, utilityNavigation } from './navigationRegistry'
 
 describe('primary navigation registry', () => {
   it('registers one primary entry per capability and role', () => {
@@ -81,6 +81,9 @@ describe('primary navigation registry', () => {
     expect(isNavigationActive('student', journey, '/student/projects/8/map')).toBe(true)
     expect(isNavigationActive('student', applications, '/student/public-applications', { projectId: 8 })).toBe(true)
     expect(isNavigationActive('student', applications, '/student/projects', { focus: 'apply' })).toBe(true)
+    expect(isNavigationActive('student', projects, '/student/projects', { focus: 'journey' })).toBe(false)
+    expect(isNavigationActive('student', projects, '/student/projects', { focus: 'materials' })).toBe(false)
+    expect(isNavigationActive('student', projects, '/student/projects', { focus: 'apply' })).toBe(false)
     expect(isNavigationActive('platform_admin', settings, '/platform/settings')).toBe(true)
   })
 
@@ -89,6 +92,18 @@ describe('primary navigation registry', () => {
     const journey = student.find((item) => item.key === 'journey')!
     expect(isNavigationActive('student', journey, '/student/projects', { focus: 'journey' })).toBe(true)
     expect(isNavigationActive('student', journey, '/student/projects', { focus: 'materials' })).toBe(true)
+  })
+
+  it('uses the same active project fallback as the project page when no primary project is assigned', () => {
+    expect(resolveStudentNavigationProject(null, [
+      { id: 4, is_archived: true, deleted_at: null },
+      { id: 8, is_primary: false, is_archived: false, deleted_at: null },
+      { id: 9, is_primary: true, is_archived: false, deleted_at: null },
+    ])).toBe(9)
+    expect(resolveStudentNavigationProject(null, [
+      { id: 8, is_primary: false, is_archived: false, deleted_at: null },
+    ])).toBe(8)
+    expect(resolveStudentNavigationProject(null, [])).toBeNull()
   })
 
   it('does not register project detail tabs as duplicate global entries', () => {

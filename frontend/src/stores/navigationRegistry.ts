@@ -18,10 +18,32 @@ export interface NavigationChildItem {
   icon: NavigationIcon
 }
 
+export interface StudentNavigationProject {
+  id: number
+  is_primary?: boolean
+  is_archived?: boolean
+  deleted_at?: string | null
+}
+
 const roleBasePath: Record<NavigationRole, string> = {
   student: '/student',
   teacher: '/teacher',
   platform_admin: '/platform',
+}
+
+/**
+ * The project page promotes the primary project, or the first available
+ * active project when an older account has not been assigned one yet. The
+ * sidebar must use that same deterministic fallback or it will display a
+ * current-project card while linking to the no-project query surfaces.
+ */
+export function resolveStudentNavigationProject(
+  primaryProject: number | null | undefined,
+  projects: StudentNavigationProject[] = [],
+): number | null {
+  if (primaryProject) return primaryProject
+  const activeProjects = projects.filter((project) => !project.is_archived && !project.deleted_at)
+  return activeProjects.find((project) => project.is_primary)?.id ?? activeProjects[0]?.id ?? null
 }
 
 export function primaryNavigation(role: NavigationRole, primaryProject?: number | null): NavigationItem[] {
@@ -80,7 +102,11 @@ export function studentTopNavigation(primaryProject: number | null | undefined):
  */
 export function isNavigationActive(role: NavigationRole, item: NavigationItem, path: string, query: Record<string, unknown> = {}) {
   if (role === 'student') {
-    if (item.key === 'projects') return /^\/student\/projects(?:\/\d+)?$/.test(path)
+    if (item.key === 'projects') {
+      const isProjectIndex = path === '/student/projects'
+      const isFocusedSurface = ['journey', 'materials', 'apply'].includes(String(query.focus ?? ''))
+      return /^\/student\/projects(?:\/\d+)?$/.test(path) && !(isProjectIndex && isFocusedSurface)
+    }
     if (item.key === 'journey') {
       return /^\/student\/projects\/\d+\/(?:map|materials|tasks\/\d+)$/.test(path)
         || (path === '/student/projects' && ['journey', 'materials'].includes(String(query.focus ?? '')))
