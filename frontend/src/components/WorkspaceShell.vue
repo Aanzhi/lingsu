@@ -33,7 +33,7 @@ function isUtilityActive(to: string) {
     <template #sidebar>
       <p class="workspace-sidebar__label">{{ sectionLabel }}</p>
       <template v-for="item in nav" :key="item.key">
-        <RouterLink :to="item.to" active-class="workspace-router-active" :class="{ 'workspace-router-active': isNavActive(item) }" :aria-current="isNavActive(item) ? 'page' : undefined">
+        <RouterLink :to="item.to" active-class="" exact-active-class="" :class="{ 'workspace-router-active': isNavActive(item) }" :aria-current="isNavActive(item) ? 'page' : undefined">
           <el-icon aria-hidden="true"><component :is="iconMap[item.icon]" /></el-icon><span>{{ item.label }}</span>
         </RouterLink>
         <div v-if="navigationChildren(role, item).length" class="workspace-sidebar__subnav" :aria-label="`${item.label}子页面`">

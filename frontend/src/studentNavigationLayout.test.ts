@@ -53,7 +53,7 @@ describe('shared Demo B workspace layout contract', () => {
     }
     expect(navigationRegistry).not.toContain("label: '材料档案'")
     expect(workspaceShell).toContain('primaryNavigation(props.role, auth.user.value?.primaryProject)')
-    expect(workspaceShell).toContain('active-class="workspace-router-active"')
+    expect(workspaceShell).toContain('active-class=""')
     expect(foundations).toContain('.workspace-sidebar > a.workspace-router-active')
   })
 
@@ -61,6 +61,11 @@ describe('shared Demo B workspace layout contract', () => {
     expect(workspaceShell).toContain('utilityNavigation')
     expect(workspaceShell).toContain('更多页面')
     expect(studentLayout).not.toContain('更多页面')
+  })
+
+  it('uses the registry active state instead of RouterLink path-only matching', () => {
+    expect(workspaceShell).toContain('active-class=""')
+    expect(workspaceShell).toContain('exact-active-class=""')
   })
 
   it('sets a PC-only minimum width and the Demo B sans typography', () => {
