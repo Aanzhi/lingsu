@@ -6,6 +6,11 @@ from django.core.checks import Error, Tags, register
 def production_file_scanner_check(app_configs, **kwargs):
     if settings.DEBUG:
         return []
+    # The 2GB core deployment deliberately disables attachment uploads. Keep
+    # the security gate strict whenever uploads are enabled, but do not make a
+    # disabled feature prevent the text-only application from starting.
+    if not getattr(settings, "ATTACHMENT_UPLOADS_ENABLED", True):
+        return []
     if not settings.FILE_SCAN_REQUIRED or not settings.CLAMAV_HOST:
         return [
             Error(

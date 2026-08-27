@@ -52,8 +52,13 @@ def configured_env_flag(name, default=True):
     return value.lower() in ("1", "true", "yes", "on")
 
 
-CLAMAV_ENABLED = configured_env_flag("CLAMAV_ENABLED", True)
-CELERY_ENABLED = configured_env_flag("CELERY_ENABLED", False)
+CLAMAV_ENABLED = configured_env_flag("CLAMAV_ENABLED", False)
+CELERY_WORKER_ENABLED = configured_env_flag(
+    "CELERY_WORKER_ENABLED",
+    configured_env_flag("CELERY_ENABLED", False),
+)
+CELERY_ENABLED = CELERY_WORKER_ENABLED  # backwards-compatible console setting
+CELERY_BEAT_ENABLED = configured_env_flag("CELERY_BEAT_ENABLED", False)
 DOCUMENT_CONVERTER_ENABLED = configured_env_flag("DOCUMENT_CONVERTER_ENABLED", False)
 COMPOSE = ["docker", "compose"] + (["--env-file", COMPOSE_ENV_FILE] if os.path.isfile(COMPOSE_ENV_FILE) else []) + ["-p", os.environ.get("COMPOSE_PROJECT_NAME", "lingsu")]
 FRONTEND_PORT = 5173
@@ -63,8 +68,8 @@ CONSOLE_PORT = int(os.environ.get("PORT", "8800"))
 PROFILE_SERVICES = {"frontend": "dev", "nginx": "production"}
 OPTIONAL_PROFILE_SERVICES = {
     "clamav": ("scanner", CLAMAV_ENABLED),
-    "celery": ("async", CELERY_ENABLED),
-    "celery_beat": ("async", CELERY_ENABLED),
+    "celery": ("async", CELERY_WORKER_ENABLED),
+    "celery_beat": ("async-beat", CELERY_BEAT_ENABLED),
     "gotenberg": ("documents", DOCUMENT_CONVERTER_ENABLED),
 }
 COMPOSE_SERVICES = ["postgres", "redis", "backend"]
@@ -72,14 +77,14 @@ for service, (profile, enabled) in OPTIONAL_PROFILE_SERVICES.items():
     if enabled:
         COMPOSE_SERVICES.append(service)
         PROFILE_SERVICES[service] = profile
-ALL_PROJECT_SERVICES = COMPOSE_SERVICES + list(PROFILE_SERVICES)
-SERVICE_TARGETS = set(ALL_PROJECT_SERVICES + ["all", "colima", "demo"])
-LOG_SERVICES = set(ALL_PROJECT_SERVICES + ["action"])
 FRONTEND_MODE = os.environ.get("FRONTEND_MODE", "docker").lower()
 COMPOSE_PROFILE = os.environ.get("COMPOSE_PROFILE", "dev").lower()
 ACTIVE_FRONTEND_SERVICE = "nginx" if COMPOSE_PROFILE == "production" else "frontend"
 if COMPOSE_PROFILE == "production":
     FRONTEND_PORT = int(os.environ.get("FRONTEND_PORT", "80"))
+ALL_PROJECT_SERVICES = COMPOSE_SERVICES + [ACTIVE_FRONTEND_SERVICE]
+SERVICE_TARGETS = set(ALL_PROJECT_SERVICES + ["all", "colima", "demo"])
+LOG_SERVICES = set(ALL_PROJECT_SERVICES + ["action"])
 
 # 从 .env 解析后端宿主端口（BACKEND_BIND=127.0.0.1:18001）
 BACKEND_PORT = 18001

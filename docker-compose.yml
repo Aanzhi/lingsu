@@ -4,6 +4,16 @@ services:
   # 项目控制台由宿主机 scripts/console.sh 单独运行，不作为 Compose 服务。
   postgres:
     image: postgres:16-alpine
+    command:
+      - postgres
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - max_connections=30
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-kechuang}
       POSTGRES_USER: ${POSTGRES_USER:-kechuang}
@@ -15,10 +25,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 12
+    mem_limit: 256m
+    cpus: 0.40
+    pids_limit: 128
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 64mb --maxmemory-policy noeviction
     volumes:
       - redis_data:/data
     healthcheck:
@@ -26,6 +40,10 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+    mem_limit: 96m
+    cpus: 0.20
+    pids_limit: 64
+    restart: unless-stopped
 
   clamav:
     image: ${CLAMAV_IMAGE:-clamav/clamav-debian:1.4}
@@ -40,6 +58,7 @@ services:
       start_period: 60s
 
   backend:
+    image: ${BACKEND_IMAGE:-lingsu-backend:latest}
     build:
       context: ./backend
       args:
@@ -54,12 +73,14 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       DOCUMENT_CONVERTER_URL: http://gotenberg:3000
       FILE_SCAN_REQUIRED: ${FILE_SCAN_REQUIRED:-1}
-      CLAMAV_HOST: ${CLAMAV_HOST-clamav}
+      CLAMAV_HOST: ${CLAMAV_HOST:-}
+      ATTACHMENT_UPLOADS_ENABLED: ${ATTACHMENT_UPLOADS_ENABLED:-1}
+      DOCUMENT_CONVERTER_ENABLED: ${DOCUMENT_CONVERTER_ENABLED:-1}
+      PDF_EXPORT_ENABLED: ${PDF_EXPORT_ENABLED:-1}
     command: >-
       sh -c "python manage.py migrate --noinput &&
-      python manage.py seed_ai_agents --reset &&
       python manage.py collectstatic --noinput &&
-      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-1} --timeout 120 --access-logfile - --error-logfile -"
+      gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-1} --threads ${GUNICORN_THREADS:-2} --max-requests ${GUNICORN_MAX_REQUESTS:-400} --max-requests-jitter ${GUNICORN_MAX_REQUESTS_JITTER:-40} --timeout 120 --access-logfile - --error-logfile -"
     volumes:
       - media_data:/app/media
     ports:
@@ -74,9 +95,14 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+    mem_limit: 384m
+    cpus: 0.70
+    pids_limit: 128
+    restart: unless-stopped
 
   celery:
     profiles: ["async"]
+    image: ${BACKEND_IMAGE:-lingsu-backend:latest}
     build:
       context: ./backend
       args:
@@ -91,8 +117,11 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/0
       DOCUMENT_CONVERTER_URL: http://gotenberg:3000
       FILE_SCAN_REQUIRED: ${FILE_SCAN_REQUIRED:-1}
-      CLAMAV_HOST: ${CLAMAV_HOST-clamav}
-    command: celery -A config worker --loglevel=INFO
+      CLAMAV_HOST: ${CLAMAV_HOST:-}
+      ATTACHMENT_UPLOADS_ENABLED: ${ATTACHMENT_UPLOADS_ENABLED:-1}
+      DOCUMENT_CONVERTER_ENABLED: ${DOCUMENT_CONVERTER_ENABLED:-1}
+      PDF_EXPORT_ENABLED: ${PDF_EXPORT_ENABLED:-1}
+    command: celery -A config worker --loglevel=${CELERY_LOG_LEVEL:-WARNING} --pool=${CELERY_POOL:-solo} --concurrency=${CELERY_CONCURRENCY:-1}
     volumes:
       - media_data:/app/media
     depends_on:
@@ -100,9 +129,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 384m
+    cpus: 0.70
+    pids_limit: 128
+    restart: unless-stopped
 
   celery_beat:
-    profiles: ["async"]
+    profiles: ["async-beat"]
+    image: ${BACKEND_IMAGE:-lingsu-backend:latest}
     build:
       context: ./backend
       args:
@@ -123,6 +157,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    mem_limit: 160m
+    cpus: 0.20
+    pids_limit: 96
+    restart: unless-stopped
 
   # Gotenberg packages LibreOffice as an HTTP conversion service. Export tasks
   # call DOCUMENT_CONVERTER_URL instead of shelling out in the Django container.
@@ -153,6 +191,7 @@ services:
     profiles: ["dev"]
 
   nginx:
+    image: ${WEB_IMAGE:-lingsu-nginx:latest}
     build:
       context: .
       dockerfile: infra/nginx/Dockerfile
@@ -166,6 +205,10 @@ services:
       backend:
         condition: service_healthy
     profiles: ["production"]
+    mem_limit: 64m
+    cpus: 0.20
+    pids_limit: 64
+    restart: unless-stopped
 
 volumes:
   postgres_data:

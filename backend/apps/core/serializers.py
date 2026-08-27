@@ -168,6 +168,8 @@ class MaterialRevisionSerializer(serializers.ModelSerializer):
 
     def validate_uploaded_files(self, uploads):
         request = self.context["request"]
+        if not settings.ATTACHMENT_UPLOADS_ENABLED:
+            raise serializers.ValidationError("当前核心部署未启用附件上传；请先保存文本材料，或联系管理员启用安全扫描。")
         max_size = getattr(settings, "MAX_UPLOAD_SIZE", 500 * 1024 * 1024)
         denied_extensions = {".exe", ".com", ".bat", ".cmd", ".msi", ".dll", ".scr", ".ps1", ".sh"}
         for upload in uploads:

@@ -3,13 +3,19 @@ import { computed, ref, watch } from 'vue'
 import type { AIAgent } from '../../api'
 import { AI_WORKBENCH_MODES, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   modelValue: AIWorkspaceMode
-  agents: AIAgent[]
+  agents?: AIAgent[]
   selectedAgent?: string
   disabled?: boolean
   modes?: AIWorkspaceMode[]
-}>()
+  showAgentRail?: boolean
+  showMoreAgents?: boolean
+}>(), {
+  agents: () => [],
+  showAgentRail: true,
+  showMoreAgents: true,
+})
 
 const emit = defineEmits<{
   (event: 'update:modelValue', value: AIWorkspaceMode): void
@@ -58,7 +64,7 @@ function goalLabel(agent: AIAgent) {
         <small>{{ mode.description }}</small>
       </button>
     </div>
-    <div class="ai-agent-rail" data-agent-rail aria-label="当前模式的 Agent（平台模板）" title="Agent 由平台 AI 助手模板管理">
+    <div v-if="props.showAgentRail" class="ai-agent-rail" data-agent-rail aria-label="当前模式的 Agent（平台模板）" title="Agent 由平台 AI 助手模板管理">
       <button class="ai-agent-arrow" type="button" aria-label="查看前面的 Agent" :disabled="props.disabled || !canMoveAgentBack" @click="moveAgents(-1)">‹</button>
       <div class="ai-agent-viewport">
         <div class="ai-agent-strip">
@@ -75,7 +81,7 @@ function goalLabel(agent: AIAgent) {
             <strong>{{ agent.name }}</strong>
             <small>{{ goalLabel(agent) }}</small>
           </button>
-          <button type="button" class="ai-agent-more" :disabled="props.disabled" @click="emit('more-agents')">更多能力</button>
+          <button v-if="props.showMoreAgents" type="button" class="ai-agent-more" :disabled="props.disabled" @click="emit('more-agents')">更多能力</button>
           <span v-if="!props.agents.length" class="ai-agent-empty">当前模式暂无可用能力</span>
         </div>
       </div>

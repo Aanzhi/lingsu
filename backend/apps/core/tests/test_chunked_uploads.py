@@ -74,6 +74,20 @@ class ChunkedUploadTests(TestCase):
         self.assertEqual(detail.data["uploaded_parts"], [0])
         self.assertEqual(detail.data["part_count"], 3)
 
+    @override_settings(ATTACHMENT_UPLOADS_ENABLED=False)
+    def test_core_deployment_rejects_chunked_attachment_session(self):
+        response = self.client.post("/api/upload-sessions/", {
+            "revision": self.revision.id,
+            "original_name": "evidence.bin",
+            "content_type": "application/octet-stream",
+            "total_size": 10,
+            "chunk_size": 4,
+        }, format="json")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("未启用附件上传", str(response.data))
+        self.assertFalse(UploadSession.objects.exists())
+
     def test_same_part_is_idempotent_but_conflicting_reupload_is_rejected(self):
         session = self.create_session().data
         first = self.put_part(session["id"], 0, b"abcd")

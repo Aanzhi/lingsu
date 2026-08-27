@@ -66,7 +66,14 @@ CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_TASK_ALWAYS_EAGER = os.getenv("CELERY_TASK_ALWAYS_EAGER", "1" if DEBUG else "0") == "1"
 CELERY_TASK_EAGER_PROPAGATES = DEBUG
+CELERY_WORKER_ENABLED = os.getenv("CELERY_WORKER_ENABLED", os.getenv("CELERY_ENABLED", "0")) == "1"
+CELERY_BEAT_ENABLED = os.getenv("CELERY_BEAT_ENABLED", "0") == "1"
+CELERY_CONCURRENCY = max(1, int(os.getenv("CELERY_CONCURRENCY", "1")))
+CELERY_POOL = os.getenv("CELERY_POOL", "solo")
+CELERY_LOG_LEVEL = os.getenv("CELERY_LOG_LEVEL", "WARNING")
 DOCUMENT_CONVERTER_URL = os.getenv("DOCUMENT_CONVERTER_URL", "http://localhost:3000")
+DOCUMENT_CONVERTER_ENABLED = os.getenv("DOCUMENT_CONVERTER_ENABLED", "1") == "1"
+PDF_EXPORT_ENABLED = os.getenv("PDF_EXPORT_ENABLED", "1") == "1"
 # Keep the existing OpenAI-compatible configuration while allowing the
 # deployment-provided ARK_API_KEY secret used by the MVP environment.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("ARK_API_KEY", "")
@@ -77,6 +84,8 @@ UPLOAD_CHUNK_MIN_SIZE = int(os.getenv("UPLOAD_CHUNK_MIN_SIZE", str(1024 * 1024))
 UPLOAD_CHUNK_MAX_SIZE = int(os.getenv("UPLOAD_CHUNK_MAX_SIZE", str(32 * 1024 * 1024)))
 UPLOAD_SESSION_TTL_HOURS = int(os.getenv("UPLOAD_SESSION_TTL_HOURS", "24"))
 FILE_SCAN_REQUIRED = os.getenv("FILE_SCAN_REQUIRED", "0" if DEBUG else "1") == "1"
-CLAMAV_HOST = os.getenv("CLAMAV_HOST", "")
+CLAMAV_ENABLED = os.getenv("CLAMAV_ENABLED", "1" if not DEBUG else "0") == "1"
+CLAMAV_HOST = os.getenv("CLAMAV_HOST", "") if CLAMAV_ENABLED else ""
 CLAMAV_PORT = int(os.getenv("CLAMAV_PORT", "3310"))
 CLAMAV_TIMEOUT = int(os.getenv("CLAMAV_TIMEOUT", "120"))
+ATTACHMENT_UPLOADS_ENABLED = os.getenv("ATTACHMENT_UPLOADS_ENABLED", "1") == "1"

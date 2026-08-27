@@ -1,0 +1,48 @@
+name: Publish production images
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - codex/ui-audit-consistency
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: ghcr.io/aanzhi/lingsu-backend:${{ github.sha }}
+          build-args: |
+            APT_MIRROR=https://mirrors.aliyun.com/debian
+            APT_SECURITY_MIRROR=https://mirrors.aliyun.com/debian-security
+            PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple
+
+      - name: Build and publish web image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./infra/nginx/Dockerfile
+          push: true
+          tags: ghcr.io/aanzhi/lingsu-web:${{ github.sha }}
+          build-args: |
+            NPM_REGISTRY=https://registry.npmmirror.com

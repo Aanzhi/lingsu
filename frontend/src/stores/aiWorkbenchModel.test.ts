@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AIAgent } from '../api'
-import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
+import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, resolveStudentAgent, visibleAgents, type AIWorkspaceMode } from './aiWorkbenchModel'
 
 const agent = (overrides: Partial<AIAgent>): AIAgent => ({
   id: 1,
@@ -46,6 +46,19 @@ describe('AI workbench model', () => {
     expect(visibleAgents('opening', agents).map((item) => item.key)).toEqual(['opening-agent', 'proposal-background'])
     expect(visibleAgents('research', agents).map((item) => item.key)).toEqual(['research-agent', 'report-agent'])
     expect(visibleAgents('defense', agents).map((item) => item.key)).toEqual(['defense-agent'])
+  })
+
+  it('resolves a deterministic internal student Agent without exposing it in the UI', () => {
+    const agents = [
+      agent({ id: 1, key: 'opening-late', name: '后置开题助手', category: '开题', workflow: 'opening', order: 2 }),
+      agent({ id: 2, key: 'opening-first', name: '默认开题助手', category: '开题', workflow: 'opening', order: 1 }),
+      agent({ id: 3, key: 'research-disabled', category: '研究', workflow: 'research', is_active: false, order: 0 }),
+    ]
+    expect(resolveStudentAgent('opening', agents)).toMatchObject({ key: 'opening-first' })
+    expect(resolveStudentAgent('opening', agents, 'opening-late')).toMatchObject({ key: 'opening-late' })
+    expect(resolveStudentAgent('opening', agents, 'missing')).toMatchObject({ key: 'opening-first' })
+    expect(resolveStudentAgent('opening', agents, 'opening-late', 'opening-first')).toMatchObject({ key: 'opening-first' })
+    expect(resolveStudentAgent('research', agents)).toBeNull()
   })
 
   it('requires an explicit action for completed drafts', () => {

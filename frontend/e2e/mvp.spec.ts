@@ -230,10 +230,18 @@ test('学生可以进入项目和 AI 工作台', async ({ page }) => {
   await page.goto('/student/ai')
   await expect(page.locator('aside.workspace-sidebar')).toHaveCount(1)
   await expect(page.locator('.workspace-sidebar a[aria-current="page"]')).toContainText('灵思 AI')
-  await expect(page.getByText('你的研究工作台')).toBeVisible()
+  await expect(page.getByText('研究工作台')).toBeVisible()
   await expect(page.getByRole('heading', { name: '灵思 AI', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: '历史对话' }).click()
-  await expect(page.getByRole('button', { name: '＋ 新建对话' })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /开题/ })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /^研究 / })).toBeVisible()
+  await expect(page.getByRole('tab', { name: /^成果表达 / })).toBeVisible()
+  await expect(page.locator('.ai-workbench-composer')).toHaveCount(1)
+  const newConversation = page.getByRole('button', { name: '新建对话', exact: true })
+  if (await newConversation.count()) await newConversation.click()
+  await expect(page.locator('.ai-workbench-page--new')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: '历史会话' })).toHaveCount(1)
+  await expect(page.getByRole('button', { name: '更多能力' })).toHaveCount(0)
+  await expect(page.locator('.ai-context-drawer, .ai-tool-picker')).toHaveCount(0)
 })
 
 test('已有课题可以直接创建项目', async ({ page }) => {
@@ -254,13 +262,15 @@ test('已有课题可以直接创建项目', async ({ page }) => {
 test('无课题可以进入 AI 对话工作台，不需要先填写补充表单', async ({ page }) => {
   await login(page, 'student', '/student/projects?create=1')
   await page.getByRole('dialog').getByRole('tab', { name: /AI 开题/ }).click()
-  await expect(page).toHaveURL(/\/student\/ai\?mode=brainstorm/)
+  await expect(page).toHaveURL(/\/student\/ai\?mode=opening/)
 
   await expect(page.getByRole('heading', { name: '灵思 AI', exact: true })).toBeVisible()
-  await expect(page.getByText('当前 Agent · 研究问题助手')).toBeVisible()
-  await expect(page.getByPlaceholder('先写下一个观察，或继续追问研究问题…')).toBeVisible()
+  await expect(page.locator('.ai-workbench-page--new')).toHaveCount(1)
+  await expect(page.getByRole('button', { name: '历史会话' })).toBeVisible()
+  await expect(page.getByPlaceholder('写下你的观察或研究想法…')).toBeVisible()
   await expect(page.getByText('补充信息（可选）')).toHaveCount(0)
   await expect(page.getByLabel('研究问题工作台')).toHaveCount(0)
+  await expect(page.locator('.ai-empty-state, .ai-project-selector')).toHaveCount(0)
 })
 
 test('研究旅程以五个章节呈现，当前章节默认展开', async ({ page }) => {
@@ -313,7 +323,7 @@ test('教师指导项目列表使用项目卡片并保留唯一详情入口', as
   }
 })
 
-test('学生 AI 工具菜单按分类滚动并展示全部可见工具', async ({ page }) => {
+test('学生 AI 三种模式共享聊天布局并隐藏技术 Agent', async ({ page }) => {
   await login(page, 'student', '/student/ai')
 
   for (const viewport of [{ width: 1280, height: 768 }, { width: 1440, height: 900 }]) {
@@ -324,8 +334,10 @@ test('学生 AI 工具菜单按分类滚动并展示全部可见工具', async (
     for (const label of ['开题', '研究', '成果表达']) {
       await page.getByRole('tab', { name: new RegExp(`^${label}`) }).click()
       await expect(page.getByRole('tab', { name: new RegExp(`^${label}`) })).toHaveAttribute('aria-selected', 'true')
-      await expect(page.locator('.ai-agent-strip')).toBeVisible()
-      await expect(page.locator('.ai-agent-empty')).toHaveCount(0)
+      await expect(page.locator('.ai-agent-strip, .ai-agent-more, [data-agent-rail]')).toHaveCount(0)
+      await expect(page.locator('.ai-workbench-composer')).toHaveCount(1)
+      await expect(page.locator('.ai-context-drawer, .ai-tool-picker')).toHaveCount(0)
+      await expect(page.locator('.ai-project-selector')).toHaveCount(0)
     }
   }
 })
@@ -419,8 +431,10 @@ test('关键页面没有本轮引入的浏览器控制台错误', async ({ page 
   })
   await login(page, 'student', '/student/projects')
   await expect(page.getByRole('heading', { name: '我的项目', exact: true })).toBeVisible()
+  const conversationsLoaded = page.waitForResponse((response) => response.request().method() === 'GET' && response.url().includes('/api/ai-conversations/') && response.status() < 400)
   await page.goto('/student/ai?mode=brainstorm&agent=proposal-topic')
   await expect(page.locator('.ai-workbench-composer__textarea')).toBeVisible()
+  await conversationsLoaded
   await page.context().clearCookies()
   await login(page, 'teacher', '/teacher/projects')
   await expect(page.getByRole('heading', { name: '指导项目', exact: true })).toBeVisible()

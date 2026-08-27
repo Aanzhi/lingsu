@@ -50,15 +50,15 @@ class ProductionContractTests(TestCase):
         client.force_authenticate(user)
         return client
 
-    def test_compose_backend_startup_resets_global_ai_agent_templates_after_migrations(self):
+    def test_compose_backend_startup_does_not_reset_global_ai_agent_templates(self):
         compose_path = Path(__file__).resolve().parents[4] / "docker-compose.yml"
         if not compose_path.is_file():
             self.skipTest("docker-compose.yml is not available inside the backend image")
         compose = compose_path.read_text(encoding="utf-8")
 
-        migrate_index = compose.index("python manage.py migrate --noinput")
-        seed_index = compose.index("python manage.py seed_ai_agents --reset")
-        self.assertLess(migrate_index, seed_index)
+        self.assertIn("python manage.py migrate --noinput", compose)
+        self.assertIn("python manage.py collectstatic --noinput", compose)
+        self.assertNotIn("seed_ai_agents --reset", compose)
 
     def test_real_session_login_and_logout(self):
         client = APIClient()

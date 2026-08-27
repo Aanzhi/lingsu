@@ -1,0 +1,19 @@
+[Unit]
+Description=Lingsu independent host project console
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/lingsu
+Environment=PORT=8800
+Environment=COMPOSE_PROFILE=production
+Environment=COMPOSE_ENV_FILE=/home/ubuntu/lingsu/.env
+ExecStart=/usr/bin/python3 /home/ubuntu/lingsu/scripts/project-console.py
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

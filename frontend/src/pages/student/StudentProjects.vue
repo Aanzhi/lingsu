@@ -139,7 +139,7 @@ async function create() {
 async function openBrainstorm() {
   open.value = false
   error.value = ''
-  await router.push({ path: '/student/ai', query: { mode: 'brainstorm', agent: 'proposal-topic' } })
+  await router.push({ path: '/student/ai', query: { mode: 'opening', agent: 'proposal-topic' } })
 }
 function setPage(nextPage: number) {
   page.value = Math.min(Math.max(nextPage, 1), totalPages.value)

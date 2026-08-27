@@ -50,3 +50,9 @@ class RuntimeConfigurationTests(SimpleTestCase):
         messages = production_file_scanner_check(None)
 
         self.assertIn("core.E001", [message.id for message in messages])
+
+    @override_settings(DEBUG=False, FILE_SCAN_REQUIRED=True, CLAMAV_HOST="", ATTACHMENT_UPLOADS_ENABLED=False)
+    def test_text_only_core_deployment_can_start_without_file_scanner(self):
+        from apps.core.checks import production_file_scanner_check
+
+        self.assertEqual(production_file_scanner_check(None), [])

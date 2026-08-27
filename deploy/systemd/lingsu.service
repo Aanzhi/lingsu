@@ -1,0 +1,17 @@
+[Unit]
+Description=Lingsu production Docker Compose core services
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/ubuntu/lingsu
+ExecStart=/usr/bin/docker compose --env-file /home/ubuntu/lingsu/.env --profile production --profile async up -d --no-build postgres redis backend celery nginx
+ExecStop=/usr/bin/docker compose --env-file /home/ubuntu/lingsu/.env --profile production --profile async stop postgres redis backend celery nginx
+RemainAfterExit=yes
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

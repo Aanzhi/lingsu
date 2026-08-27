@@ -39,6 +39,20 @@ export function visibleAgents(mode: AIWorkspaceMode, agents: AIAgent[], audience
     .sort((left, right) => left.order - right.order || left.name.localeCompare(right.name))
 }
 
+/** Resolve the internal student assistant without exposing platform template names in the UI. */
+export function resolveStudentAgent(
+  mode: AIWorkspaceMode,
+  agents: AIAgent[],
+  requestedKey?: string,
+  conversationKey?: string | null,
+): AIAgent | null {
+  const available = visibleAgents(mode, agents, 'student')
+  const conversationAgent = available.find((agent) => agent.key === conversationKey)
+  if (conversationAgent) return conversationAgent
+  const requestedAgent = available.find((agent) => agent.key === requestedKey)
+  return requestedAgent || available[0] || null
+}
+
 export type DraftAction = 'save_material' | 'create_project_from_opening'
 
 export function draftActions(status: string): DraftAction[] {

@@ -63,7 +63,7 @@ class ProjectConsoleTests(unittest.TestCase):
             content = handle.read()
         self.assertIn('profiles: ["scanner"]', content)
         self.assertIn("FILE_SCAN_REQUIRED: ${FILE_SCAN_REQUIRED:-1}", content)
-        self.assertIn("CLAMAV_HOST: ${CLAMAV_HOST-clamav}", content)
+        self.assertIn("CLAMAV_HOST: ${CLAMAV_HOST:-}", content)
         backend_block = content.split("\n  celery:\n", 1)[0]
         self.assertNotIn("      clamav:\n        condition: service_healthy", backend_block)
 
@@ -71,9 +71,11 @@ class ProjectConsoleTests(unittest.TestCase):
         with open("docker-compose.yml", encoding="utf-8") as handle:
             content = handle.read()
         self.assertRegex(content, r"(?ms)^  celery:\n.*?profiles: \[\"async\"\]")
-        self.assertRegex(content, r"(?ms)^  celery_beat:\n.*?profiles: \[\"async\"\]")
+        self.assertRegex(content, r"(?ms)^  celery_beat:\n.*?profiles: \[\"async-beat\"\]")
         self.assertRegex(content, r"(?ms)^  gotenberg:\n.*?profiles: \[\"documents\"\]")
         self.assertIn("--workers ${GUNICORN_WORKERS:-1}", content)
+        self.assertIn("--threads ${GUNICORN_THREADS:-2}", content)
+        self.assertIn("--pool=${CELERY_POOL:-solo}", content)
 
     def test_console_core_mode_excludes_scanner_async_and_documents(self):
         probe = (
@@ -85,7 +87,8 @@ class ProjectConsoleTests(unittest.TestCase):
         env = os.environ.copy()
         env.update({
             "CLAMAV_ENABLED": "0",
-            "CELERY_ENABLED": "0",
+            "CELERY_WORKER_ENABLED": "0",
+            "CELERY_BEAT_ENABLED": "0",
             "DOCUMENT_CONVERTER_ENABLED": "0",
             "COMPOSE_ENV_FILE": "/tmp/lingsu-test-env-does-not-exist",
         })
@@ -125,6 +128,26 @@ class ProjectConsoleTests(unittest.TestCase):
             check=True,
         )
         self.assertNotIn("clamav", result.stdout.split(","))
+
+    def test_console_can_enable_worker_without_enabling_beat(self):
+        probe = (
+            "import importlib.util; "
+            "spec=importlib.util.spec_from_file_location('console', 'scripts/project-console.py'); "
+            "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+            "print(','.join(module.COMPOSE_SERVICES)); print(module.PROFILE_SERVICES.get('celery')); print(module.PROFILE_SERVICES.get('celery_beat'))"
+        )
+        env = os.environ.copy()
+        env.update({
+            "CELERY_WORKER_ENABLED": "1",
+            "CELERY_BEAT_ENABLED": "0",
+            "COMPOSE_ENV_FILE": "/tmp/lingsu-test-env-does-not-exist",
+        })
+        result = subprocess.run([sys.executable, "-c", probe], capture_output=True, text=True, env=env, check=True)
+        lines = result.stdout.strip().splitlines()
+        self.assertIn("celery", lines[0].split(","))
+        self.assertNotIn("celery_beat", lines[0].split(","))
+        self.assertEqual(lines[1], "async")
+        self.assertEqual(lines[2], "None")
 
     def test_console_html_has_one_backend_stack_start_button(self):
         with open("scripts/console.html", encoding="utf-8") as handle:
@@ -188,7 +211,8 @@ class ProjectConsoleTests(unittest.TestCase):
         self.assertEqual(status["source"], "宿主机 Vite（未由控制台启动）")
 
     def test_service_profile_is_applied_to_profile_services(self):
-        with patch.object(console, "ensure_docker", return_value=True), \
+        with patch.object(console, "ALL_PROJECT_SERVICES", ["postgres", "redis", "backend", "nginx"]), \
+             patch.object(console, "ensure_docker", return_value=True), \
              patch.object(console, "compose", return_value=(0, "ok", "")) as compose:
             self.assertTrue(console.compose_service_action("nginx", "start"))
         compose.assert_called_once_with("--profile", "production", "up", "-d", "nginx", timeout=180)

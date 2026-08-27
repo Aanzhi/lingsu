@@ -470,9 +470,11 @@ test.describe('核心项目跨角色闭环', () => {
     await login(page, studentUsername, `/student/ai?mode=research&projectId=${project.id}`)
     await expect(page.locator('.ai-workbench-composer__textarea')).toBeVisible()
     await page.getByRole('tab', { name: /^成果表达/ }).click()
-    await expect(page).toHaveURL(/\/student\/ai\?mode=defense&projectId=/)
+    await expect(page).toHaveURL(/\/student\/ai\?mode=defense(?:&[^#]*)?projectId=/)
     await expect(page.locator('.ai-workbench-composer__textarea')).toBeVisible()
     await page.goto(`/student/ai?mode=research&projectId=${project.id}`)
+    const newConversationButton = page.getByRole('button', { name: '新建对话', exact: true })
+    if (await newConversationButton.count()) await newConversationButton.click()
 
     let messageRequests = 0
     let streamRequests = 0
@@ -532,17 +534,17 @@ test.describe('核心项目跨角色闭环', () => {
     await page.getByRole('button', { name: '发送', exact: true }).click()
     await expect(page.getByText('受控替身暂时失败')).toBeVisible()
     await page.getByRole('button', { name: '重试', exact: true }).click()
-    await expect(page.locator('.artifact-card')).toBeVisible()
-    await expect(page.locator('.artifact-card')).toContainText('研究记录建议')
-    await page.locator('.artifact-card textarea').fill('人工修改后的研究记录建议。')
-    const target = page.locator('.target-material select')
+    await expect(page.locator('.ai-result-card')).toBeVisible()
+    await expect(page.locator('.ai-result-card')).toContainText('研究记录建议')
+    await page.locator('.ai-result-card textarea').fill('人工修改后的研究记录建议。')
+    await page.getByRole('button', { name: '保存为材料', exact: true }).click()
+    const target = page.locator('.ai-material-target select')
     await expect(target).toBeVisible()
     await target.selectOption({ index: 1 })
-    await page.getByRole('button', { name: '保存为材料', exact: true }).click()
-    await page.getByRole('alertdialog', { name: '确认 AI 草稿操作' }).getByRole('button', { name: '确认保存', exact: true }).click()
-    await expect(page.getByText(/草稿已提交到材料/)).toBeVisible()
+    await page.getByRole('dialog', { name: '保存为材料' }).getByRole('button', { name: '保存为材料', exact: true }).click()
+    await expect(page.getByText(/草稿已保存到/)).toBeVisible()
     expect(messageRequests).toBe(1)
-    expect(savedPayload).toMatchObject({ content: '人工修改后的研究记录建议。', revision_note: '由全局 AI 对话保存为材料草稿' })
+    expect(savedPayload).toMatchObject({ content: '人工修改后的研究记录建议。', revision_note: '由灵思 AI 生成结果保存为材料草稿' })
   })
 
   test('已配置真实 AI 服务时完成一次模型队列和流式冒烟', async ({ page }) => {
@@ -556,7 +558,7 @@ test.describe('核心项目跨角色闭环', () => {
     await page.locator('.ai-workbench-composer__textarea').fill('请用一句话总结当前项目的研究问题。')
     await page.getByRole('button', { name: '发送', exact: true }).click()
     await expect.poll(async () => {
-      const assistant = page.locator('.message.assistant').last()
+      const assistant = page.locator('.ai-message.assistant').last()
       return (await assistant.innerText()).replace('灵思 AI', '').trim()
     }, { timeout: 60_000, intervals: [1000, 2000] }).not.toMatch(/^正在排队|^正在生成|^$/)
     const logs = await getJson<Array<{ project: number; status: string }>>(page, `ai-logs/?project=${project.id}`)

@@ -17,11 +17,13 @@ import { canInviteMember } from '../../stores/memberModel'
 import { makeFeedback, type FeedbackState } from '../../stores/feedbackModel'
 import { studentProjectRoute, studentTaskRoute } from '../../stores/pageContracts'
 import { projectTypeLabel } from '../../stores/presentationModel'
+import { runtimeCapabilities } from '../../stores/runtimeCapabilities'
 
 const route = useRoute(); const router = useRouter(); const error = ref(''); const feedback = ref<FeedbackState | null>(null); const exports = ref<ReportExport[]>([]); const exportBusy = ref(false); let pollTimer: number | undefined
 const loading = ref(true)
 const surface = computed(() => String(route.meta.surface ?? 'map')); const projectId = computed(() => Number(route.params.id))
 const project = computed(() => student.project(projectId.value))
+const pdfExportEnabled = computed(() => runtimeCapabilities.state.pdf_export)
 const researchQuestionLocation = computed(() => ({
   path: '/student/ai',
   query: { projectId: String(projectId.value), researchQuestion: '1' },
@@ -95,6 +97,10 @@ async function load() {
   }
 }
 async function queueExport(format: 'docx' | 'pdf') {
+  if (format === 'pdf' && !pdfExportEnabled.value) {
+    feedback.value = makeFeedback('info', '当前核心部署未启用 PDF 转换。', '请导出 Word 文档；启用文档转换服务后才可生成 PDF。')
+    return
+  }
   if (!reportSections.value.length) {
     feedback.value = makeFeedback('info', '报告还没有已通过材料。', '至少有一项材料通过教师审核后，才能解锁正式导出。')
     return
@@ -104,7 +110,7 @@ async function queueExport(format: 'docx' | 'pdf') {
   catch (reason) { feedback.value = makeFeedback('error', errorMessage(reason), '报告内容不会丢失，可以稍后重试。', '重试') }
   finally { exportBusy.value = false }
 }
-onMounted(load)
+onMounted(() => { void runtimeCapabilities.load(); void load() })
 onBeforeUnmount(() => { window.clearTimeout(pollTimer) })
 watch([projectId, surface], () => { void load() })
 </script>
@@ -194,11 +200,11 @@ watch([projectId, surface], () => { void load() })
     <template v-else-if="project">
       <div class="demo-report-grid">
         <div class="demo-stack">
-          <section class="paper-card demo-card-pad"><p class="eyebrow">当前状态</p><h2>还差 {{ Math.max(materials.length - reportSections.length, 0) }} 项材料</h2><p class="muted">完成并通过审核后，Word 和 PDF 导出会自动解锁。</p><div class="demo-progress"><div class="progress-row"><span>报告完成度</span><strong>{{ reportSections.length }} / {{ materials.length }}</strong></div><div class="progress-track"><i :style="{ width: `${Math.round(reportSections.length / Math.max(materials.length, 1) * 100)}%` }" /></div></div></section>
+          <section class="paper-card demo-card-pad"><p class="eyebrow">当前状态</p><h2>还差 {{ Math.max(materials.length - reportSections.length, 0) }} 项材料</h2><p class="muted">完成并通过审核后，Word 导出会解锁。PDF 需要额外的文档转换服务。</p><div class="demo-progress"><div class="progress-row"><span>报告完成度</span><strong>{{ reportSections.length }} / {{ materials.length }}</strong></div><div class="progress-track"><i :style="{ width: `${Math.round(reportSections.length / Math.max(materials.length, 1) * 100)}%` }" /></div></div></section>
           <section class="paper-card demo-card-pad"><h2>报告章节</h2><div class="demo-list"><div v-for="chapter in journeyChapters.slice(0, 3)" :key="chapter.index" class="demo-list-row"><div><strong>{{ ['一、研究问题', '二、研究过程', '三、研究结论'][chapter.index - 1] || chapter.name }}</strong><small>{{ chapter.done ? `已完成 ${chapter.done} 项材料` : '等待材料通过审核' }}</small></div><StatusTag :status="chapter.done === chapter.total && chapter.total ? 'completed' : chapter.done ? 'active' : 'draft'" /></div></div></section>
         </div>
         <aside class="demo-stack">
-          <section class="paper-card demo-card-pad"><h2>导出报告</h2><p class="muted">至少有一项材料通过审核后才能生成正式报告。</p><div class="demo-stack demo-export-actions"><button class="secondary-button" :disabled="exportBusy || !reportSections.length" type="button" @click="queueExport('docx')"><el-icon><Download /></el-icon> 导出 Word</button><button class="secondary-button" :disabled="exportBusy || !reportSections.length" type="button" @click="queueExport('pdf')">导出 PDF</button></div></section>
+          <section class="paper-card demo-card-pad"><h2>导出报告</h2><p class="muted">至少有一项材料通过审核后才能生成正式报告。</p><div class="demo-stack demo-export-actions"><button class="secondary-button" :disabled="exportBusy || !reportSections.length" type="button" @click="queueExport('docx')"><el-icon><Download /></el-icon> 导出 Word</button><button v-if="pdfExportEnabled" class="secondary-button" :disabled="exportBusy || !reportSections.length" type="button" @click="queueExport('pdf')">导出 PDF</button><small v-else class="pdf-export-disabled">当前核心部署未启用 PDF 转换，请导出 Word。</small></div></section>
           <section v-if="exports.length" class="paper-card demo-card-pad"><h2>生成历史</h2><div class="demo-list"><div v-for="item in exports" :key="item.id" class="demo-list-row"><span>{{ item.format.toUpperCase() }} · {{ exportStatusLabel(item.status) }}</span><a v-if="item.download_url" class="text-link" :href="item.download_url">下载</a></div></div></section>
         </aside>
       </div>
@@ -287,6 +293,7 @@ watch([projectId, surface], () => { void load() })
 .demo-stack { display: grid; align-content: start; gap: var(--space-4); }
 .demo-export-actions { margin-top: 18px; }
 .demo-export-actions .secondary-button { width: 100%; }
+.pdf-export-disabled { color: var(--muted); line-height: 1.6; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 1024px) {
   .journey-workspace { grid-template-columns: minmax(0, 1fr) 280px; }

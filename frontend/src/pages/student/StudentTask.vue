@@ -14,10 +14,12 @@ import { taskPermission } from '../../stores/projectPermissions'
 import { selectPriorityTask, taskActionLabel, taskCompletion, validateTaskSubmission } from '../../stores/studentApiModel'
 import { aiQuickEntryLocation, taskQuickEntryAgents } from '../../stores/aiModel'
 import { studentProjectRoute, studentTaskRoute } from '../../stores/pageContracts'
+import { runtimeCapabilities } from '../../stores/runtimeCapabilities'
 
 const route = useRoute(); const loading = ref(false); const dataLoading = ref(true); const body = ref(''); const truth = ref(false); const files = ref<File[]>([]); const feedback = ref<FeedbackState | null>(null); const aiAgents = ref<AIAgent[]>([])
 const projectId = computed(() => Number(route.params.id)); const taskId = computed(() => Number(route.params.taskId))
 const project = computed(() => student.project(projectId.value)); const task = computed(() => student.task(taskId.value)); const material = computed(() => student.materialForTask(taskId.value))
+const attachmentsEnabled = computed(() => runtimeCapabilities.state.attachments)
 const projectTasks = computed(() => student.state.tasks.filter((item) => item.project === projectId.value).sort((a, b) => a.order - b.order))
 const quickAgents = computed(() => task.value && project.value ? taskQuickEntryAgents(aiAgents.value, task.value, project.value.project_type) : [])
 const aiCenterEntry = computed(() => {
@@ -62,6 +64,7 @@ async function load() {
 }
 onMounted(() => {
   void load()
+  void runtimeCapabilities.load()
   getAIAgents().then((response) => { aiAgents.value = response.data }).catch(() => { aiAgents.value = [] })
 })
 watch(material, (value) => { body.value = value?.revisions.at(-1)?.content ?? ''; truth.value = false; files.value = [] }, { immediate: true })
@@ -70,6 +73,10 @@ function addFiles(event: Event) { files.value = Array.from((event.target as HTML
 function retry() { feedback.value = null; void load() }
 async function submit() {
   if (!task.value || !material.value) return
+  if (files.value.length && !attachmentsEnabled.value) {
+    feedback.value = makeFeedback('error', '当前部署未启用附件上传。', '请先保存文本材料，或联系管理员启用安全扫描。')
+    return
+  }
   const validationError = validateTaskSubmission(task.value, body.value, files.value, truth.value)
   if (validationError) { feedback.value = makeFeedback('error', validationError, '请根据提示补充后再提交。'); return }
   if (!permission.value.canSubmit) { feedback.value = makeFeedback('info', permission.value.reason); return }
@@ -84,6 +91,10 @@ async function submit() {
 }
 async function saveDraft() {
   if (!task.value || !material.value || !permission.value.canDraft) return
+  if (files.value.length && !attachmentsEnabled.value) {
+    feedback.value = makeFeedback('error', '当前部署未启用附件上传。', '请先保存文本材料，或联系管理员启用安全扫描。')
+    return
+  }
   if (!body.value.trim() && !files.value.length) { feedback.value = makeFeedback('error', '请填写正文或选择附件后再保存。'); return }
   loading.value = true; feedback.value = null
   try {
@@ -150,7 +161,8 @@ async function submitTeamDraft() {
             <div class="task-editor-panel__heading"><div><p class="eyebrow">提交内容</p><h3>我的记录</h3></div><span>{{ body.length }} / 3000</span></div>
             <textarea v-model="body" aria-label="我的记录" rows="8" placeholder="在这里填写你的任务记录……" />
           </section>
-          <section class="task-attachment-panel"><div><el-icon><UploadFilled /></el-icon><span><strong>选择任务附件</strong><small>文件将上传至受权限保护的项目空间</small></span></div><label class="secondary-button"><input type="file" multiple @change="addFiles">选择文件</label><div v-for="file in files" :key="`${file.name}-${file.size}`" class="file-chip"><el-icon><Paperclip /></el-icon>{{ file.name }}<button type="button" @click="files = files.filter((item) => item !== file)">×</button></div></section>
+          <section v-if="attachmentsEnabled" class="task-attachment-panel"><div><el-icon><UploadFilled /></el-icon><span><strong>选择任务附件</strong><small>文件将上传至受权限保护的项目空间</small></span></div><label class="secondary-button"><input type="file" multiple @change="addFiles">选择文件</label><div v-for="file in files" :key="`${file.name}-${file.size}`" class="file-chip"><el-icon><Paperclip /></el-icon>{{ file.name }}<button type="button" @click="files = files.filter((item) => item !== file)">×</button></div></section>
+          <section v-else class="task-attachment-disabled"><el-icon><Lock /></el-icon><div><strong>当前部署未启用附件上传</strong><small>核心服务优先保障文本材料；启用安全扫描后才可上传文件。</small></div></section>
         </template>
         <template v-if="canEdit">
           <label v-if="isLeader" class="truth-check"><input v-model="truth" type="checkbox"><span><strong>我已按真实项目核对以上内容</strong><small>材料中的事实、数据和引用已经过人工确认。</small></span></label>
@@ -217,6 +229,10 @@ async function submitTeamDraft() {
 .task-attachment-panel label { margin: 0; }
 .task-attachment-panel label input { display: none; }
 .task-attachment-panel .file-chip { grid-column: 1 / -1; }
+.task-attachment-disabled { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding: 14px; border: 1px dashed var(--line-dark); border-radius: var(--radius-sm); color: var(--muted); background: var(--paper-muted); }
+.task-attachment-disabled > div { display: grid; gap: 3px; }
+.task-attachment-disabled strong { color: var(--ink); }
+.task-attachment-disabled small { color: var(--muted); }
 .task-support-column { position: sticky; top: 20px; display: grid; gap: 14px; }
 .demo-task-side-card { min-width: 0; padding: 22px; }
 .demo-task-side-card h2 { margin: 5px 0 7px; color: var(--ink); font-size: 20px; overflow-wrap: anywhere; }

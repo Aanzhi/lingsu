@@ -43,6 +43,17 @@ class UploadPolicyTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("存储配额", str(response.data))
 
+    @override_settings(ATTACHMENT_UPLOADS_ENABLED=False)
+    def test_core_deployment_rejects_regular_attachment_upload_before_creation(self):
+        response = self.client.post("/api/material-revisions/", {
+            "material": self.material.id,
+            "uploaded_files": [SimpleUploadedFile("evidence.txt", b"real evidence", content_type="text/plain")],
+        }, format="multipart")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("未启用附件上传", str(response.data))
+        self.assertFalse(MaterialRevision.objects.filter(material=self.material).exists())
+
     @patch("apps.core.serializers.process_uploaded_material.delay")
     def test_accepted_upload_is_queued_for_security_processing(self, delay):
         with self.captureOnCommitCallbacks(execute=True):

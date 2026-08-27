@@ -39,6 +39,16 @@ class ReportExportTests(TestCase):
         self.assertEqual(queued.status_code, 201)
         self.assertEqual(queued.data["status"], "queued")
 
+    @override_settings(PDF_EXPORT_ENABLED=False)
+    def test_core_deployment_rejects_pdf_before_queueing(self):
+        response = self.client_for(self.leader).post(
+            "/api/report-exports/", {"project": self.project.id, "format": "pdf"}, format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("未启用 PDF", str(response.data))
+        self.assertFalse(ReportExport.objects.filter(project=self.project, format="pdf").exists())
+
     def test_queueing_report_export_records_a_non_sensitive_audit_event(self):
         response = self.client_for(self.leader).post(
             "/api/report-exports/", {"project": self.project.id, "format": "docx"}, format="json",

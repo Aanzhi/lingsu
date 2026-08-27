@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import type { AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   draft: string
   mode: AIWorkspaceMode
   agentName?: string
@@ -12,7 +12,12 @@ const props = defineProps<{
   selectedMaterialIds?: number[]
   canCiteMaterials?: boolean
   sending?: boolean
-}>()
+  showMeta?: boolean
+  showMaterialCitation?: boolean
+}>(), {
+  showMeta: true,
+  showMaterialCitation: true,
+})
 
 const emit = defineEmits<{
   (event: 'update:draft', value: string): void
@@ -31,7 +36,7 @@ const canCiteMaterials = computed(() => props.canCiteMaterials ?? props.mode !==
 
 <template>
   <footer class="ai-workbench-composer">
-    <div class="ai-workbench-composer__meta">
+    <div v-if="props.showMeta" class="ai-workbench-composer__meta">
       <span class="ai-workbench-composer__agent">当前 Agent · <strong>{{ props.agentName || (props.mode === 'opening' ? '开题伙伴' : '灵思 AI') }}</strong></span>
       <span class="ai-workbench-composer__context">{{ props.projectLabel || (props.mode === 'opening' ? '开题 · 不读取项目材料' : '等待当前项目') }}</span>
     </div>
@@ -45,7 +50,7 @@ const canCiteMaterials = computed(() => props.canCiteMaterials ?? props.mode !==
       @keydown.enter.exact.prevent="emit('send')"
     />
     <div class="ai-workbench-composer__footer">
-      <button class="composer-tool-button selected-material" type="button" :disabled="props.disabled || !canCiteMaterials" @click="emit('cite-material')">＋ 引用材料<span v-if="props.selectedMaterialIds?.length"> · 已选 {{ props.selectedMaterialIds.length }}</span></button>
+      <button v-if="props.showMaterialCitation" class="composer-tool-button selected-material" type="button" :disabled="props.disabled || !canCiteMaterials" @click="emit('cite-material')">＋ 引用材料<span v-if="props.selectedMaterialIds?.length"> · 已选 {{ props.selectedMaterialIds.length }}</span></button>
       <span class="composer-hint">Enter 发送 · Shift+Enter 换行</span>
       <button v-if="props.sending" class="send-button send-button--stop" type="button" @click="emit('stop')">停止</button>
       <button v-else class="send-button" type="button" :disabled="props.disabled || !props.canSend" @click="emit('send')">发送</button>

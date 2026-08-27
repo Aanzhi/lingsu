@@ -24,7 +24,15 @@ class PlatformConfigurationTests(TestCase):
         self.assertNotIn("OPENAI_API_KEY", str(response.data))
         self.assertNotIn("password", str(response.data).lower())
 
-    @override_settings(CLAMAV_HOST="clamav")
+    @override_settings(ATTACHMENT_UPLOADS_ENABLED=False, PDF_EXPORT_ENABLED=False)
+    def test_health_declares_disabled_core_deployment_capabilities(self):
+        response = self.client.get("/api/health/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["status"], "ok")
+        self.assertEqual(response.data["capabilities"], {"attachments": False, "pdf_export": False})
+
+    @override_settings(CLAMAV_ENABLED=True, CLAMAV_HOST="clamav")
     @patch("apps.core.views.requests.get")
     @patch("apps.core.views.redis.Redis.from_url")
     @patch("apps.core.views.clamd.ClamdNetworkSocket")

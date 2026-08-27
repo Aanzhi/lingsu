@@ -70,6 +70,8 @@ def _redis_status():
 
 
 def _clamav_status():
+    if not getattr(settings, "ATTACHMENT_UPLOADS_ENABLED", True) or not getattr(settings, "CLAMAV_ENABLED", True):
+        return "disabled"
     host = getattr(settings, "CLAMAV_HOST", "").strip()
     if not host:
         return "not_configured"
@@ -81,6 +83,8 @@ def _clamav_status():
 
 
 def _document_converter_status():
+    if not getattr(settings, "DOCUMENT_CONVERTER_ENABLED", True):
+        return "disabled"
     converter_url = getattr(settings, "DOCUMENT_CONVERTER_URL", "").strip()
     if not converter_url:
         return "not_configured"
@@ -530,7 +534,13 @@ def health(request):
     with connection.cursor() as cursor:
         cursor.execute("SELECT 1")
         cursor.fetchone()
-    return Response({"status": "ok"})
+    return Response({
+        "status": "ok",
+        "capabilities": {
+            "attachments": bool(getattr(settings, "ATTACHMENT_UPLOADS_ENABLED", True)),
+            "pdf_export": bool(getattr(settings, "PDF_EXPORT_ENABLED", True)),
+        },
+    })
 
 
 @ensure_csrf_cookie
@@ -842,6 +852,8 @@ class UploadSessionViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         require_authorized_school(self.request.user)
+        if not settings.ATTACHMENT_UPLOADS_ENABLED:
+            raise ValidationError("当前核心部署未启用附件上传；请先保存文本材料，或联系管理员启用安全扫描。")
         if self.request.user.role != Account.Role.STUDENT:
             raise PermissionDenied("仅项目学生可上传材料附件。")
         revision = serializer.validated_data["revision"]
@@ -1615,6 +1627,8 @@ class ReportExportViewSet(viewsets.ModelViewSet):
             raise PermissionDenied("仅项目负责人可生成报告。")
         if not accessible_projects(self.request.user).filter(pk=project.pk).exists():
             raise PermissionDenied("无项目权限。")
+        if serializer.validated_data["format"] == ReportExport.Format.PDF and not settings.PDF_EXPORT_ENABLED:
+            raise ValidationError("当前核心部署未启用 PDF 转换，请导出 Word 文档。")
         export = serializer.save(requested_by=self.request.user)
         AuditEvent.objects.create(
             school=project.school,

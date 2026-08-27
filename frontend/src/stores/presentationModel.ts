@@ -48,7 +48,7 @@ export function conversationDisplayTitle(conversation: Pick<ConversationSummary,
   return prompt ? `${prompt.slice(0, 32)}${prompt.length > 32 ? '…' : ''}` : '未命名对话'
 }
 
-export function filterConversationSummaries(items: ConversationSummary[], keyword: string, includeArchived = false) {
+export function filterConversationSummaries<T extends ConversationSummary>(items: T[], keyword: string, includeArchived = false): T[] {
   const normalized = keyword.trim().toLowerCase()
   return items.filter((item) => {
     if (!includeArchived && item.is_archived) return false

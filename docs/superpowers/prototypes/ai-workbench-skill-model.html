@@ -1,0 +1,554 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>灵思 AI · 工作台方案预览</title>
+    <style>
+      :root {
+        --ink: #1f3329;
+        --muted: #718077;
+        --soft: #f4f6f2;
+        --paper: #ffffff;
+        --line: #d9e2dc;
+        --green: #4f765f;
+        --green-dark: #385d49;
+        --green-soft: #e5efe8;
+        --green-pale: #f1f6f2;
+        --shadow: 0 16px 36px rgba(45, 74, 57, 0.08);
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body { min-width: 1180px; min-height: 100%; }
+
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--soft);
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      button, textarea { font: inherit; }
+      button { color: inherit; }
+
+      .topbar {
+        height: 66px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 30px;
+        background: rgba(255, 255, 255, 0.96);
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        font-weight: 750;
+        letter-spacing: -0.04em;
+      }
+
+      .brand-mark {
+        width: 34px;
+        height: 34px;
+        display: grid;
+        place-items: center;
+        border-radius: 9px;
+        color: #fff;
+        background: var(--green-dark);
+        font-size: 17px;
+      }
+
+      .brand-name { font-size: 23px; }
+      .brand-divider { width: 1px; height: 22px; background: var(--line); }
+      .brand-subtitle { color: var(--muted); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+
+      .topbar-context { display: flex; align-items: center; gap: 12px; }
+
+      .context-pill, .user-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        min-height: 36px;
+        padding: 0 14px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fbfcfa;
+        font-size: 13px;
+        font-weight: 650;
+      }
+
+      .context-pill::before {
+        content: "";
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+      }
+
+      .user-avatar {
+        width: 27px;
+        height: 27px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        color: #fff;
+        background: #88a18e;
+        font-size: 12px;
+      }
+
+      .app-layout {
+        display: grid;
+        grid-template-columns: 232px minmax(0, 1fr);
+        min-height: calc(100vh - 66px);
+      }
+
+      .sidebar {
+        padding: 28px 16px;
+        background: var(--paper);
+        border-right: 1px solid var(--line);
+      }
+
+      .sidebar-label {
+        margin: 0 12px 18px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 750;
+        letter-spacing: 0.08em;
+      }
+
+      .nav-list { display: grid; gap: 4px; }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        height: 44px;
+        padding: 0 13px;
+        border-radius: 9px;
+        color: #506159;
+        font-size: 14px;
+        font-weight: 650;
+      }
+
+      .nav-item.active { color: var(--green-dark); background: var(--green-soft); }
+      .nav-icon { width: 20px; color: #789086; text-align: center; font-size: 16px; }
+      .nav-item.active .nav-icon { color: var(--green-dark); }
+
+      .main {
+        min-width: 0;
+        padding: 35px 0 64px;
+        overflow: auto;
+      }
+
+      .content {
+        width: min(1120px, calc(100% - 64px));
+        margin: 0 auto;
+      }
+
+      .page-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 24px;
+        padding-bottom: 25px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .eyebrow {
+        margin: 0 0 7px;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+      }
+
+      h1 {
+        margin: 0;
+        color: var(--ink);
+        font-size: 44px;
+        line-height: 1.06;
+        letter-spacing: -0.06em;
+      }
+
+      .page-description { margin: 11px 0 0; color: #617168; font-size: 15px; }
+
+      .head-badges { display: flex; align-items: center; gap: 10px; padding-top: 9px; }
+      .mode-status { color: var(--green-dark); background: var(--green-pale); border-color: #bdd5c4; }
+
+      .section { margin-top: 26px; }
+
+      .section-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+      .section-title { margin: 0; font-size: 16px; letter-spacing: -0.02em; }
+      .section-note { color: var(--muted); font-size: 13px; }
+
+      .mode-tabs {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        overflow: hidden;
+        border: 1px solid #cbd9d0;
+        border-radius: 12px;
+        background: var(--paper);
+      }
+
+      .mode-tab {
+        min-height: 76px;
+        padding: 14px 18px;
+        border: 0;
+        border-right: 1px solid var(--line);
+        background: transparent;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .mode-tab:last-child { border-right: 0; }
+      .mode-tab:hover { background: #f8fbf8; }
+      .mode-tab.active { color: var(--green-dark); background: var(--green-soft); box-shadow: inset 0 -3px 0 var(--green); }
+      .mode-tab strong { display: block; font-size: 16px; }
+      .mode-tab span { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+
+      .skills-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+      .skill {
+        min-height: 68px;
+        padding: 12px 15px;
+        border: 1px solid #cbd9d0;
+        border-radius: 11px;
+        background: var(--paper);
+        text-align: left;
+        cursor: pointer;
+        transition: border-color .18s ease, background .18s ease, transform .18s ease;
+      }
+
+      .skill:hover { border-color: #9fbeaa; transform: translateY(-1px); }
+      .skill.active { color: #fff; border-color: var(--green); background: var(--green); }
+      .skill-title { display: block; font-size: 14px; font-weight: 750; }
+      .skill-description { display: block; margin-top: 5px; color: var(--muted); font-size: 12px; }
+      .skill.active .skill-description { color: #e1eee5; }
+
+      .chat-section { margin-top: 27px; }
+
+      .chat-shell {
+        min-height: 440px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid #b7cdbd;
+        border-radius: 15px;
+        background: var(--paper);
+        box-shadow: var(--shadow);
+      }
+
+      .chat-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 53px;
+        padding: 0 21px;
+        border-bottom: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .assistant-label { display: inline-flex; align-items: center; gap: 8px; color: var(--green-dark); font-weight: 750; }
+      .assistant-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); }
+      .scope-label { color: var(--muted); }
+
+      .conversation {
+        flex: 1;
+        min-height: 260px;
+        padding: 26px 28px 20px;
+      }
+
+      .empty-message { max-width: 680px; margin: 22px auto 0; text-align: center; }
+      .empty-mark {
+        width: 52px;
+        height: 52px;
+        display: grid;
+        place-items: center;
+        margin: 0 auto 15px;
+        border: 1px solid #c5d9ca;
+        border-radius: 16px;
+        color: var(--green-dark);
+        background: var(--green-pale);
+        font-size: 22px;
+        font-weight: 800;
+      }
+
+      .empty-message h2 { margin: 0; font-size: 23px; letter-spacing: -0.04em; }
+      .empty-message p { margin: 10px 0 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+
+      .message-list { display: grid; gap: 16px; max-width: 840px; margin: 0 auto; }
+      .message { display: flex; flex-direction: column; gap: 6px; }
+      .message.user { align-items: flex-end; }
+      .message-author { color: var(--muted); font-size: 11px; }
+      .message-bubble { max-width: 75%; padding: 11px 15px; border-radius: 13px; font-size: 14px; line-height: 1.65; }
+      .message.ai .message-bubble { color: #405349; background: #f4f7f4; }
+      .message.user .message-bubble { color: var(--green-dark); background: var(--green-soft); }
+
+      .composer {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: end;
+        padding: 16px 18px 17px;
+        border-top: 1px solid var(--line);
+        background: #fbfcfb;
+      }
+
+      textarea {
+        width: 100%;
+        min-height: 72px;
+        resize: none;
+        padding: 13px 15px;
+        border: 1px solid #cbd9d0;
+        border-radius: 10px;
+        outline: none;
+        color: var(--ink);
+        background: #fff;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      textarea:focus { border-color: var(--green); box-shadow: 0 0 0 3px rgba(79, 118, 95, .11); }
+      textarea::placeholder { color: #9aa8a1; }
+
+      .composer-actions { display: flex; align-items: center; gap: 10px; }
+      .composer-hint { color: var(--muted); font-size: 12px; white-space: nowrap; }
+
+      .send-button {
+        min-width: 84px;
+        height: 42px;
+        border: 0;
+        border-radius: 9px;
+        color: #fff;
+        background: var(--green);
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .send-button:hover { background: var(--green-dark); }
+      .demo-note { margin-top: 14px; color: #8a9890; text-align: right; font-size: 11px; }
+
+      @media (min-width: 1400px) {
+        .main { padding-top: 42px; }
+        .content { width: min(1120px, calc(100% - 96px)); }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">溯</span>
+        <span class="brand-name">灵溯</span>
+        <span class="brand-divider"></span>
+        <span class="brand-subtitle">青少年科学创新项目工作台</span>
+      </div>
+      <div class="topbar-context">
+        <span id="project-pill" class="context-pill">开题 · 不绑定项目</span>
+        <span class="user-pill"><span class="user-avatar">林</span>林同学　⌄</span>
+      </div>
+    </header>
+
+    <div class="app-layout">
+      <aside class="sidebar">
+        <p class="sidebar-label">学生工作台</p>
+        <nav class="nav-list" aria-label="学生工作台导航">
+          <div class="nav-item"><span class="nav-icon">⌂</span>首页</div>
+          <div class="nav-item"><span class="nav-icon">▱</span>我的项目</div>
+          <div class="nav-item active"><span class="nav-icon">✣</span>灵思 AI</div>
+          <div class="nav-item"><span class="nav-icon">▣</span>研究进程</div>
+          <div class="nav-item"><span class="nav-icon">♧</span>项目邀请</div>
+          <div class="nav-item"><span class="nav-icon">◇</span>成果申请</div>
+          <div class="nav-item"><span class="nav-icon">♧</span>消息中心</div>
+          <div class="nav-item"><span class="nav-icon">▤</span>内容资源</div>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <div class="content">
+          <section class="page-head">
+            <div>
+              <p class="eyebrow">研究工作台</p>
+              <h1>灵思 AI</h1>
+              <p id="mode-description" class="page-description">把观察和想法整理成开题草稿，确认后再创建项目。</p>
+            </div>
+            <div class="head-badges">
+              <span id="mode-status" class="context-pill mode-status">开题模式</span>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-heading">
+              <h2 class="section-title">工作模式</h2>
+              <span class="section-note">先选择目标，也可以直接聊天</span>
+            </div>
+            <div class="mode-tabs" role="tablist" aria-label="灵思 AI 工作模式">
+              <button class="mode-tab active" data-mode="opening" role="tab" aria-selected="true">
+                <strong>开题</strong><span>从观察开始，形成研究问题和开题草稿</span>
+              </button>
+              <button class="mode-tab" data-mode="research" role="tab" aria-selected="false">
+                <strong>研究</strong><span>围绕当前项目推进任务、材料和证据</span>
+              </button>
+              <button class="mode-tab" data-mode="expression" role="tab" aria-selected="false">
+                <strong>成果表达</strong><span>整理项目成果，准备展示与答辩表达</span>
+              </button>
+            </div>
+          </section>
+
+          <section class="section">
+            <div class="section-heading">
+              <h2 class="section-title">快捷技能</h2>
+              <span class="section-note">每个模式只保留三个最常用的目标</span>
+            </div>
+            <div id="skills" class="skills-row"></div>
+          </section>
+
+          <section class="chat-section">
+            <div class="chat-shell">
+              <div class="chat-meta">
+                <span class="assistant-label"><span class="assistant-dot"></span><span id="assistant-name">当前助手 · 开题助手</span></span>
+                <span id="scope-label" class="scope-label">当前会话不绑定项目</span>
+              </div>
+              <div id="conversation" class="conversation">
+                <div id="empty-message" class="empty-message">
+                  <div class="empty-mark">灵</div>
+                  <h2 id="empty-title">从一个观察开始</h2>
+                  <p id="empty-description">直接说出你看到的现象或已有想法，我会帮你整理成可以继续研究的问题。</p>
+                </div>
+                <div id="message-list" class="message-list" hidden></div>
+              </div>
+              <form id="composer" class="composer">
+                <textarea id="prompt" aria-label="输入消息" placeholder="直接描述你的观察或研究想法…"></textarea>
+                <div class="composer-actions">
+                  <span class="composer-hint">Enter 发送</span>
+                  <button class="send-button" type="submit">发送</button>
+                </div>
+              </form>
+            </div>
+            <p class="demo-note">展示版：快捷技能只是目标入口，真正的助手由平台模板配置后自动匹配。</p>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script>
+      const modes = {
+        opening: {
+          label: '开题',
+          status: '开题模式',
+          project: '开题 · 不绑定项目',
+          description: '把观察和想法整理成开题草稿，确认后再创建项目。',
+          scope: '当前会话不绑定项目',
+          emptyTitle: '从一个观察开始',
+          emptyDescription: '直接说出你看到的现象或已有想法，我会帮你整理成可以继续研究的问题。',
+          placeholder: '直接描述你的观察或研究想法…',
+          assistant: '开题助手',
+          skills: [
+            ['找到研究问题', '把现象整理成可研究的问题'],
+            ['设计研究方案', '把问题变成可执行的计划'],
+            ['整理开题报告', '形成一份可编辑的开题草稿']
+          ]
+        },
+        research: {
+          label: '研究',
+          status: '研究模式',
+          project: '研究 · 校园雨水研究',
+          description: '围绕当前项目推进任务、材料和证据，直接处理下一步研究工作。',
+          scope: '当前项目 · 校园雨水研究',
+          emptyTitle: '推进下一项研究工作',
+          emptyDescription: '告诉我你正在处理的任务或遇到的困难，我会基于当前项目给出可以核对的建议。',
+          placeholder: '直接描述你要推进的任务或遇到的问题…',
+          assistant: '研究助手',
+          skills: [
+            ['推进下一项任务', '明确今天可以完成的下一步'],
+            ['完善当前材料', '补足结构、证据和表达'],
+            ['检查研究证据', '核对实验记录与研究结论']
+          ]
+        },
+        expression: {
+          label: '成果表达',
+          status: '成果表达模式',
+          project: '成果表达 · 校园雨水研究',
+          description: '整理项目成果，准备展示、答辩和对外表达。',
+          scope: '当前项目 · 校园雨水研究',
+          emptyTitle: '把成果讲清楚',
+          emptyDescription: '告诉我你要准备展示、摘要还是答辩，我会帮你组织一份可编辑的表达草稿。',
+          placeholder: '直接描述你要准备的展示或答辩内容…',
+          assistant: '成果表达助手',
+          skills: [
+            ['整理项目摘要', '提炼问题、方法和主要发现'],
+            ['准备展示提纲', '组织一份清晰的汇报结构'],
+            ['模拟答辩问答', '练习可能被追问的关键问题']
+          ]
+        }
+      };
+
+      let currentMode = 'opening';
+      let currentSkill = 0;
+      const modeTabs = document.querySelectorAll('[data-mode]');
+      const skills = document.getElementById('skills');
+      const prompt = document.getElementById('prompt');
+      const messageList = document.getElementById('message-list');
+      const emptyMessage = document.getElementById('empty-message');
+
+      function renderMode(mode) {
+        currentMode = mode;
+        currentSkill = 0;
+        const config = modes[mode];
+        modeTabs.forEach((tab) => {
+          const active = tab.dataset.mode === mode;
+          tab.classList.toggle('active', active);
+          tab.setAttribute('aria-selected', String(active));
+        });
+        document.getElementById('mode-description').textContent = config.description;
+        document.getElementById('mode-status').textContent = config.status;
+        document.getElementById('project-pill').textContent = config.project;
+        document.getElementById('scope-label').textContent = config.scope;
+        document.getElementById('assistant-name').textContent = '当前助手 · ' + config.assistant;
+        document.getElementById('empty-title').textContent = config.emptyTitle;
+        document.getElementById('empty-description').textContent = config.emptyDescription;
+        prompt.placeholder = config.placeholder;
+        skills.innerHTML = config.skills.map((skill, index) => `
+          <button class="skill ${index === 0 ? 'active' : ''}" data-skill="${index}">
+            <span class="skill-title">${skill[0]}</span>
+            <span class="skill-description">${skill[1]}</span>
+          </button>
+        `).join('');
+        skills.querySelectorAll('[data-skill]').forEach((button) => {
+          button.addEventListener('click', () => {
+            currentSkill = Number(button.dataset.skill);
+            skills.querySelectorAll('.skill').forEach((item) => item.classList.toggle('active', item === button));
+            prompt.placeholder = config.skills[currentSkill][1] + '…';
+            prompt.focus();
+          });
+        });
+      }
+
+      modeTabs.forEach((tab) => tab.addEventListener('click', () => renderMode(tab.dataset.mode)));
+
+      document.getElementById('composer').addEventListener('submit', (event) => {
+        event.preventDefault();
+        const content = prompt.value.trim();
+        if (!content) {
+          prompt.focus();
+          return;
+        }
+        emptyMessage.hidden = true;
+        messageList.hidden = false;
+        const config = modes[currentMode];
+        messageList.insertAdjacentHTML('beforeend', `
+          <div class="message user"><span class="message-author">你</span><div class="message-bubble"></div></div>
+          <div class="message ai"><span class="message-author">灵思 AI · ${config.assistant}</span><div class="message-bubble">我会围绕“${config.skills[currentSkill][0]}”处理你的内容，并把建议整理成可以继续修改的结果。</div></div>
+        `);
+        messageList.querySelector('.message.user:last-of-type .message-bubble').textContent = content;
+        prompt.value = '';
+      });
+
+      renderMode('opening');
+    </script>
+  </body>
+</html>
