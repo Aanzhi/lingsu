@@ -14,8 +14,13 @@ const props = defineProps<{
   sectionLabel: string
 }>()
 const route = useRoute()
+function routeProjectId(value: unknown) {
+  const candidate = Array.isArray(value) ? value[0] : value
+  const projectId = Number(candidate)
+  return Number.isInteger(projectId) && projectId > 0 ? projectId : null
+}
 const navigationProject = computed(() => props.role === 'student'
-  ? resolveStudentNavigationProject(auth.user.value?.primaryProject, student.state.projects)
+  ? resolveStudentNavigationProject(auth.user.value?.primaryProject, student.state.projects, routeProjectId(route.params.id ?? route.query.projectId))
   : auth.user.value?.primaryProject ?? null)
 const nav = computed(() => primaryNavigation(props.role, navigationProject.value))
 const utilityNav = computed(() => utilityNavigation(props.role, navigationProject.value))

@@ -52,7 +52,7 @@ describe('shared Demo B workspace layout contract', () => {
       expect(navigationRegistry).toContain(`label: '${label}'`)
     }
     expect(navigationRegistry).not.toContain("label: '材料档案'")
-    expect(workspaceShell).toContain('resolveStudentNavigationProject(auth.user.value?.primaryProject, student.state.projects)')
+    expect(workspaceShell).toContain('resolveStudentNavigationProject(auth.user.value?.primaryProject, student.state.projects, routeProjectId(route.params.id ?? route.query.projectId))')
     expect(workspaceShell).toContain('active-class=""')
     expect(foundations).toContain('.workspace-sidebar > a.workspace-router-active')
   })

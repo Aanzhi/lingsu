@@ -40,7 +40,9 @@ const roleBasePath: Record<NavigationRole, string> = {
 export function resolveStudentNavigationProject(
   primaryProject: number | null | undefined,
   projects: StudentNavigationProject[] = [],
+  contextProject: number | null | undefined = null,
 ): number | null {
+  if (contextProject) return contextProject
   if (primaryProject) return primaryProject
   const activeProjects = projects.filter((project) => !project.is_archived && !project.deleted_at)
   return activeProjects.find((project) => project.is_primary)?.id ?? activeProjects[0]?.id ?? null

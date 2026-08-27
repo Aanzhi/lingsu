@@ -103,6 +103,9 @@ describe('primary navigation registry', () => {
     expect(resolveStudentNavigationProject(null, [
       { id: 8, is_primary: false, is_archived: false, deleted_at: null },
     ])).toBe(8)
+    expect(resolveStudentNavigationProject(9, [
+      { id: 9, is_primary: true, is_archived: false, deleted_at: null },
+    ], 12)).toBe(12)
     expect(resolveStudentNavigationProject(null, [])).toBeNull()
   })
 
