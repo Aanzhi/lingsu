@@ -9,5 +9,5 @@ const route = useRoute()
 
 <template>
   <HeroHomeShell v-if="route.meta.layout === 'hero'" role-tone="student" section-label="学生工作台" />
-  <WorkspaceShell v-else role="student" role-tone="student" section-label="学生工作台" />
+  <WorkspaceShell v-else role="student" role-tone="student" section-label="学生工作台" collapsible-sidebar />
 </template>

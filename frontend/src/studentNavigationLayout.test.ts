@@ -10,6 +10,7 @@ const studentLayout = readFileSync(new URL('./layouts/StudentLayout.vue', import
 const studentShell = source('./components/StudentPortalShell.vue')
 const heroShell = source('./components/HeroHomeShell.vue')
 const workspaceShell = readFileSync(new URL('./components/WorkspaceShell.vue', import.meta.url), 'utf8')
+const workspaceFrame = readFileSync(new URL('./components/WorkspaceFrame.vue', import.meta.url), 'utf8')
 const teacherLayout = readFileSync(new URL('./layouts/TeacherLayout.vue', import.meta.url), 'utf8')
 const platformLayout = readFileSync(new URL('./layouts/PlatformLayout.vue', import.meta.url), 'utf8')
 const router = readFileSync(new URL('./router.ts', import.meta.url), 'utf8')
@@ -61,6 +62,44 @@ describe('shared Demo B workspace layout contract', () => {
     expect(workspaceShell).toContain('utilityNavigation')
     expect(workspaceShell).toContain('更多页面')
     expect(studentLayout).not.toContain('更多页面')
+  })
+
+  it('enables a default-collapsed icon sidebar for students only', () => {
+    expect(studentLayout).toContain('collapsible-sidebar')
+    expect(workspaceShell).toContain('readSidebarPreference')
+    expect(workspaceShell).toContain('writeSidebarPreference')
+    expect(workspaceShell).toContain('aria-expanded')
+    expect(foundations).toContain('.workspace-shell--sidebar-collapsed')
+    expect(foundations).toContain('.workspace-sidebar--collapsed')
+    expect(responsive).toContain('.workspace-shell--sidebar-collapsed .workspace-sidebar')
+    expect(teacherLayout).not.toContain('collapsible-sidebar')
+    expect(platformLayout).not.toContain('collapsible-sidebar')
+  })
+
+  it('keeps the collapsible student sidebar mobile-safe in every preference state', () => {
+    expect(workspaceFrame).toContain('workspace-shell--sidebar-collapsible')
+    expect(responsive).toContain('.workspace-shell--sidebar-collapsible { grid-template-columns: 1fr; }')
+    expect(responsive).toContain('.workspace-shell--sidebar-collapsible .workspace-sidebar')
+    expect(responsive).toContain('position: relative')
+    expect(responsive).toContain('overflow-x: auto')
+    expect(responsive).toContain('.workspace-shell--sidebar-collapsible .workspace-sidebar > a')
+    expect(responsive).toContain('width: auto')
+    expect(responsive).toContain('justify-content: flex-start')
+    expect(responsive).toContain('font-size: 15px')
+    expect(responsive).toContain('.workspace-shell--sidebar-collapsible .workspace-sidebar__toggle { display: none; }')
+    expect(foundations).toContain('.workspace-sidebar__toggle:focus-visible')
+    expect(foundations).toContain('outline: 3px solid var(--color-focus-ring)')
+    expect(foundations.indexOf('.workspace-sidebar > a {')).toBeLessThan(foundations.indexOf('.workspace-sidebar--collapsed > a {'))
+    expect(foundations.indexOf('.workspace-sidebar > a .el-icon {')).toBeLessThan(foundations.indexOf('.workspace-sidebar--collapsed > a .el-icon {'))
+    expect(workspaceShell).toContain('sidebarPreferenceReady')
+    expect(workspaceShell).toContain("flush: 'sync'")
+  })
+
+  it('keeps toggle focus styling separate from hover and sizes collapsed icons consistently', () => {
+    expect(foundations).toContain('.workspace-sidebar__toggle:hover {')
+    expect(foundations).toContain('.workspace-sidebar__toggle:focus-visible {')
+    expect(foundations).toContain('outline-offset: 2px')
+    expect(foundations).toContain('flex-basis: 20px')
   })
 
   it('uses the registry active state instead of RouterLink path-only matching', () => {
