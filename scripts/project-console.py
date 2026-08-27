@@ -26,12 +26,42 @@ from urllib.parse import parse_qs, urlparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 COMPOSE_ENV_FILE = os.environ.get("COMPOSE_ENV_FILE", os.path.join(ROOT, ".env"))
+
+
+def configured_env_value(name, default=""):
+    """Read a non-secret setting before the console builds its service list."""
+    if name in os.environ:
+        return os.environ[name]
+    try:
+        with open(COMPOSE_ENV_FILE, encoding="utf-8") as handle:
+            for raw in handle:
+                line = raw.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    key, value = line.split("=", 1)
+                    if key.strip() == name:
+                        return value.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    return default
+
+
+def configured_env_flag(name, default=True):
+    value = configured_env_value(name, "")
+    if not value:
+        return default
+    return value.lower() in ("1", "true", "yes", "on")
+
+
+CLAMAV_ENABLED = configured_env_flag("CLAMAV_ENABLED", True)
 COMPOSE = ["docker", "compose"] + (["--env-file", COMPOSE_ENV_FILE] if os.path.isfile(COMPOSE_ENV_FILE) else []) + ["-p", os.environ.get("COMPOSE_PROJECT_NAME", "lingsu")]
 FRONTEND_PORT = 5173
 FRONTEND_LOG = "/tmp/lingsu-frontend.log"
 FRONTEND_PID = "/tmp/lingsu-frontend.pid"
 CONSOLE_PORT = int(os.environ.get("PORT", "8800"))
-COMPOSE_SERVICES = ["postgres", "redis", "clamav", "backend", "celery", "celery_beat", "gotenberg"]
+COMPOSE_SERVICES = ["postgres", "redis"]
+if CLAMAV_ENABLED:
+    COMPOSE_SERVICES.append("clamav")
+COMPOSE_SERVICES.extend(["backend", "celery", "celery_beat", "gotenberg"])
 PROFILE_SERVICES = {"frontend": "dev", "nginx": "production"}
 ALL_PROJECT_SERVICES = COMPOSE_SERVICES + list(PROFILE_SERVICES)
 SERVICE_TARGETS = set(ALL_PROJECT_SERVICES + ["all", "colima", "demo"])
@@ -109,6 +139,8 @@ def compose_all_profiles_args(*args):
     for profile in PROFILE_SERVICES.values():
         if profile not in profiles:
             profiles.append(profile)
+    if CLAMAV_ENABLED:
+        profiles.append("scanner")
     prefix = tuple(item for profile in profiles for item in ("--profile", profile))
     return prefix + tuple(args)
 
@@ -579,7 +611,7 @@ def e2e_login_check(force: bool = False, host: str = "127.0.0.1"):
 def backend_start():
     if not ensure_docker():
         return False
-    _log("启动后端服务栈：docker compose up -d postgres redis clamav gotenberg backend celery celery_beat")
+    _log("启动后端服务栈：docker compose up -d %s" % " ".join(COMPOSE_SERVICES))
     rc, out, err = compose("up", "-d", *COMPOSE_SERVICES, timeout=240)
     _log(out.strip() or err.strip() or "done (rc=%d)" % rc)
     if rc != 0:
@@ -713,8 +745,7 @@ def wait_for_backend_ready(timeout=240):
     while time.time() < deadline:
         if http_ok("http://127.0.0.1:%d/api/health/" % BACKEND_PORT, timeout=3):
             services = service_health_map(collect_services())
-            required = ["postgres", "redis", "clamav", "backend", "celery", "celery_beat", "gotenberg"]
-            if all(services.get(name, {}).get("state") == "running" for name in required):
+            if all(services.get(name, {}).get("state") == "running" for name in COMPOSE_SERVICES):
                 _log("后端 API 与依赖服务已就绪")
                 return True
         if time.time() - logged > 10:

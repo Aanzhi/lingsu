@@ -31,6 +31,7 @@ services:
     image: ${CLAMAV_IMAGE:-clamav/clamav-debian:1.4}
     volumes:
       - clamav_data:/var/lib/clamav
+    profiles: ["scanner"]
     healthcheck:
       test: ["CMD-SHELL", "timeout 3 bash -c 'echo > /dev/tcp/127.0.0.1/3310'"]
       interval: 20s
@@ -52,8 +53,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       DOCUMENT_CONVERTER_URL: http://gotenberg:3000
-      FILE_SCAN_REQUIRED: "1"
-      CLAMAV_HOST: clamav
+      FILE_SCAN_REQUIRED: ${FILE_SCAN_REQUIRED:-1}
+      CLAMAV_HOST: ${CLAMAV_HOST-clamav}
     command: >-
       sh -c "python manage.py migrate --noinput &&
       python manage.py seed_ai_agents --reset &&
@@ -67,8 +68,6 @@ services:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      clamav:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/', timeout=3)\""]
@@ -90,8 +89,8 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       DOCUMENT_CONVERTER_URL: http://gotenberg:3000
-      FILE_SCAN_REQUIRED: "1"
-      CLAMAV_HOST: clamav
+      FILE_SCAN_REQUIRED: ${FILE_SCAN_REQUIRED:-1}
+      CLAMAV_HOST: ${CLAMAV_HOST-clamav}
     command: celery -A config worker --loglevel=INFO
     volumes:
       - media_data:/app/media
@@ -99,8 +98,6 @@ services:
       backend:
         condition: service_healthy
       redis:
-        condition: service_healthy
-      clamav:
         condition: service_healthy
 
   celery_beat:

@@ -2,6 +2,8 @@ import importlib.util
 import json
 import os
 import re
+import subprocess
+import sys
 import threading
 import unittest
 from unittest.mock import patch
@@ -55,6 +57,34 @@ class ProjectConsoleTests(unittest.TestCase):
         with open("docker-compose.yml", encoding="utf-8") as handle:
             content = handle.read()
         self.assertNotRegex(content, re.compile(r"^\s{2}console:\s*$", re.MULTILINE))
+
+    def test_clamav_is_optional_and_backend_does_not_wait_for_scanner(self):
+        with open("docker-compose.yml", encoding="utf-8") as handle:
+            content = handle.read()
+        self.assertIn('profiles: ["scanner"]', content)
+        self.assertIn("FILE_SCAN_REQUIRED: ${FILE_SCAN_REQUIRED:-1}", content)
+        self.assertIn("CLAMAV_HOST: ${CLAMAV_HOST-clamav}", content)
+        backend_block = content.split("\n  celery:\n", 1)[0]
+        self.assertNotIn("      clamav:\n        condition: service_healthy", backend_block)
+
+    def test_console_omits_clamav_when_scanner_is_disabled(self):
+        probe = (
+            "import importlib.util; "
+            "spec=importlib.util.spec_from_file_location('console', 'scripts/project-console.py'); "
+            "module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module); "
+            "print(','.join(module.COMPOSE_SERVICES))"
+        )
+        env = os.environ.copy()
+        env["CLAMAV_ENABLED"] = "0"
+        env["COMPOSE_ENV_FILE"] = "/tmp/lingsu-test-env-does-not-exist"
+        result = subprocess.run(
+            [sys.executable, "-c", probe],
+            capture_output=True,
+            text=True,
+            env=env,
+            check=True,
+        )
+        self.assertNotIn("clamav", result.stdout.split(","))
 
     def test_console_html_has_one_backend_stack_start_button(self):
         with open("scripts/console.html", encoding="utf-8") as handle:
