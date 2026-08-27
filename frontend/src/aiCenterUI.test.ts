@@ -8,12 +8,11 @@ const composer = read('./components/ai/AIWorkbenchComposer.vue')
 const draftActions = read('./components/ai/AIDraftActions.vue')
 
 describe('AI workbench information architecture', () => {
-  it('keeps the student page as one simple workbench with separate new and active states', () => {
+  it('keeps the student page as one Conversation Studio workbench', () => {
     expect(source).toContain('class="page ai-center-page ai-workbench-frame"')
     expect(source).toContain('class="ai-workbench-mode-region"')
-    expect(source).toContain('ai-workbench-new-state')
-    expect(source).toContain('ai-workbench-active-state')
-    expect(source).toContain('class="ai-active-chat"')
+    expect(source).toContain('class="ai-conversation-stage"')
+    expect(source).toContain('class="ai-assistant-bar"')
     expect(source).toContain('isConversationStarted')
     expect(source).toContain('<AIModeTabs')
     expect(source).toContain('<AIWorkbenchComposer')
@@ -23,6 +22,25 @@ describe('AI workbench information architecture', () => {
     expect(source).not.toContain('AIToolPicker')
     expect(source).not.toContain('AIResearchWizard')
     expect(source).not.toContain('class="ai-workbench-agent-region"')
+    expect(source).not.toContain('ai-workbench-new-state')
+    expect(source).not.toContain('ai-workbench-active-state')
+    expect(source).not.toContain('class="ai-active-chat"')
+  })
+
+  it('renders the assistant identity and starter prompts in the new conversation canvas', () => {
+    expect(source).toContain('starterPrompts(workbenchMode.value)')
+    expect(source).toContain('currentAgent.value?.name')
+    expect(source).toContain('<span class="ai-assistant-avatar" aria-hidden="true">灵思</span>')
+    expect(source).toContain('class="ai-welcome"')
+    expect(source).toContain('class="ai-starter-prompt"')
+    expect(source).toContain('@click="void sendMessage(prompt)"')
+  })
+
+  it('keeps the conversation stage and existing recovery/result contracts', () => {
+    expect(source).toContain('ai-conversation-stage')
+    expect(source).toContain('AIResultCard')
+    expect(source).toContain('resumePendingMessage')
+    expect(source).toContain("message.status === 'failed'")
   })
 
   it('shows only the three student modes and hides the technical Agent rail', () => {
@@ -64,7 +82,7 @@ describe('AI workbench information architecture', () => {
     expect(source).not.toContain('modeDescription')
     expect(source).not.toContain('aiPageDescription')
     expect(source).not.toContain('围绕当前项目直接聊天，处理任务、材料和研究推进')
-    expect(source).toContain(':show-mode-descriptions="false"')
+    expect(source).toContain(':show-mode-descriptions="true"')
     expect(source).not.toContain(':project-label="workspaceContextLabel"')
   })
 
@@ -83,7 +101,8 @@ describe('AI workbench information architecture', () => {
     expect(source).toContain('历史会话')
     expect(source).toContain('historyOpen')
     expect(source).toContain('isNewConversation')
-    expect(source).not.toContain('ai-workbench-active-state.*历史会话')
+    expect(source).toContain('<button v-if="isNewConversation"')
+    expect(source).toContain('<button v-else class="text-button" type="button" :disabled="sending" @click="startNewConversation">新建对话</button>')
     expect(source).not.toContain('查看上下文')
     expect(source).not.toContain('更多能力')
     expect(source).not.toContain('选择 AI 工具')

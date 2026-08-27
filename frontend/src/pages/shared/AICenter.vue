@@ -4,7 +4,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { createAIConversation, createAIConversationMessage, createProjectFromOpening, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, retryAIConversationMessage, saveAIGenerationAsMaterial, streamAIConversationMessage, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
 import { auth } from '../../stores/auth'
 import { isNearBottom, isTerminalSSEEvent, normalizeResearchQuestionArtifact, researchProjectDraftFromArtifact } from '../../stores/aiConversationModel'
-import { normalizeAIWorkspaceMode, resolveStudentAgent, visibleAgents, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
+import { normalizeAIWorkspaceMode, resolveStudentAgent, starterPrompts, visibleAgents, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
 import { PAPER_TYPES, type PaperType } from '../../stores/aiModel'
 import { studentProjectRoute } from '../../stores/pageContracts'
 import { filterConversationSummaries, groupConversationSummaries } from '../../stores/presentationModel'
@@ -102,6 +102,10 @@ const current = computed(() => conversations.value.find((item) => item.id === se
 const currentProject = computed(() => projects.value.find((item) => item.id === (current.value?.project ?? projectFilter.value)) || null)
 const modeAgents = computed(() => visibleAgents(workbenchMode.value, agents.value, 'student'))
 const currentAgent = computed(() => resolveStudentAgent(workbenchMode.value, agents.value, selectedAgent.value, current.value?.current_agent))
+const modeStarterPrompts = computed(() => starterPrompts(workbenchMode.value))
+const assistantName = computed(() => currentAgent.value?.name || (agentsLoading.value ? '正在加载助手…' : '灵思 AI'))
+const assistantDescription = computed(() => currentAgent.value?.description || '围绕当前研究阶段，帮助你梳理问题、证据和下一步行动。')
+const assistantStage = computed(() => workbenchMode.value === 'opening' ? '开题' : workbenchMode.value === 'research' ? '研究' : '成果表达')
 const projectRequired = computed(() => workbenchMode.value !== 'opening')
 const isConversationStarted = computed(() => messages.value.some((message) => Boolean(message.content?.trim()) || message.status === 'queued' || message.status === 'streaming'))
 const isNewConversation = computed(() => !isConversationStarted.value)
@@ -735,44 +739,56 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="page ai-center-page ai-workbench-frame" :class="{ 'ai-workbench-page--new': isNewConversation, 'ai-workbench-page--active': isConversationStarted }">
-    <template v-if="isNewConversation">
-      <div class="ai-workbench-new-state">
-        <header class="ai-workbench-header ai-workbench-header--new" aria-labelledby="ai-workbench-title">
-          <div class="ai-workbench-heading">
-            <span class="eyebrow">研究工作台</span>
-            <h1 id="ai-workbench-title">灵思 AI</h1>
-          </div>
-          <div class="ai-workbench-header__actions">
-            <span class="ai-workbench-context-pill">{{ workspaceContextLabel }}</span>
-            <button class="text-button" type="button" :disabled="sending || loading || !conversations.length" @click="openHistory">历史会话</button>
-          </div>
-        </header>
-
-        <section class="ai-workbench-mode-region" aria-label="灵思 AI 模式">
-          <AIModeTabs :model-value="workbenchMode" :disabled="sending" :show-agent-rail="false" :show-mode-descriptions="false" @update:model-value="selectWorkbenchMode" />
-        </section>
-
-        <section v-if="loading || projectsLoading" class="ai-workbench-skeleton" role="status" aria-label="正在准备灵思 AI"><i /><i /><i /></section>
-        <section v-else-if="(projectRequired && !currentProject) || (!agentsLoading && !currentAgent)" class="ai-workbench-context-note" role="status">
-          <span v-if="projectRequired && !currentProject">研究和成果表达默认绑定你的主项目，请先在“我的项目”创建或设置主项目。</span>
-          <span v-else>当前模式暂未配置 AI 助手，请联系平台管理员。</span>
-          <button v-if="projectRequired && !currentProject" class="secondary-button" type="button" @click="chooseProject">去我的项目</button>
-        </section>
+    <header class="ai-workbench-header" aria-labelledby="ai-workbench-title">
+      <div class="ai-workbench-heading">
+        <span class="eyebrow">研究工作台</span>
+        <h1 id="ai-workbench-title">灵思 AI</h1>
+        <p>把问题说出来，和研究助手一起推进下一步。</p>
       </div>
-    </template>
+      <div class="ai-workbench-header__actions">
+        <span class="ai-workbench-context-pill">{{ workspaceContextLabel }}</span>
+        <button v-if="isNewConversation" class="text-button" type="button" :disabled="sending || loading || !conversations.length" @click="openHistory">历史会话</button>
+        <button v-else class="text-button" type="button" :disabled="sending" @click="startNewConversation">新建对话</button>
+      </div>
+    </header>
 
-    <template v-else>
-      <header class="ai-workbench-active-state" aria-label="当前灵思 AI 对话">
-        <div class="ai-active-context">
-          <span class="eyebrow">灵思 AI</span>
-          <span>{{ workspaceContextLabel }}</span>
+    <section class="ai-workbench-mode-region" aria-label="灵思 AI 模式">
+      <AIModeTabs :model-value="workbenchMode" :disabled="sending" :show-agent-rail="false" :show-mode-descriptions="true" @update:model-value="selectWorkbenchMode" />
+    </section>
+
+    <section v-if="loading || projectsLoading" class="ai-workbench-skeleton" role="status" aria-label="正在准备灵思 AI"><i /><i /><i /></section>
+    <section v-else-if="(projectRequired && !currentProject) || (!agentsLoading && !currentAgent)" class="ai-workbench-context-note" role="status">
+      <span v-if="projectRequired && !currentProject">研究和成果表达默认绑定你的主项目，请先在“我的项目”创建或设置主项目。</span>
+      <span v-else>当前模式暂未配置 AI 助手，请联系平台管理员。</span>
+      <button v-if="projectRequired && !currentProject" class="secondary-button" type="button" @click="chooseProject">去我的项目</button>
+    </section>
+
+    <section v-else class="ai-conversation-stage" aria-label="灵思 AI 对话工作区">
+      <header class="ai-assistant-bar">
+        <div class="ai-assistant-identity">
+          <span class="ai-assistant-avatar" aria-hidden="true">灵思</span>
+          <div class="ai-assistant-copy">
+            <strong>{{ assistantName }}</strong>
+            <p>{{ assistantDescription }}</p>
+          </div>
         </div>
-        <button class="text-button" type="button" :disabled="sending" @click="startNewConversation">新建对话</button>
+        <div class="ai-assistant-meta">
+          <span class="ai-assistant-status"><i aria-hidden="true" />在线</span>
+          <span class="ai-stage-badge">{{ assistantStage }}</span>
+        </div>
       </header>
 
-      <section class="ai-active-chat" aria-label="灵思 AI 消息记录">
-        <section ref="chatStreamRef" class="ai-conversation-stream" aria-live="polite" :aria-busy="sending" @scroll="updateScrollAffordance">
-          <div v-if="conversationLoading" class="ai-stream-loading"><span class="ai-loading-dot" />正在恢复对话…</div>
+      <section ref="chatStreamRef" class="ai-conversation-stream" aria-live="polite" :aria-busy="sending" @scroll="updateScrollAffordance">
+        <div v-if="conversationLoading" class="ai-stream-loading"><span class="ai-loading-dot" />正在恢复对话…</div>
+        <div v-if="isNewConversation" class="ai-welcome">
+          <span class="eyebrow">{{ workbenchMode === 'opening' ? '开题阶段' : workbenchMode === 'research' ? '研究阶段' : '成果表达阶段' }}</span>
+          <h2>你好，{{ auth.user.value?.displayName || auth.user.value?.username || '同学' }}</h2>
+          <p>从一个观察、问题或想法开始，我会结合当前研究阶段，陪你梳理证据并找到下一步。</p>
+          <div class="ai-starter-prompts" aria-label="快捷开始">
+            <button v-for="prompt in modeStarterPrompts" :key="prompt" class="ai-starter-prompt" type="button" :disabled="composerDisabled" @click="void sendMessage(prompt)">{{ prompt }}</button>
+          </div>
+        </div>
+        <template v-else>
           <article v-for="message in messages" :key="message.id" class="ai-message" :class="message.role">
             <div class="ai-message__label">{{ message.role === 'user' ? '你' : '灵思 AI' }}</div>
             <div class="ai-message__body">
@@ -799,10 +815,10 @@ onBeforeUnmount(() => {
               />
             </div>
           </article>
-        </section>
-        <button v-if="showJumpLatest" type="button" class="jump-latest" @click="scrollToLatest()">↓ 跳到最新消息</button>
+        </template>
       </section>
-    </template>
+      <button v-if="showJumpLatest" type="button" class="jump-latest" @click="scrollToLatest()">↓ 跳到最新消息</button>
+    </section>
 
     <div v-if="resourceErrorMessage || error || streamNotice || copyNotice" class="ai-workbench-notices">
       <div v-if="resourceErrorMessage" class="ai-resource-notice" role="status"><span>{{ resourceErrorMessage }}</span><button type="button" :disabled="loading" @click="void bootstrapWorkbench()">重试加载</button></div>
@@ -856,7 +872,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .ai-center-page { display: flex; width: 100%; max-width: var(--content-max); min-width: 0; min-height: calc(100vh - var(--topbar-height)); flex-direction: column; box-sizing: border-box; margin: 0 auto; padding: 28px 0 24px; overflow: visible; }
 .ai-workbench-page--new { min-height: calc(100vh - var(--topbar-height) - 52px); }
-.ai-workbench-new-state { display: flex; min-width: 0; min-height: 0; flex: 0 0 auto; flex-direction: column; }
 .ai-workbench-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
 .ai-workbench-heading { min-width: 0; }
 .ai-workbench-heading h1 { margin: 3px 0 5px; color: var(--ink); font: 700 clamp(32px, 4vw, 48px)/1.08 var(--sans); letter-spacing: -.045em; }
@@ -873,13 +888,29 @@ onBeforeUnmount(() => {
 @keyframes ai-workbench-pulse { from { opacity: .45; } to { opacity: 1; } }
 .ai-workbench-context-note { display: flex; align-items: center; justify-content: space-between; gap: 14px; width: min(100%, 900px); box-sizing: border-box; margin: 18px auto 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper-soft); color: var(--muted); font-size: 11px; line-height: 1.55; }
 .ai-workbench-context-note .secondary-button { flex: 0 0 auto; }
-.ai-workbench-page--active { height: calc(100vh - var(--topbar-height) - 104px); min-height: 0; overflow: hidden; display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; }
-.ai-workbench-active-state { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 0; padding-bottom: 12px; border-bottom: 1px solid var(--line); }
-.ai-active-context { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--moss-dark); font-size: 12px; font-weight: 700; }
-.ai-active-context .eyebrow { flex: 0 0 auto; margin: 0; }
-.ai-active-context > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ai-active-chat { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 8px; min-width: 0; min-height: 0; overflow: hidden; }
-.ai-conversation-stream { display: grid; align-content: start; gap: 22px; width: min(100%, 900px); min-height: 0; height: 100%; overflow-y: auto; box-sizing: border-box; margin: 0 auto; padding: 22px 8px 26px; scrollbar-width: thin; }
+.ai-workbench-page--active { height: calc(100vh - var(--topbar-height) - 104px); min-height: 0; overflow: hidden; display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+.ai-conversation-stage { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; width: min(100%, 900px); min-width: 0; min-height: 0; box-sizing: border-box; margin: 22px auto 0; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper); overflow: hidden; }
+.ai-workbench-page--new .ai-conversation-stage { min-height: 330px; }
+.ai-workbench-page--active .ai-conversation-stage { height: 100%; }
+.ai-assistant-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding: 14px 18px; border-bottom: 1px solid var(--line); background: var(--paper-soft); }
+.ai-assistant-identity { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.ai-assistant-avatar { display: grid; flex: 0 0 auto; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--moss); color: #fff; font: 700 16px/1 var(--sans); }
+.ai-assistant-copy { min-width: 0; }
+.ai-assistant-copy strong { display: block; overflow: hidden; color: var(--ink); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ai-assistant-copy p { max-width: 560px; margin: 3px 0 0; overflow: hidden; color: var(--muted); font-size: 11px; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+.ai-assistant-meta { display: flex; align-items: center; flex: 0 0 auto; gap: 8px; }
+.ai-assistant-status { display: inline-flex; align-items: center; gap: 5px; color: var(--moss-dark); font-size: 10px; font-weight: 700; }
+.ai-assistant-status i { width: 6px; height: 6px; border-radius: 50%; background: #5f9d68; }
+.ai-stage-badge { padding: 5px 8px; border: 1px solid var(--sage-line); border-radius: 999px; background: var(--sage-soft); color: var(--moss-dark); font-size: 10px; font-weight: 700; }
+.ai-conversation-stream { display: grid; align-content: start; gap: 22px; width: 100%; min-width: 0; min-height: 0; height: 100%; overflow-y: auto; box-sizing: border-box; margin: 0; padding: 22px 18px 26px; scrollbar-width: thin; }
+.ai-welcome { display: grid; justify-items: center; align-content: center; gap: 10px; min-height: 280px; padding: 30px 14px; text-align: center; }
+.ai-welcome .eyebrow { margin: 0; }
+.ai-welcome h2 { margin: 0; color: var(--ink); font: 700 clamp(24px, 3vw, 32px)/1.15 var(--sans); letter-spacing: -.035em; }
+.ai-welcome > p { max-width: 560px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.7; }
+.ai-starter-prompts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; width: min(100%, 720px); margin-top: 6px; }
+.ai-starter-prompt { min-height: 38px; padding: 8px 10px; border: 1px solid var(--line-dark); border-radius: var(--radius-sm); background: var(--paper); color: var(--moss-dark); font: inherit; font-size: 11px; line-height: 1.4; cursor: pointer; }
+.ai-starter-prompt:hover:not(:disabled), .ai-starter-prompt:focus-visible { border-color: var(--moss); background: var(--sage-soft); }
+.ai-starter-prompt:disabled { cursor: not-allowed; opacity: .52; }
 .ai-message { display: grid; gap: 7px; width: min(100%, 800px); min-width: 0; color: var(--ink); line-height: 1.75; }
 .ai-message.user { justify-self: end; width: min(72%, 640px); }
 .ai-message__label { color: var(--muted); font-size: 10px; }
@@ -894,7 +925,7 @@ onBeforeUnmount(() => {
 .ai-loading-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--moss); animation: ai-workbench-pulse 1s ease-in-out infinite alternate; }
 .jump-latest { justify-self: center; border: 1px solid var(--line-dark); border-radius: 999px; padding: 6px 11px; background: var(--paper); color: var(--moss-dark); font: inherit; font-size: 10px; cursor: pointer; }
 .ai-workbench-composer-host { width: min(100%, 900px); min-width: 0; margin: 24px auto 0; }
-.ai-workbench-page--new .ai-workbench-composer-host { margin-top: clamp(48px, 8vh, 88px); }
+.ai-workbench-page--new .ai-workbench-composer-host { margin-top: 24px; }
 .ai-workbench-page--active .ai-workbench-composer-host { position: sticky; bottom: 0; z-index: 2; padding-top: 8px; background: linear-gradient(to bottom, rgba(243, 244, 240, 0), var(--ivory) 26%); }
 .ai-center-page :deep(.ai-workbench-composer) { width: 100%; box-sizing: border-box; border-color: var(--line-dark); box-shadow: 0 12px 30px rgba(42, 70, 47, .09); }
 .ai-center-page :deep(.ai-workbench-composer__textarea) { min-height: 78px; }

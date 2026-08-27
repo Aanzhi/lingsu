@@ -9,6 +9,8 @@ const composer = read('./components/ai/AIWorkbenchComposer.vue')
 describe('simple AI workbench layout', () => {
   it('uses one shared mode selector for opening, research and defense', () => {
     expect(page).toContain('ai-workbench-mode-region')
+    expect(page).toContain('ai-conversation-stage')
+    expect(page).toContain('ai-assistant-bar')
     expect(page).not.toContain('ai-workbench-agent-region')
     expect(tabs).toContain('showAgentRail')
     expect(tabs).toContain('showModeDescriptions')
@@ -46,10 +48,10 @@ describe('simple AI workbench layout', () => {
     expect(page).toContain('class="ai-workbench-context-pill"')
   })
 
-  it('places the new-state mode selector before one composer and active chat before its composer', () => {
+  it('places the shared mode selector before one conversation stage and composer', () => {
     expect(page.indexOf('ai-workbench-mode-region')).toBeLessThan(page.indexOf('ai-workbench-composer-host'))
-    expect(page).toContain('ai-active-chat')
-    expect(page).toContain('grid-template-rows: minmax(0, 1fr) auto')
+    expect(page.indexOf('ai-conversation-stage')).toBeLessThan(page.indexOf('ai-workbench-composer-host'))
+    expect(page).toContain('ai-assistant-bar')
     expect(page.match(/<AIWorkbenchComposer/g) ?? []).toHaveLength(1)
   })
 
@@ -62,7 +64,8 @@ describe('simple AI workbench layout', () => {
   })
 
   it('keeps the active conversation stream as the only scrolling region', () => {
-    expect(page).toContain('ai-workbench-active-state')
+    expect(page).toContain('ai-conversation-stage')
+    expect(page).toContain('ai-assistant-bar')
     expect(page).toContain('ai-conversation-stream')
     expect(page).toContain('overflow-y: auto')
     expect(page).toContain('position: sticky')
