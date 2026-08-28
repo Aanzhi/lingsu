@@ -6,10 +6,12 @@ const page = read('./pages/shared/AICenter.vue')
 const tabs = read('./components/ai/AIModeTabs.vue')
 const composer = read('./components/ai/AIWorkbenchComposer.vue')
 const workbenchModel = read('./stores/aiWorkbenchModel.ts')
+const pageTemplate = page.match(/<template>([\s\S]*?)<\/template>/)?.[1] ?? ''
+const composerTemplate = composer.match(/<template>([\s\S]*?)<\/template>/)?.[1] ?? ''
 
 const cssRuleBody = (source: string, selector: string) => {
   const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return source.match(new RegExp(`[^{}]*${escapedSelector}[^{}]*\\{([^{}]*)\\}`))?.[1] ?? ''
+  return source.match(new RegExp(`(?:^|\\n)\\s*(?:[^{}]*,\\s*)?${escapedSelector}\\s*\\{([^{}]*)\\}`))?.[1] ?? ''
 }
 
 describe('simple AI workbench layout', () => {
@@ -57,8 +59,7 @@ describe('simple AI workbench layout', () => {
     expect(page).toContain('class="ai-workbench-header__actions"')
     expect(page).toContain('class="ai-workbench-context-pill"')
     expect(page).toContain('class="text-button ai-workbench-history-button"')
-    expect(page.indexOf('class="ai-workbench-header__actions"')).toBeLessThan(page.indexOf('class="ai-workbench-context-pill"'))
-    expect(page.indexOf('class="ai-workbench-context-pill"')).toBeLessThan(page.indexOf('class="text-button ai-workbench-history-button"'))
+    expect(pageTemplate).toMatch(/<div class="ai-workbench-header__actions">[\s\S]*?<span class="ai-workbench-context-pill">[\s\S]*?<button[^>]*class="text-button ai-workbench-history-button"/)
     expect(cssRuleBody(page, '.ai-workbench-header__actions')).toContain('align-items: center;')
     expect(cssRuleBody(page, '.ai-workbench-header__actions')).toContain('gap: 14px;')
     expect(cssRuleBody(page, '.ai-workbench-context-pill')).toContain('flex: 0 1 360px;')
@@ -102,12 +103,14 @@ describe('simple AI workbench layout', () => {
   it('keeps Composer actions in a stable tools-hint-send row', () => {
     expect(composer).toContain('class="ai-workbench-composer__tools"')
     expect(composer).toContain('class="ai-workbench-composer__action"')
-    expect(composer.indexOf('class="ai-workbench-composer__footer"')).toBeLessThan(composer.indexOf('class="ai-workbench-composer__tools"'))
-    expect(composer.indexOf('class="ai-workbench-composer__tools"')).toBeLessThan(composer.indexOf('class="composer-hint"'))
-    expect(composer.indexOf('class="composer-hint"')).toBeLessThan(composer.indexOf('class="ai-workbench-composer__action"'))
+    expect(composerTemplate).toMatch(/<div class="ai-workbench-composer__footer">\s*<div class="ai-workbench-composer__tools">[\s\S]*?<\/div>\s*<span class="composer-hint">[\s\S]*?<\/span>\s*<button[^>]*class="ai-workbench-composer__action"/)
     expect(cssRuleBody(composer, '.ai-workbench-composer__footer')).toContain('display: flex;')
     expect(cssRuleBody(composer, '.ai-workbench-composer__tools')).toContain('display: flex;')
+    expect(cssRuleBody(composer, '.ai-workbench-composer__action')).toContain('flex: 0 0 auto;')
     expect(cssRuleBody(composer, '.composer-hint')).toContain('flex: 1 1 auto;')
+    expect(cssRuleBody(composer, '.composer-hint')).toContain('min-width: 0;')
+    expect(cssRuleBody(composer, '.composer-hint')).toContain('overflow: hidden;')
+    expect(cssRuleBody(composer, '.composer-hint')).toContain('margin: 0;')
     expect(cssRuleBody(composer, '.composer-hint')).toContain('text-overflow: ellipsis;')
     expect(cssRuleBody(composer, '.composer-hint')).toContain('white-space: nowrap;')
     expect(cssRuleBody(composer, '.send-button')).toContain('width: 70px;')
