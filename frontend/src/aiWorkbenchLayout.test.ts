@@ -7,6 +7,11 @@ const tabs = read('./components/ai/AIModeTabs.vue')
 const composer = read('./components/ai/AIWorkbenchComposer.vue')
 const workbenchModel = read('./stores/aiWorkbenchModel.ts')
 
+const cssRuleBody = (source: string, selector: string) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return source.match(new RegExp(`[^{}]*${escapedSelector}[^{}]*\\{([^{}]*)\\}`))?.[1] ?? ''
+}
+
 describe('simple AI workbench layout', () => {
   it('uses one shared mode selector for opening, research and defense', () => {
     expect(page).toContain('ai-workbench-mode-region')
@@ -52,9 +57,11 @@ describe('simple AI workbench layout', () => {
     expect(page).toContain('class="ai-workbench-header__actions"')
     expect(page).toContain('class="ai-workbench-context-pill"')
     expect(page).toContain('class="text-button ai-workbench-history-button"')
-    expect(page).toContain('.ai-workbench-header__actions { align-items: center;')
-    expect(page).toContain('gap: 14px;')
-    expect(page).toContain('.ai-workbench-context-pill { flex: 0 1 360px;')
+    expect(page.indexOf('class="ai-workbench-header__actions"')).toBeLessThan(page.indexOf('class="ai-workbench-context-pill"'))
+    expect(page.indexOf('class="ai-workbench-context-pill"')).toBeLessThan(page.indexOf('class="text-button ai-workbench-history-button"'))
+    expect(cssRuleBody(page, '.ai-workbench-header__actions')).toContain('align-items: center;')
+    expect(cssRuleBody(page, '.ai-workbench-header__actions')).toContain('gap: 14px;')
+    expect(cssRuleBody(page, '.ai-workbench-context-pill')).toContain('flex: 0 1 360px;')
   })
 
   it('places the shared mode selector before one conversation stage and composer', () => {
@@ -95,12 +102,15 @@ describe('simple AI workbench layout', () => {
   it('keeps Composer actions in a stable tools-hint-send row', () => {
     expect(composer).toContain('class="ai-workbench-composer__tools"')
     expect(composer).toContain('class="ai-workbench-composer__action"')
-    expect(composer).toContain('.ai-workbench-composer__footer { display: flex;')
-    expect(composer).toContain('.ai-workbench-composer__tools { display: flex;')
-    expect(composer).toContain('.composer-hint { flex: 1 1 auto;')
-    expect(composer).toContain('text-overflow: ellipsis;')
-    expect(composer).toContain('white-space: nowrap;')
-    expect(composer).toContain('.send-button { width: 70px;')
+    expect(composer.indexOf('class="ai-workbench-composer__footer"')).toBeLessThan(composer.indexOf('class="ai-workbench-composer__tools"'))
+    expect(composer.indexOf('class="ai-workbench-composer__tools"')).toBeLessThan(composer.indexOf('class="composer-hint"'))
+    expect(composer.indexOf('class="composer-hint"')).toBeLessThan(composer.indexOf('class="ai-workbench-composer__action"'))
+    expect(cssRuleBody(composer, '.ai-workbench-composer__footer')).toContain('display: flex;')
+    expect(cssRuleBody(composer, '.ai-workbench-composer__tools')).toContain('display: flex;')
+    expect(cssRuleBody(composer, '.composer-hint')).toContain('flex: 1 1 auto;')
+    expect(cssRuleBody(composer, '.composer-hint')).toContain('text-overflow: ellipsis;')
+    expect(cssRuleBody(composer, '.composer-hint')).toContain('white-space: nowrap;')
+    expect(cssRuleBody(composer, '.send-button')).toContain('width: 70px;')
   })
 
   it('supports the reference send button arrow without changing other composer consumers', () => {
@@ -116,7 +126,10 @@ describe('simple AI workbench layout', () => {
   it('keeps the reference treatment coherent and scoped to the new main area', () => {
     expect(page).toContain('.ai-workbench-main {')
     expect(page).toContain('background: var(--paper);')
-    expect(page).toContain('.ai-workbench-page--new :deep(.composer-hint) { margin: 0;')
+    const newPageHintRule = cssRuleBody(page, '.ai-workbench-page--new :deep(.composer-hint)')
+    expect(newPageHintRule).toContain('margin: 0;')
+    expect(newPageHintRule).not.toContain('margin-left: auto;')
+    expect(newPageHintRule).not.toContain('margin-right: auto;')
     expect(page).toContain('.ai-workbench-page--active .ai-workbench-composer-dock')
   })
 
