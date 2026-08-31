@@ -1,7 +1,7 @@
 import { studentProjectsPath } from './pageContracts'
 
 export type NavigationRole = 'student' | 'teacher' | 'platform_admin'
-export type NavigationIcon = 'home' | 'projects' | 'journey' | 'review' | 'members' | 'content' | 'schools' | 'ai' | 'settings' | 'bell'
+export type NavigationIcon = 'home' | 'projects' | 'journey' | 'review' | 'members' | 'content' | 'cases' | 'competitions' | 'announcements' | 'schools' | 'ai' | 'settings' | 'bell'
 
 export interface NavigationItem {
   key: string
@@ -77,9 +77,9 @@ function studentProjectNavigation(primaryProject?: number | null): NavigationIte
     { key: 'ai', label: '灵思 AI', to: '/student/ai', icon: 'ai' },
     { key: 'journey', label: '研究进程', to: projectBase ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
-    { key: 'cases', label: '案例库', to: '/student/cases', icon: 'content' },
-    { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'content' },
-    { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'content' },
+    { key: 'cases', label: '案例库', to: '/student/cases', icon: 'cases' },
+    { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'competitions' },
+    { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'announcements' },
   ]
 }
 
@@ -91,9 +91,9 @@ export function studentTopNavigation(primaryProject: number | null | undefined):
     { key: 'ai', label: '灵思 AI', to: '/student/ai', icon: 'ai' },
     { key: 'journey', label: '研究进程', to: primaryProject ? `${projectBase}/map` : studentProjectsPath('journey'), icon: 'journey' },
     { key: 'invitations', label: '项目邀请', to: '/student/invitations', icon: 'members' },
-    { key: 'cases', label: '案例库', to: '/student/cases', icon: 'content' },
-    { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'content' },
-    { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'content' },
+    { key: 'cases', label: '案例库', to: '/student/cases', icon: 'cases' },
+    { key: 'competitions', label: '赛事信息', to: '/student/competitions', icon: 'competitions' },
+    { key: 'announcements', label: '校内通知', to: '/student/announcements', icon: 'announcements' },
   ]
 }
 

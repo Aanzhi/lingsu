@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, type Component, watch } from 'vue'
-import { Bell, Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick, Medal, Reading, Setting } from '@element-plus/icons-vue'
+import { Bell, Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick, MapLocation, Medal, Reading, Setting, Trophy, User } from '@element-plus/icons-vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { isNavigationActive, navigationChildren, primaryNavigation, resolveStudentNavigationProject, utilityNavigation, type NavigationIcon, type NavigationRole } from '../stores/navigationRegistry'
 import { auth } from '../stores/auth'
@@ -56,8 +56,10 @@ const navigationProject = computed(() => props.role === 'student'
 const nav = computed(() => primaryNavigation(props.role, navigationProject.value))
 const utilityNav = computed(() => utilityNavigation(props.role, navigationProject.value))
 const iconMap: Record<NavigationIcon, Component> = {
-  home: House, projects: FolderOpened, journey: Collection, review: DocumentChecked,
-  members: Briefcase, content: props.role === 'platform_admin' ? Medal : Reading,
+  home: House, projects: FolderOpened, journey: MapLocation, review: DocumentChecked,
+  members: props.role === 'student' ? User : Briefcase,
+  content: props.role === 'platform_admin' ? Medal : Reading,
+  cases: Reading, competitions: Trophy, announcements: Bell,
   schools: Collection, ai: MagicStick, settings: Setting, bell: Bell,
 }
 function isNavActive(item: (typeof nav.value)[number]) { return isNavigationActive(props.role, item, route.path, route.query) }

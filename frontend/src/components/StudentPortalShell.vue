@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Bell, Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick } from '@element-plus/icons-vue'
+import { Bell, Briefcase, Collection, DocumentChecked, FolderOpened, House, MagicStick, MapLocation, Reading, Trophy, User } from '@element-plus/icons-vue'
 import { computed, type Component } from 'vue'
 import { RouterLink, RouterView, useRoute, useRouter } from 'vue-router'
 
@@ -19,10 +19,13 @@ const projectLabel = computed(() => auth.user.value?.primaryProjectTitle ?? '我
 const iconMap: Record<NavigationIcon, Component> = {
   home: House,
   projects: FolderOpened,
-  journey: Collection,
+  journey: MapLocation,
   review: DocumentChecked,
-  members: Briefcase,
+  members: User,
   content: Collection,
+  cases: Reading,
+  competitions: Trophy,
+  announcements: Bell,
   schools: Collection,
   ai: MagicStick,
   settings: Collection,

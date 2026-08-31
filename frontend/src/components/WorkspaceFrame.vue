@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+
 const emit = defineEmits<{ 'toggle-sidebar': [] }>()
 
 withDefaults(defineProps<{
@@ -35,7 +37,7 @@ withDefaults(defineProps<{
           :title="sidebarCollapsed ? '展开导航' : '收起导航'"
           @click="emit('toggle-sidebar')"
         >
-          <span class="workspace-sidebar__toggle-icon" aria-hidden="true">{{ sidebarCollapsed ? '›' : '‹' }}</span>
+          <span class="workspace-sidebar__toggle-icon" aria-hidden="true"><component :is="sidebarCollapsed ? ArrowRight : ArrowLeft" /></span>
           <span class="workspace-sidebar__toggle-label">{{ sidebarCollapsed ? '展开' : '收起' }}</span>
         </button>
       </aside>
