@@ -93,7 +93,8 @@ describe('remaining Demo B page parity', () => {
     expect(library).toContain('我的公开申请')
     expect(library).toContain('PublicCaseDialog')
     expect(invitations).toContain('eyebrow="项目协作"')
-    expect(invitations).toContain('class="demo-invitation-list paper-card"')
+    expect(invitations).toContain('class="invite-panel paper-card"')
+    expect(invitations).toContain('class="invite-row"')
   })
 
   it('uses the unified research progress and report compositions', () => {
