@@ -1,8 +1,10 @@
 from unittest.mock import patch
 
+from cryptography.fernet import Fernet
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
+from apps.core.ai_config import save_configured_ai_api_key
 from apps.core.models import AIGenerationLog, Account, Project, School
 from apps.core.tasks import generate_ai_response
 
@@ -13,6 +15,7 @@ class AIServiceTests(TestCase):
         self.student = Account.objects.create_user(username="ai-student", school=self.school, role="student")
         self.teacher = Account.objects.create_user(username="ai-teacher", school=self.school, role="teacher")
         self.other = Account.objects.create_user(username="ai-other", school=self.school, role="student")
+        self.platform = Account.objects.create_user(username="ai-platform", role="platform_admin")
         self.project = Project.objects.create(
             school=self.school, title="雨水研究", problem="如何提升回收效率", plan="测量与对照",
             leader=self.student, primary_teacher=self.teacher, status=Project.Status.ACTIVE,
@@ -92,6 +95,22 @@ class AIServiceTests(TestCase):
         generate_ai_response(record.id)
 
         client_class.assert_called_once_with(api_key="configured", base_url="https://example.test/v1")
+
+    @override_settings(OPENAI_API_KEY="sk-env-fallback", AI_CONFIG_ENCRYPTION_KEY="")
+    @patch("apps.core.tasks.OpenAI")
+    def test_worker_uses_the_saved_database_key_over_the_environment_key(self, client_class):
+        client_class.return_value.responses.create.return_value.output_text = "数据库配置回复"
+        database_key = Fernet.generate_key().decode()
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, purpose="问题梳理", prompt="帮我明确变量",
+            context_scope={"project_basics": True}, status=AIGenerationLog.Status.QUEUED,
+        )
+
+        with override_settings(AI_CONFIG_ENCRYPTION_KEY=database_key):
+            save_configured_ai_api_key("sk-db-runtime-key", self.platform)
+            generate_ai_response(record.id)
+
+        client_class.assert_called_once_with(api_key="sk-db-runtime-key")
 
     @override_settings(OPENAI_API_KEY="")
     def test_demo_worker_populates_auditable_artifact_fields_without_replacing_raw_output(self):

@@ -1,6 +1,6 @@
 from rest_framework.routers import DefaultRouter
 from django.urls import path
-from .views import AIGenerationLogViewSet, AIConversationViewSet, AgentTemplateViewSet, AIAvailabilityView, AnnouncementViewSet, CompetitionViewSet, MaterialAttachmentViewSet, MaterialRevisionViewSet, MaterialViewSet, MemberInvitationViewSet, MeView, NotificationViewSet, ProjectTaskViewSet, ProjectViewSet, PublicCaseRequestViewSet, ReportExportViewSet, SchoolViewSet, ServiceStatusView, StudentDirectoryView, TemplateViewSet, UploadSessionViewSet, change_password, csrf, demo_login, health, register, session_login, session_logout
+from .views import AIGenerationLogViewSet, AIConversationViewSet, AgentTemplateViewSet, AIAvailabilityView, AnnouncementViewSet, CompetitionViewSet, MaterialAttachmentViewSet, MaterialRevisionViewSet, MaterialViewSet, MemberInvitationViewSet, MeView, NotificationViewSet, PlatformAIConfigurationView, ProjectTaskViewSet, ProjectViewSet, PublicCaseRequestViewSet, ReportExportViewSet, SchoolViewSet, ServiceStatusView, StudentDirectoryView, TemplateViewSet, UploadSessionViewSet, change_password, csrf, demo_login, health, register, session_login, session_logout
 
 router = DefaultRouter()
 router.register("projects", ProjectViewSet, basename="project")
@@ -25,6 +25,7 @@ urlpatterns = [
     path("accounts/students/", StudentDirectoryView.as_view()),
     path("health/", health),
     path("service-status/", ServiceStatusView.as_view()),
+    path("platform-ai-config/", PlatformAIConfigurationView.as_view()),
     path("ai-availability/", AIAvailabilityView.as_view()),
     path("csrf/", csrf),
     path("login/", session_login),

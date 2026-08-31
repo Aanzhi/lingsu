@@ -15,6 +15,7 @@ from django.utils import timezone
 from docx import Document
 
 from .models import AgentTemplate, AIConversationMessage
+from .ai_config import get_configured_ai_api_key
 from .ai_agents import PAPER_AGENT_KEYS, parse_research_question_output, render_agent_prompt, render_conversation_agent_prompt
 from .workflows.ai import publish_conversation_event
 
@@ -258,7 +259,10 @@ def generate_general_ai_response(self, message_id):
                 "candidates 必须正好 3 个，每个包含 question、scope、why、evidence_plan、limitations 和 scores，"
                 "scores 的 researchability、clarity、verifiability、resource_fit 均为 1-5。"
             )
-        client_kwargs = {"api_key": settings.OPENAI_API_KEY}
+        api_key = get_configured_ai_api_key()
+        if not api_key:
+            raise ValueError("AI 服务尚未配置 API Key。")
+        client_kwargs = {"api_key": api_key}
         if settings.OPENAI_BASE_URL:
             client_kwargs["base_url"] = settings.OPENAI_BASE_URL
         response = OpenAI(**client_kwargs).responses.create(
@@ -418,7 +422,7 @@ def generate_ai_response(self, record_id):
         if project is None:
             if record.workspace_mode != "opening":
                 raise ValueError("研究或答辩 AI 记录必须绑定当前项目。")
-            api_key = getattr(settings, "OPENAI_API_KEY", "")
+            api_key = get_configured_ai_api_key()
             if api_key:
                 client_kwargs = {"api_key": api_key}
                 base_url = getattr(settings, "OPENAI_BASE_URL", "")
@@ -592,7 +596,7 @@ def generate_ai_response(self, record_id):
             f"\n论文类型：{record.paper_type}\n"
             if record.agent_key in PAPER_AGENT_KEYS else ""
         )
-        api_key = getattr(settings, "OPENAI_API_KEY", "")
+        api_key = get_configured_ai_api_key()
         if not api_key:
             record.output = _demo_ai_response(record, context_parts, referenced, rendered_prompt)
             artifact = _artifact_fields(record, record.output)

@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from cryptography.fernet import Fernet
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 from unittest.mock import patch
@@ -91,3 +92,39 @@ class PlatformConfigurationTests(TestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertTrue(response.data["is_active"])
+
+    def test_platform_can_read_masked_ai_configuration_without_plaintext(self):
+        client = APIClient(); client.force_authenticate(self.platform)
+        with override_settings(AI_CONFIG_ENCRYPTION_KEY=Fernet.generate_key().decode()):
+            response = client.put(
+                "/api/platform-ai-config/",
+                {"api_key": "sk-live-1234567890-END"},
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data["masked_key"], "sk-l********-END")
+            self.assertNotIn("sk-live-1234567890-END", str(response.data))
+            self.assertNotIn("encrypted_api_key", response.data)
+
+            read = client.get("/api/platform-ai-config/")
+            self.assertEqual(read.status_code, 200)
+            self.assertEqual(read.data["masked_key"], "sk-l********-END")
+            self.assertNotIn("sk-live-1234567890-END", str(read.data))
+
+    def test_non_platform_accounts_cannot_read_or_write_ai_configuration(self):
+        client = APIClient(); client.force_authenticate(self.teacher)
+        self.assertEqual(client.get("/api/platform-ai-config/").status_code, 403)
+        self.assertEqual(
+            client.put("/api/platform-ai-config/", {"api_key": "sk-denied"}, format="json").status_code,
+            403,
+        )
+
+    @override_settings(AI_CONFIG_ENCRYPTION_KEY="")
+    def test_platform_gets_actionable_error_when_encryption_key_is_missing(self):
+        client = APIClient(); client.force_authenticate(self.platform)
+        response = client.put(
+            "/api/platform-ai-config/",
+            {"api_key": "sk-no-encryption"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 503)

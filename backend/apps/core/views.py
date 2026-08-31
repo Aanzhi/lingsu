@@ -28,6 +28,7 @@ import hashlib
 import secrets
 from pathlib import Path
 from io import BytesIO
+from .ai_config import AIConfigError, get_ai_configuration_state, get_configured_ai_api_key, save_configured_ai_api_key
 from .models import AIGenerationLog, AIConversation, AIConversationMessage, Account, AgentTemplate, Announcement, AnnouncementRead, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, UploadPart, UploadSession
 from .ai_agents import normalize_workspace_mode, workspace_mode_requires_project
 from .notifiers import notify
@@ -500,8 +501,37 @@ class ServiceStatusView(APIView):
             "virus_scan": _clamav_status(),
             "document_converter": _document_converter_status(),
             "storage": getattr(settings, "STORAGE_OPTIONS", {}).get("AWS_STORAGE_BUCKET_NAME") and "configured" or "local",
-            "ai": "configured" if getattr(settings, "OPENAI_API_KEY", "") else "demo_mode",
+            "ai": "configured" if get_configured_ai_api_key() else "demo_mode",
         })
+
+
+class PlatformAIConfigurationView(APIView):
+    """Manage the single deployment-wide AI credential without returning it."""
+
+    def _check_platform_admin(self, request):
+        if not platform_admin(request.user):
+            raise PermissionDenied("仅平台管理员可配置 AI 服务。")
+
+    def _response(self, state):
+        return {
+            **state,
+            "model": settings.OPENAI_MODEL,
+            "base_url": settings.OPENAI_BASE_URL,
+        }
+
+    def get(self, request):
+        self._check_platform_admin(request)
+        return Response(self._response(get_ai_configuration_state()))
+
+    def put(self, request):
+        self._check_platform_admin(request)
+        try:
+            state = save_configured_ai_api_key(request.data.get("api_key"), request.user)
+        except ValueError as exc:
+            raise ValidationError({"api_key": str(exc)})
+        except AIConfigError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        return Response(self._response(state))
 
 
 class AIAvailabilityView(APIView):
@@ -518,7 +548,7 @@ class AIAvailabilityView(APIView):
             created_at__year=now.year,
             created_at__month=now.month,
         ).count()
-        if getattr(settings, "OPENAI_API_KEY", ""):
+        if get_configured_ai_api_key():
             service_status = "configured"
         else:
             require_authorized_school(request.user)
@@ -1318,7 +1348,8 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         message.artifact_payload = {}
 
         retry_agent_key = conversation.current_agent or (message.generation_log.agent_key if message.generation_log else None)
-        if not settings.OPENAI_API_KEY and not conversation.project_id:
+        api_key = get_configured_ai_api_key()
+        if not api_key and not conversation.project_id:
             message.content = (
                 "研究问题助手需要配置真实 AI 服务后才能生成候选。"
                 if retry_agent_key == "proposal-topic"
@@ -1385,7 +1416,8 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         if mode_supplied and workspace_mode_requires_project(workspace_mode) and project is None:
             raise ValidationError({"project": "研究或答辩工作台需要先选择当前项目。"})
         agent_key = request.data.get("agent_key") or conversation.current_agent or None
-        if project is None and agent_key == "proposal-topic" and not settings.OPENAI_API_KEY:
+        api_key = get_configured_ai_api_key()
+        if project is None and agent_key == "proposal-topic" and not api_key:
             return Response(
                 {"detail": "研究问题助手需要配置真实 AI 服务后才能生成候选。"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1404,7 +1436,7 @@ class AIConversationViewSet(viewsets.ModelViewSet):
         )
         if project is None:
             # General consultation remains project-free and never creates a material-bearing AI log.
-            if settings.OPENAI_API_KEY:
+            if api_key:
                 transaction.on_commit(lambda: generate_general_ai_response.delay(assistant.id))
             else:
                 assistant.content = f"这是通用咨询：你问的是“{content}”。我可以先帮你梳理概念、拆解问题和制定下一步；如果需要结合项目材料，请新建一个绑定项目的对话。"
