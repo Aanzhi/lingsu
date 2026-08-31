@@ -31,6 +31,24 @@ class School(models.Model):
         return self.is_active and (not self.license_expires_at or self.license_expires_at >= timezone.localdate())
 
 
+class PlatformAIConfiguration(models.Model):
+    key = models.CharField(max_length=32, unique=True, default="default")
+    encrypted_api_key = models.TextField()
+    masked_api_key = models.CharField(max_length=128)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="updated_platform_ai_configurations",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "平台 AI 配置"
+        verbose_name_plural = "平台 AI 配置"
+
+
 class AuditEvent(models.Model):
     """Minimal, non-sensitive audit trail for platform governance actions."""
 

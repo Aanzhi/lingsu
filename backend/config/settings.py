@@ -85,6 +85,7 @@ PDF_EXPORT_ENABLED = os.getenv("PDF_EXPORT_ENABLED", "1") == "1"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("ARK_API_KEY", "")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+AI_CONFIG_ENCRYPTION_KEY = os.getenv("AI_CONFIG_ENCRYPTION_KEY", "")
 MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(500 * 1024 * 1024)))
 UPLOAD_CHUNK_MIN_SIZE = int(os.getenv("UPLOAD_CHUNK_MIN_SIZE", str(1024 * 1024)))
 UPLOAD_CHUNK_MAX_SIZE = int(os.getenv("UPLOAD_CHUNK_MAX_SIZE", str(32 * 1024 * 1024)))
