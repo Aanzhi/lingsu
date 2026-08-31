@@ -41,7 +41,7 @@ describe('progressive first paint contracts', () => {
 
   it('renders the AI workbench frame before projects, agents, and conversations finish', () => {
     const ai = read('./pages/shared/AICenter.vue')
-    expect(ai).toContain('class="page ai-center-page ai-workbench-frame"')
+    expect(ai).toContain('class="page ai-center-page ai-workbench-frame ai-workbench-main"')
     expect(ai).toContain('ai-workbench-skeleton')
     expect(ai).toContain('aria-label="正在准备灵思 AI"')
     expect(ai).not.toContain('v-if="!loading && !hasConversationMessages"')
@@ -67,7 +67,7 @@ describe('progressive first paint contracts', () => {
     expect(navigation).toContain("key: 'announcements', label: '校内通知'")
     expect(navigation).toContain("announcements: '校内通知'")
     expect(content).toContain('平台公告')
-    expect(content).toContain('需要处理的个人消息请查看顶部铃铛')
+    expect(content).toContain('个人审核与邀请事项请到消息中心处理')
     expect(notifications).toContain('personalNotifications')
     expect(notifications).toContain('审核结果、项目邀请、成员变化和成果状态')
   })

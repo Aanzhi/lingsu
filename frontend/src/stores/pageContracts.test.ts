@@ -5,6 +5,7 @@ import {
   PAGE_CONTRACTS,
   consoleSectionLocations,
   platformSchoolRoute,
+  studentCaseRoute,
   studentProjectRoute,
   studentProjectsLocation,
   studentTaskRoute,
@@ -90,8 +91,14 @@ describe('page contracts and route locations', () => {
   it('keeps case browsing and public applications under one canonical page contract', () => {
     const cases = PAGE_CONTRACTS.find((contract) => contract.key === 'student.cases')!
     expect(cases.path).toBe('/student/cases')
-    expect(cases.allowedQuery).toEqual(['view', 'projectId'])
+    expect(cases.allowedQuery).toEqual(['view', 'projectId', 'caseId'])
+    expect(studentCaseRoute(91)).toBe('/student/cases?caseId=91')
     expect(PAGE_CONTRACTS.find((contract) => contract.key === 'student.public-applications')).toBeUndefined()
+  })
+
+  it('allows the student AI page to address one exact conversation', () => {
+    const ai = PAGE_CONTRACTS.find((contract) => contract.key === 'student.ai')!
+    expect(ai.allowedQuery).toContain('conversationId')
   })
 
   it('keeps teacher and platform detail context in query parameters', () => {

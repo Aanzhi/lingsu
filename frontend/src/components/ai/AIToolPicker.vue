@@ -20,13 +20,13 @@ const emit = defineEmits<{
 <template>
   <Teleport to="body">
     <div class="agent-picker-overlay" role="presentation" @click.self="emit('close')">
-      <section id="agent-menu" class="agent-menu agent-menu--wide agent-picker-drawer" role="dialog" aria-modal="true" aria-label="选择 AI 工具（平台模板）">
+      <section id="skill-menu" class="agent-menu agent-menu--wide agent-picker-drawer" role="dialog" aria-modal="true" aria-label="添加 Skill">
         <header class="agent-picker-header">
-          <div><span class="eyebrow">平台能力</span><h2>选择 AI 工具</h2><p>按当前研究方式选择一个 Agent，选中后可直接输入目标。</p></div>
-          <button type="button" class="agent-picker-close" aria-label="关闭 AI 工具选择" @click="emit('close')">×</button>
+          <div><span class="eyebrow">可用 Skill</span><h2>添加 Skill</h2><p>为当前 Agent 添加一项专用能力，选中后可直接输入目标。</p></div>
+          <button type="button" class="agent-picker-close" aria-label="关闭 Skill 选择" @click="emit('close')">×</button>
         </header>
-        <div class="agent-menu__filters"><label><span class="sr-only">搜索 AI 工具</span><input :value="search" type="search" placeholder="搜索 AI 工具" aria-label="搜索 AI 工具" @input="emit('update:search', ($event.target as HTMLInputElement).value)" /></label><label><span class="sr-only">筛选 AI 工具分类</span><select :value="category" aria-label="筛选 AI 工具分类" @change="emit('update:category', ($event.target as HTMLSelectElement).value)"><option v-for="item in categories" :key="item" :value="item">{{ item === 'all' ? '全部分类' : item }}</option></select></label></div>
-        <div v-if="!groups.length" class="agent-empty">没有匹配的 AI 工具</div>
+        <div class="agent-menu__filters"><label><span class="sr-only">搜索 Skill</span><input :value="search" type="search" placeholder="搜索 Skill" aria-label="搜索 Skill" @input="emit('update:search', ($event.target as HTMLInputElement).value)" /></label><label><span class="sr-only">筛选 Skill 分类</span><select :value="category" aria-label="筛选 Skill 分类" @change="emit('update:category', ($event.target as HTMLSelectElement).value)"><option v-for="item in categories" :key="item" :value="item">{{ item === 'all' ? '全部分类' : item }}</option></select></label></div>
+        <div v-if="!groups.length" class="agent-empty">没有匹配的 Skill</div>
         <div v-else class="agent-picker-groups"><section v-for="group in groups" :key="group.category" class="agent-group"><h3>{{ group.category }}</h3><button v-for="agent in group.agents" :key="agent.key" type="button" :disabled="sending" @click="emit('choose', agent)"><strong>{{ agent.name }}</strong><small>{{ agent.description }}</small></button></section></div>
       </section>
     </div>

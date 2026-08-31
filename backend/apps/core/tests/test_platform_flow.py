@@ -181,6 +181,38 @@ class PlatformFlowTests(TestCase):
         self.assertEqual(rejected.status_code, 200)
         self.assertEqual(rejected.data["status"], "rejected")
 
+    def test_inviter_can_cancel_pending_student_invitation(self):
+        project = Project.objects.create(
+            school=self.school, title="可取消邀请", leader=self.leader,
+            primary_teacher=self.teacher, status="active",
+        )
+        project.members.create(account=self.leader, role="leader")
+        leader_client = self.client_for(self.leader)
+        invited = leader_client.post(
+            "/api/member-invitations/", {"project": project.id, "invitee": self.member.id}, format="json",
+        )
+
+        cancelled = leader_client.post(f"/api/member-invitations/{invited.data['id']}/cancel/")
+
+        self.assertEqual(cancelled.status_code, 204)
+        self.assertFalse(MemberInvitation.objects.filter(pk=invited.data["id"]).exists())
+
+    def test_only_inviter_can_cancel_and_accepted_invitation_cannot_be_cancelled(self):
+        project = Project.objects.create(
+            school=self.school, title="取消权限", leader=self.leader,
+            primary_teacher=self.teacher, status="active",
+        )
+        project.members.create(account=self.leader, role="leader")
+        leader_client = self.client_for(self.leader)
+        invited = leader_client.post(
+            "/api/member-invitations/", {"project": project.id, "invitee": self.member.id}, format="json",
+        )
+        member_client = self.client_for(self.member)
+
+        self.assertEqual(member_client.post(f"/api/member-invitations/{invited.data['id']}/cancel/").status_code, 403)
+        self.assertEqual(member_client.post(f"/api/member-invitations/{invited.data['id']}/accept/").status_code, 200)
+        self.assertEqual(leader_client.post(f"/api/member-invitations/{invited.data['id']}/cancel/").status_code, 400)
+
     def test_expired_school_can_read_but_cannot_create_project(self):
         self.school.license_expires_at = timezone.localdate().replace(year=timezone.localdate().year - 1); self.school.save()
         client = APIClient(); client.force_authenticate(self.leader)

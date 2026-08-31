@@ -103,7 +103,7 @@ describe('simple AI workbench layout', () => {
   it('keeps Composer actions in a stable tools-hint-send row', () => {
     expect(composer).toContain('class="ai-workbench-composer__tools"')
     expect(composer).toContain('class="ai-workbench-composer__action"')
-    expect(composerTemplate).toMatch(/<div class="ai-workbench-composer__footer">\s*<div class="ai-workbench-composer__tools">[\s\S]*?<\/div>\s*<span class="composer-hint">[\s\S]*?<\/span>\s*<button[^>]*class="ai-workbench-composer__action"/)
+    expect(composerTemplate).toMatch(/<div class="ai-workbench-composer__footer">\s*<div class="ai-workbench-composer__tools">[\s\S]*?<\/div>\s*<span class="composer-hint">[\s\S]*?<\/span>\s*<div class="ai-workbench-composer__action">[\s\S]*?<button[^>]*class="send-button/)
     expect(cssRuleBody(composer, '.ai-workbench-composer__footer')).toContain('display: flex;')
     expect(cssRuleBody(composer, '.ai-workbench-composer__tools')).toContain('display: flex;')
     expect(cssRuleBody(composer, '.ai-workbench-composer__action')).toContain('flex: 0 0 auto;')
@@ -178,10 +178,41 @@ describe('simple AI workbench layout', () => {
     expect(page).not.toContain('v-else-if="workbenchMode === \'opening\'" class="ai-workbench-empty"')
   })
 
+  it('opens an independent step work dialog instead of rewriting the composer', () => {
+    expect(pageTemplate).toContain('class="ai-workbench-empty__step-button"')
+    expect(pageTemplate).toContain('@click="startGuideStep(step)"')
+    expect(pageTemplate).toContain(':aria-pressed="activeGuideStep === step.label"')
+    expect(page).toContain('guideDialogOpen && guideDialogStep')
+    expect(page).toContain('class="ai-confirm-backdrop ai-guide-dialog-backdrop"')
+    expect(page).toContain('class="ai-guide-dialog"')
+    expect(page).toContain('role="dialog"')
+    expect(page).toContain('ref="guideDialogFieldRefs"')
+    expect(page).toContain('v-model="guideDialogValues[field.key]"')
+    expect(page).toContain(':disabled="!guideDialogComplete || composerDisabled"')
+    expect(page).toContain('@click="generateGuideStep"')
+    expect(page).toContain('const activeGuideStep = ref<string | null>(null)')
+    expect(page).toContain('guideDialogFieldRefs.value[0]?.focus()')
+    expect(page).not.toContain('guideDialogDraft')
+    expect(page).not.toContain('ref="composerRef"')
+    expect(page).not.toContain('composerRef.value?.focus()')
+    expect(cssRuleBody(page, '.ai-workbench-empty__step-button')).toContain('cursor: pointer;')
+    expect(cssRuleBody(page, '.ai-workbench-empty__step-button:focus-visible')).toContain('outline: 2px solid var(--moss);')
+    expect(cssRuleBody(page, '.ai-guide-dialog__field')).toContain('display: grid;')
+    expect(cssRuleBody(page, '.ai-guide-dialog')).toContain('box-shadow: var(--shadow-hover);')
+  })
+
   it('uses one shared vertical grid so each workbench mode keeps the same spacing', () => {
     expect(page).toContain('.ai-workbench-content { display: grid; flex: 1 1 auto;')
     expect(page).toContain('grid-template-rows: auto minmax(260px, 1fr);')
     expect(page).not.toContain('.ai-workbench-content--opening { flex: 1 1 auto;')
+  })
+
+  it('keeps new and active states on one frame and composer baseline', () => {
+    expect(cssRuleBody(page, '.ai-center-page')).toContain('height: calc(100vh - var(--topbar-height) - 104px);')
+    expect(cssRuleBody(page, '.ai-center-page')).toContain('min-height: 0;')
+    expect(page).toContain('.ai-workbench-page--active .ai-workbench-composer-dock { width: 100%; margin-top: 20px;')
+    expect(page).toContain('padding-top: 0;')
+    expect(page).toContain('.ai-workbench-page--active :deep(.ai-workbench-composer) { min-height: 148px;')
   })
 
   it('reconnects a queued or streaming message after a conversation is restored', () => {

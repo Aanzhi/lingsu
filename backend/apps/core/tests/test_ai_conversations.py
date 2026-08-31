@@ -3,7 +3,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 from rest_framework.test import APIClient
 
-from apps.core.models import AIConversation, AIConversationMessage, Account, AIGenerationLog, Project, School
+from apps.core.models import AIConversation, AIConversationMessage, Account, AIGenerationLog, AgentTemplate, Project, School
 from apps.core.tasks import generate_general_ai_response
 
 
@@ -76,6 +76,60 @@ class AIConversationAPITests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["status"], "completed")
         self.assertFalse(AIGenerationLog.objects.exists())
+
+    @override_settings(OPENAI_API_KEY="")
+    def test_first_user_message_names_conversation_and_exposes_preview(self):
+        conversation = AIConversation.objects.create(owner=self.student, workspace_mode="opening")
+        response = self.api_client(self.student).post(
+            f"/api/ai-conversations/{conversation.id}/messages/",
+            {"content": "  我想研究校园积水的持续时间和排水条件  "},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        conversation.refresh_from_db()
+        self.assertEqual(conversation.title, "我想研究校园积水的持续时间和排水条件")
+        listed = self.api_client(self.student).get("/api/ai-conversations/")
+        item = next(item for item in listed.data if item["id"] == conversation.id)
+        self.assertEqual(item["preview"], "我想研究校园积水的持续时间和排水条件")
+
+    @override_settings(OPENAI_API_KEY="")
+    def test_explicit_conversation_title_is_preserved_after_first_message(self):
+        conversation = AIConversation.objects.create(owner=self.student, title="我的研究记录")
+        response = self.api_client(self.student).post(
+            f"/api/ai-conversations/{conversation.id}/messages/",
+            {"content": "补充一条研究观察"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        conversation.refresh_from_db()
+        self.assertEqual(conversation.title, "我的研究记录")
+
+    def test_legacy_generic_conversation_uses_first_user_message_as_history_title(self):
+        conversation = AIConversation.objects.create(owner=self.student, title="新对话")
+        AIConversationMessage.objects.create(
+            conversation=conversation, role=AIConversationMessage.Role.USER, content="旧会话的第一句研究问题",
+        )
+
+        response = self.api_client(self.student).get("/api/ai-conversations/")
+
+        self.assertEqual(response.status_code, 200)
+        item = next(item for item in response.data if item["id"] == conversation.id)
+        self.assertEqual(item["title"], "旧会话的第一句研究问题")
+        self.assertEqual(item["preview"], "旧会话的第一句研究问题")
+
+    def test_legacy_unnamed_placeholder_uses_first_user_message_as_history_title(self):
+        conversation = AIConversation.objects.create(owner=self.student, title="未命名对话")
+        AIConversationMessage.objects.create(
+            conversation=conversation, role=AIConversationMessage.Role.USER, content="截图中显示为未命名的旧问题",
+        )
+
+        response = self.api_client(self.student).get("/api/ai-conversations/")
+
+        self.assertEqual(response.status_code, 200)
+        item = next(item for item in response.data if item["id"] == conversation.id)
+        self.assertEqual(item["title"], "截图中显示为未命名的旧问题")
 
     @override_settings(OPENAI_API_KEY="configured", CELERY_TASK_ALWAYS_EAGER=False)
     @patch("apps.core.views.generate_general_ai_response.delay")
@@ -152,6 +206,31 @@ class AIConversationAPITests(TestCase):
         self.assertEqual(len(assistant.artifact_payload["candidates"]), 3)
         self.assertIn("雨后操场东侧积水很久", client_class.return_value.responses.create.call_args.kwargs["input"])
 
+    @override_settings(OPENAI_API_KEY="configured")
+    @patch("apps.core.tasks.OpenAI")
+    def test_project_free_message_uses_the_selected_skill_template(self, client_class):
+        AgentTemplate.objects.create(
+            key="proposal-background", name="研究背景 Skill", role="student", category="开题",
+            system_instruction="SKILL_SYSTEM_INSTRUCTION",
+            prompt_template="SKILL_PROMPT {user_prompt}", is_active=True,
+        )
+        conversation = AIConversation.objects.create(
+            owner=self.student, workspace_mode="opening", current_agent="proposal-background",
+        )
+        AIConversationMessage.objects.create(
+            conversation=conversation, role="user", content="请梳理校园积水的研究背景",
+        )
+        assistant = AIConversationMessage.objects.create(
+            conversation=conversation, role="assistant", content="", status="queued",
+        )
+        client_class.return_value.responses.create.return_value.output_text = "普通文本回复"
+
+        generate_general_ai_response.run(assistant.id)
+
+        kwargs = client_class.return_value.responses.create.call_args.kwargs
+        self.assertEqual(kwargs["instructions"], "SKILL_SYSTEM_INSTRUCTION")
+        self.assertIn("SKILL_PROMPT 请梳理校园积水的研究背景", kwargs["input"])
+
     def test_student_can_read_conversation_messages(self):
         conversation = AIConversation.objects.create(owner=self.student)
         AIConversationMessage.objects.create(
@@ -172,6 +251,38 @@ class AIConversationAPITests(TestCase):
         archived = self.api_client(self.student).post(f"/api/ai-conversations/{conversation.id}/archive/")
         self.assertEqual(archived.status_code, 200)
         self.assertTrue(archived.data["is_archived"])
+
+    def test_student_can_permanently_delete_conversation_and_detach_audit_log(self):
+        conversation = AIConversation.objects.create(owner=self.student, workspace_mode="opening", is_archived=True)
+        other_conversation = AIConversation.objects.create(owner=self.student, workspace_mode="opening")
+        self.assertEqual(
+            self.api_client(self.other).delete(f"/api/ai-conversations/{other_conversation.id}/").status_code,
+            404,
+        )
+        log = AIGenerationLog.objects.create(
+            actor=self.student,
+            conversation=conversation,
+            project=None,
+            purpose="开题对话",
+            prompt="删除测试",
+        )
+        message = AIConversationMessage.objects.create(
+            conversation=conversation,
+            role=AIConversationMessage.Role.USER,
+            content="待删除的问题",
+            generation_log=log,
+        )
+        log.message = message
+        log.save(update_fields=["message"])
+
+        response = self.api_client(self.student).delete(f"/api/ai-conversations/{conversation.id}/")
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(AIConversation.objects.filter(pk=conversation.id).exists())
+        self.assertFalse(AIConversationMessage.objects.filter(pk=message.id).exists())
+        log.refresh_from_db()
+        self.assertIsNone(log.conversation_id)
+        self.assertIsNone(log.message_id)
 
     @override_settings(OPENAI_API_KEY="configured", CELERY_TASK_ALWAYS_EAGER=False)
     @patch("apps.core.views.generate_general_ai_response.delay")

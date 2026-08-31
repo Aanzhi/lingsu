@@ -49,8 +49,8 @@ function goalLabel(agent: AIAgent) {
 </script>
 
 <template>
-  <section class="ai-mode-tabs" aria-label="灵思 AI 工作模式" data-mode-labels="开题 / 研究 / 成果表达">
-    <div class="ai-mode-tabs__row ai-mode-tabs__row--segmented" :class="{ 'ai-mode-tabs__row--two': props.modes?.length === 2, 'ai-mode-tabs__row--compact': !props.showModeDescriptions }" role="tablist" aria-label="选择 AI 模式">
+  <section class="ai-mode-tabs" aria-label="灵思 AI 主 Agent" data-agent-kind="primary" data-mode-labels="开题 / 研究 / 成果表达">
+    <div class="ai-mode-tabs__row ai-mode-tabs__row--segmented" :class="{ 'ai-mode-tabs__row--two': props.modes?.length === 2, 'ai-mode-tabs__row--compact': !props.showModeDescriptions }" role="tablist" aria-label="选择主 Agent">
       <button
         v-for="mode in AI_WORKBENCH_MODES.filter((item) => !props.modes || props.modes.includes(item.key))"
         :key="mode.key"
@@ -58,6 +58,8 @@ function goalLabel(agent: AIAgent) {
         :class="{ active: props.modelValue === mode.key }"
         type="button"
         role="tab"
+        :data-agent-key="mode.key"
+        :aria-label="`${mode.label} Agent`"
         :aria-selected="props.modelValue === mode.key"
         :disabled="props.disabled"
         @click="emit('update:modelValue', mode.key)"
@@ -66,11 +68,11 @@ function goalLabel(agent: AIAgent) {
         <small v-if="props.showModeDescriptions">{{ mode.description }}</small>
       </button>
     </div>
-    <div v-if="props.showAgentRail" class="ai-agent-rail" data-agent-rail aria-label="当前模式的 Agent（平台模板）" title="Agent 由平台 AI 助手模板管理">
-      <button class="ai-agent-arrow" type="button" aria-label="查看前面的 Agent" :disabled="props.disabled || !canMoveAgentBack" @click="moveAgents(-1)">‹</button>
+    <div v-if="props.showAgentRail" class="ai-agent-rail" data-agent-rail aria-label="当前 Agent 的 Skill" title="Skill 由平台管理">
+      <button class="ai-agent-arrow" type="button" aria-label="查看前面的 Skill" :disabled="props.disabled || !canMoveAgentBack" @click="moveAgents(-1)">‹</button>
       <div class="ai-agent-viewport">
         <div class="ai-agent-strip">
-          <span class="ai-agent-strip__label">我想完成什么</span>
+          <span class="ai-agent-strip__label">可添加 Skill</span>
           <button
             v-for="agent in visibleAgents"
             :key="agent.key"
@@ -83,11 +85,11 @@ function goalLabel(agent: AIAgent) {
             <strong>{{ agent.name }}</strong>
             <small>{{ goalLabel(agent) }}</small>
           </button>
-          <button v-if="props.showMoreAgents" type="button" class="ai-agent-more" :disabled="props.disabled" @click="emit('more-agents')">更多能力</button>
-          <span v-if="!props.agents.length" class="ai-agent-empty">当前模式暂无可用能力</span>
+          <button v-if="props.showMoreAgents" type="button" class="ai-agent-more" :disabled="props.disabled" @click="emit('more-agents')">更多 Skill</button>
+          <span v-if="!props.agents.length" class="ai-agent-empty">当前 Agent 暂无可用 Skill</span>
         </div>
       </div>
-      <button class="ai-agent-arrow" type="button" aria-label="查看后面的 Agent" :disabled="props.disabled || !canMoveAgentForward" @click="moveAgents(1)">›</button>
+      <button class="ai-agent-arrow" type="button" aria-label="查看后面的 Skill" :disabled="props.disabled || !canMoveAgentForward" @click="moveAgents(1)">›</button>
     </div>
   </section>
 </template>

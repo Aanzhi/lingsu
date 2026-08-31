@@ -63,7 +63,7 @@ export function primaryNavigation(role: NavigationRole, primaryProject?: number 
   return [
     { key: 'home', label: '平台概览', to: '/platform/home', icon: 'home' },
     { key: 'schools', label: '学校空间', to: '/platform/schools', icon: 'schools' },
-    { key: 'ai-agents', label: 'AI 助手模板', to: '/platform/ai-agents', icon: 'ai' },
+    { key: 'ai-agents', label: 'Skills', to: '/platform/ai-agents', icon: 'ai' },
     { key: 'content', label: '赛事与公告', to: '/platform/competitions', icon: 'content', children: ['competitions', 'announcements', 'cases'] },
     { key: 'settings', label: '系统设置', to: '/platform/settings', icon: 'settings' },
   ]

@@ -158,7 +158,7 @@ function toggleSchool(item: ApiSchool) {
       <div class="pilot-metric-grid">
         <RouterLink to="/platform/schools" class="pilot-card pilot-metric"><div class="pilot-metric__label">已授权学校</div><div class="pilot-metric__value">{{ valid }}</div><div class="pilot-metric__foot good">{{ expiring ? `${expiring} 所即将到期` : '全部服务正常' }}</div></RouterLink>
         <RouterLink to="/platform/schools" class="pilot-card pilot-metric"><div class="pilot-metric__label">活跃项目</div><div class="pilot-metric__value">{{ activeProjects }}</div><div class="pilot-metric__foot">当前学校空间累计</div></RouterLink>
-        <RouterLink to="/platform/ai-agents" class="pilot-card pilot-metric"><div class="pilot-metric__label">AI 助手模板</div><div class="pilot-metric__value">—</div><div class="pilot-metric__foot">进入模板页查看启用状态</div></RouterLink>
+        <RouterLink to="/platform/ai-agents" class="pilot-card pilot-metric"><div class="pilot-metric__label">Skills</div><div class="pilot-metric__value">—</div><div class="pilot-metric__foot">进入 Skills 页查看启用状态</div></RouterLink>
         <RouterLink to="/platform/schools" class="pilot-card pilot-metric"><div class="pilot-metric__label">待处理事项</div><div class="pilot-metric__value">{{ expiring }}</div><div class="pilot-metric__foot warn">需要管理员关注</div></RouterLink>
       </div>
       <div class="pilot-two-col pilot-platform-detail">

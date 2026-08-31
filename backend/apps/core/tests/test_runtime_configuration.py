@@ -9,6 +9,12 @@ class RuntimeConfigurationTests(SimpleTestCase):
         self.assertTrue(any(origin.startswith("http://localhost:") for origin in origins))
         self.assertTrue(any(origin.startswith("http://127.0.0.1:") for origin in origins))
 
+    def test_local_development_trusts_vite_fallback_port(self):
+        from django.conf import settings
+
+        self.assertIn("http://localhost:5174", settings.CSRF_TRUSTED_ORIGINS)
+        self.assertIn("http://127.0.0.1:5174", settings.CSRF_TRUSTED_ORIGINS)
+
     @override_settings(DEBUG=False)
     def test_clickjacking_middleware_is_installed_for_production(self):
         from django.conf import settings

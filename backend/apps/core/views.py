@@ -13,7 +13,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
 from django.utils.decorators import method_decorator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import OuterRef, Q, Subquery
 from rest_framework import status, viewsets
 from rest_framework.renderers import BaseRenderer
 from rest_framework.views import APIView
@@ -35,9 +35,10 @@ from .serializers import AIGenerationLogSerializer, AIConversationMessageSeriali
 from .tasks import generate_ai_response, generate_general_ai_response, generate_report_export, process_uploaded_material
 from .workflows.cases import consent_public_case_request, resubmit_public_case_request, review_platform_case_request, validate_public_case_request
 from .workflows.materials import create_material_draft, review_material_revision, save_ai_output_as_material, submit_material_revision
-from .workflows.memberships import assign_member, create_member_invitation, decide_member_invitation, respond_to_invitation
+from .workflows.memberships import assign_member, cancel_member_invitation, create_member_invitation, decide_member_invitation, respond_to_invitation
 from .workflows.projects import claim_project
 from .services import build_blank_reference
+from .conversation_utils import conversation_title_from_prompt, is_generic_conversation_title
 from .workflows.ai import accessible_ai_logs, conversation_stream_key, create_ai_request, publish_conversation_event
 
 
@@ -1016,6 +1017,11 @@ class MemberInvitationViewSet(viewsets.ModelViewSet):
         require_authorized_school(request.user); invitation = respond_to_invitation(self.get_object(), request.user, accept=False)
         return Response(self.get_serializer(invitation).data)
     @action(detail=True, methods=["post"])
+    def cancel(self, request, pk=None):
+        require_authorized_school(request.user)
+        cancel_member_invitation(self.get_object(), request.user)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+    @action(detail=True, methods=["post"])
     def decide(self, request, pk=None):
         require_authorized_school(request.user); invitation = self.get_object()
         approved = request.data.get("approved")
@@ -1214,14 +1220,22 @@ class PublicCaseRequestViewSet(viewsets.ModelViewSet):
 
 class AIConversationViewSet(viewsets.ModelViewSet):
     serializer_class = AIConversationSerializer
-    http_method_names = ["get", "post", "patch", "head", "options"]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
 
     def get_queryset(self):
         user = self.request.user
+        first_user_prompt = AIConversationMessage.objects.filter(
+            conversation=OuterRef("pk"),
+            role=AIConversationMessage.Role.USER,
+        ).order_by("created_at", "id").values("content")[:1]
         if user.role == Account.Role.STUDENT:
-            return AIConversation.objects.filter(owner=user).select_related("project")
+            return AIConversation.objects.filter(owner=user).select_related("project").annotate(
+                history_preview=Subquery(first_user_prompt),
+            )
         if user.role == Account.Role.TEACHER:
-            return AIConversation.objects.filter(owner=user, project__primary_teacher=user).select_related("project")
+            return AIConversation.objects.filter(owner=user, project__primary_teacher=user).select_related("project").annotate(
+                history_preview=Subquery(first_user_prompt),
+            )
         return AIConversation.objects.none()
 
     def perform_create(self, serializer):
@@ -1376,6 +1390,11 @@ class AIConversationViewSet(viewsets.ModelViewSet):
                 {"detail": "研究问题助手需要配置真实 AI 服务后才能生成候选。"},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+        should_name_conversation = is_generic_conversation_title(conversation.title) and not conversation.messages.filter(
+            role=AIConversationMessage.Role.USER,
+        ).exists()
+        if should_name_conversation:
+            conversation.title = conversation_title_from_prompt(content)
         user_message = AIConversationMessage.objects.create(
             conversation=conversation, role=AIConversationMessage.Role.USER, content=content,
         )
@@ -1437,7 +1456,10 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             transaction.on_commit(lambda: generate_ai_response.delay(log.id))
         conversation.workspace_mode = workspace_mode
         conversation.updated_at = timezone.now()
-        conversation.save(update_fields=["updated_at", "current_agent", "paper_type", "workspace_mode"])
+        update_fields = ["updated_at", "current_agent", "paper_type", "workspace_mode"]
+        if should_name_conversation:
+            update_fields.append("title")
+        conversation.save(update_fields=update_fields)
         return Response(AIConversationMessageSerializer(assistant).data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="create_from_opening")
@@ -1595,19 +1617,19 @@ class AgentTemplateViewSet(viewsets.ModelViewSet):
         if platform_admin(user):
             serializer.save(school=None)  # 管理员只建全局模板
         else:
-            raise PermissionDenied("仅平台管理员可配置 AI 模板。")
+            raise PermissionDenied("仅平台管理员可配置 Skills。")
 
     def perform_update(self, serializer):
         obj = self.get_object()
         user = self.request.user
         if not platform_admin(user):
-            raise PermissionDenied("仅平台管理员可配置 AI 模板。")
+            raise PermissionDenied("仅平台管理员可配置 Skills。")
         serializer.save()
 
     def perform_destroy(self, instance):
         user = self.request.user
         if not platform_admin(user):
-            raise PermissionDenied("仅平台管理员可配置 AI 模板。")
+            raise PermissionDenied("仅平台管理员可配置 Skills。")
         instance.delete()
 
 

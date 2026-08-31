@@ -3,15 +3,15 @@ import type { AIAgent } from '../api'
 export type AIWorkspaceMode = 'opening' | 'research' | 'defense'
 
 export const AI_WORKBENCH_MODES: Array<{ key: AIWorkspaceMode; label: string; description: string }> = [
-  { key: 'opening', label: '开题', description: '从观察开始，形成研究问题和开题草稿' },
-  { key: 'research', label: '研究', description: '围绕当前项目完善材料、实验和证据' },
-  { key: 'defense', label: '成果表达', description: '整理成果、演练问答和表达项目价值' },
+  { key: 'opening', label: '开题', description: '整理观察，形成研究问题' },
+  { key: 'research', label: '研究', description: '推进当前项目的研究任务' },
+  { key: 'defense', label: '成果表达', description: '整理摘要和答辩表达' },
 ]
 
 const AI_MODE_ASSISTANT_DESCRIPTIONS: Record<AIWorkspaceMode, string> = {
-  opening: '整理观察和研究问题，形成可以确认的开题草稿。',
+  opening: '直接说出要处理的研究问题，不需要先填写表格。',
   research: '围绕当前项目的任务、材料和进度，推进下一步研究工作。',
-  defense: '围绕已完成成果整理展示内容，练习清晰、可核验地表达研究结论。',
+  defense: '整理摘要、展示内容和答辩表达。',
 }
 
 export function workspaceModeDescription(mode: AIWorkspaceMode): string {
@@ -26,6 +26,34 @@ const AI_STARTER_PROMPTS: Record<AIWorkspaceMode, readonly string[]> = {
 
 export function starterPrompts(mode: AIWorkspaceMode): string[] {
   return [...AI_STARTER_PROMPTS[mode]]
+}
+
+export interface AIWorkPath {
+  agentKey: string
+  title: string
+  description: string
+  output: string
+  inputHint: string
+}
+
+/**
+ * Turns platform-managed Skills into meaningful empty-state entry points.
+ * The cards select a capability; they never pretend a generic prompt is a task.
+ */
+export function workbenchPaths(agents: AIAgent[]): AIWorkPath[] {
+  return agents.slice(0, 3).map((agent) => {
+    const requiredInput = agent.input_schema.find((field) => field.required) || agent.input_schema[0]
+    const quickTasks = (agent.quick_tasks || []).map((task) => task.trim()).filter(Boolean)
+    return {
+      agentKey: agent.key,
+      title: agent.name,
+      description: agent.description || '描述你的目标，Skill 会结合当前工作区继续处理。',
+      output: quickTasks.length ? quickTasks.slice(0, 2).join(' / ') : agent.description || '一份可继续修改的建议',
+      inputHint: requiredInput?.placeholder
+        ? `${requiredInput.label}：${requiredInput.placeholder}`
+        : `请描述你想处理的${agent.name || '研究问题'}…`,
+    }
+  })
 }
 
 export type AIContextScope = 'none' | 'current_project'

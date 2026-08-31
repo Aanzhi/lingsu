@@ -636,6 +636,6 @@ class Command(BaseCommand):
         total = AgentTemplate.objects.filter(school=None).count()
         self.stdout.write(
             self.style.SUCCESS(
-                f"AI 模板就绪：本次新增/更新 {affected} 个，停用旧学生模板 {disabled} 个，全局模板共 {total} 个。"
+                f"Skills 就绪：本次新增/更新 {affected} 个，停用旧学生 Skills {disabled} 个，全局 Skills 共 {total} 个。"
             )
         )

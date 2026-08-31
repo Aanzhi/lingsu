@@ -6,6 +6,7 @@ const taskPage = read('./pages/student/StudentTask.vue')
 const projectPage = read('./pages/student/StudentProject.vue')
 const projectsPage = read('./pages/student/StudentProjects.vue')
 const aiPage = read('./pages/shared/AICenter.vue')
+const aiResultCard = read('./components/ai/AIResultCard.vue')
 const aiModel = read('./stores/aiModel.ts')
 const studentLayout = read('./layouts/StudentLayout.vue')
 const router = read('./router.ts')
@@ -34,7 +35,7 @@ describe('student AI center entries', () => {
     expect(studentLayout).not.toContain("route.meta.layout === 'ai'")
     expect(router).not.toContain("path: 'ai', name: 'student-ai', component: () => import('./pages/shared/AICenter.vue'), meta: { layout: 'ai' }")
     expect(aiPage).not.toContain('AIWorkspaceShell')
-    expect(aiPage).toContain('class="page ai-center-page ai-workbench-frame"')
+    expect(aiPage).toContain('class="page ai-center-page ai-workbench-frame ai-workbench-main"')
   })
 
   it('keeps direct input without exposing technical Agent controls and preserves retry behavior', () => {
@@ -60,7 +61,7 @@ describe('student AI center entries', () => {
   it('keeps opening creation and material saving confirmation-first', () => {
     expect(aiPage).toContain('createProjectFromOpening')
     expect(aiPage).toContain('saveAIGenerationAsMaterial')
-    expect(aiPage).toContain('确认创建项目')
+    expect(aiResultCard).toContain('确认创建项目')
     expect(aiPage).toContain('保存为材料')
     expect(aiPage).not.toContain('AIResearchWizard')
     expect(aiPage).not.toContain('研究对象与场景')

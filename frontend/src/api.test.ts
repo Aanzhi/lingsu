@@ -7,6 +7,7 @@ import {
   createAIConversationMessage,
   createProjectFromOpening,
   changePassword,
+  deleteAIConversation,
   errorMessage,
   markAllNotificationsRead,
   markNotificationRead,
@@ -66,6 +67,15 @@ it('keeps null current_agent when creating a free AI conversation', async () => 
 
   expect(post).toHaveBeenCalledWith('ai-conversations/', { project: null, current_agent: null })
   post.mockRestore()
+})
+
+it('permanently deletes an AI conversation by id', async () => {
+  const del = vi.spyOn(api, 'delete').mockResolvedValue({} as never)
+
+  await deleteAIConversation(12)
+
+  expect(del).toHaveBeenCalledWith('ai-conversations/12/')
+  del.mockRestore()
 })
 
 it('keeps null paper_type when updating an AI conversation', async () => {

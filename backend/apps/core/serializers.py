@@ -8,6 +8,7 @@ from django.utils import timezone
 from rest_framework import serializers
 from .models import AIGenerationLog, AIConversation, AIConversationMessage, Account, AgentTemplate, Announcement, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, TemplateMaterial, UploadSession
 from .ai_agents import PAPER_AGENT_KEYS, PAPER_TYPES, normalize_workspace_mode, validate_agent_inputs
+from .conversation_utils import conversation_title_from_prompt, is_generic_conversation_title
 from .tasks import process_uploaded_material
 
 
@@ -313,7 +314,7 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
             user = self.context["request"].user
             tmpl = AgentTemplate.resolve(agent_key, user.school, user.role)
             if not tmpl:
-                raise serializers.ValidationError({"agent_key": "指定的 AI 模板不存在或无权限使用。"})
+                raise serializers.ValidationError({"agent_key": "指定的 Skill 不存在或无权限使用。"})
             if agent_key in PAPER_AGENT_KEYS and not paper_type:
                 raise serializers.ValidationError({
                     "paper_type": "论文写作工具必须选择论文类型：empirical、case、literature-review 或 theoretical。"
@@ -334,7 +335,7 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({"input_values": exc.detail})
             if tmpl.project_types and project and project.project_type not in tmpl.project_types:
                 raise serializers.ValidationError({
-                    "agent_key": f"该 AI 模板不适用于“{project.project_type}”类型项目。"
+                    "agent_key": f"该 Skill 不适用于“{project.project_type}”类型项目。"
                 })
             context_scope = self._template_context_scope(tmpl, attrs.get("context_scope"))
             self._validate_selected_context(project, workspace_mode, context_scope)
@@ -361,7 +362,7 @@ class AIGenerationLogSerializer(serializers.ModelSerializer):
         disallowed = supplied_selections - permitted_selections
         if disallowed:
             raise serializers.ValidationError({
-                "context_scope": f"该 AI 模板不允许选择：{', '.join(sorted(disallowed))}。"
+                "context_scope": f"该 Skill 不允许选择：{', '.join(sorted(disallowed))}。"
             })
 
         # Context booleans (including approved_materials and consistency) stay
@@ -414,15 +415,25 @@ class AIConversationSerializer(serializers.ModelSerializer):
     current_agent = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     paper_type = serializers.CharField(required=False, allow_blank=True, allow_null=True)
     message_count = serializers.SerializerMethodField()
+    preview = serializers.SerializerMethodField()
     project_title = serializers.CharField(source="project.title", read_only=True, allow_null=True)
 
     class Meta:
         model = AIConversation
-        fields = ["id", "project", "opening_project", "project_title", "title", "workspace_mode", "paper_type", "current_agent", "is_archived", "message_count", "created_at", "updated_at"]
-        read_only_fields = ["id", "opening_project", "project_title", "message_count", "created_at", "updated_at"]
+        fields = ["id", "project", "opening_project", "project_title", "title", "preview", "workspace_mode", "paper_type", "current_agent", "is_archived", "message_count", "created_at", "updated_at"]
+        read_only_fields = ["id", "opening_project", "project_title", "preview", "message_count", "created_at", "updated_at"]
 
     def get_message_count(self, obj):
         return obj.messages.count()
+
+    def get_preview(self, obj):
+        return getattr(obj, "history_preview", "") or ""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        if is_generic_conversation_title(data.get("title")) and data.get("preview"):
+            data["title"] = conversation_title_from_prompt(data["preview"])
+        return data
 
     def validate_current_agent(self, value):
         # The model stores an empty string for an unselected Agent, while the

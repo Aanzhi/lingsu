@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { createAIConversation, createAIConversationMessage, createProjectFromOpening, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, retryAIConversationMessage, saveAIGenerationAsMaterial, streamAIConversationMessage, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
+import { createAIConversation, createAIConversationMessage, createProjectFromOpening, deleteAIConversation, errorMessage, getAIAgents, getAIConversationMessages, getAIConversations, getMaterials, getProjects, retryAIConversationMessage, saveAIGenerationAsMaterial, streamAIConversationMessage, type AIAgent, type AIConversation, type AIConversationMessage, type Material, type Project } from '../../api'
 import { auth } from '../../stores/auth'
 import { groupAgentsByCategory, isNearBottom, isTerminalSSEEvent, normalizeResearchQuestionArtifact, researchProjectDraftFromArtifact } from '../../stores/aiConversationModel'
 import { normalizeAIWorkspaceMode, resolveStudentAgent, visibleAgents, workspaceModeDescription, type AIWorkspaceMode } from '../../stores/aiWorkbenchModel'
@@ -22,6 +22,20 @@ type ProjectDraft = {
   problem: string
   plan: string
   project_type: Project['project_type']
+}
+
+type EmptyWorkflowField = {
+  key: string
+  label: string
+  placeholder: string
+  required?: boolean
+}
+
+type EmptyWorkflowStep = {
+  label: string
+  title: string
+  description: string
+  fields: EmptyWorkflowField[]
 }
 
 function queryNumber(value: unknown): number | null {
@@ -79,6 +93,11 @@ const selectedSkillKey = ref<string | undefined>(routeAgentValue())
 const paperType = ref<PaperType | ''>('')
 const taskId = ref<number | undefined>(queryNumber(route.query.taskId) ?? undefined)
 const draft = ref('')
+const activeGuideStep = ref<string | null>(null)
+const guideDialogOpen = ref(false)
+const guideDialogStep = ref<EmptyWorkflowStep | null>(null)
+const guideDialogValues = ref<Record<string, string>>({})
+const guideDialogFieldRefs = ref<HTMLTextAreaElement[]>([])
 const draftsByConversation = ref<Record<string, string>>({})
 const draftContextMode = ref<AIWorkspaceMode>(routeModeValue())
 const loading = ref(true)
@@ -89,6 +108,8 @@ const projectResourceError = ref('')
 const agentResourceError = ref('')
 const sending = ref(false)
 const error = ref('')
+const deletingConversationId = ref<number | null>(null)
+const conversationDeleteError = ref('')
 const streamNotice = ref('')
 const streamController = ref<AbortController | null>(null)
 const requestVersion = ref(0)
@@ -149,30 +170,157 @@ const newConversationHint = computed(() => workbenchMode.value === 'opening'
   : workbenchMode.value === 'defense'
     ? '写下要展示的成果或担心的答辩问题，灵思会帮你整理表达。'
     : '写下你要继续完成的研究任务，灵思会结合当前项目给出建议。')
-const emptyWorkflow = computed(() => {
+const emptyWorkflow = computed<EmptyWorkflowStep[]>(() => {
   if (workbenchMode.value === 'opening') {
     return [
-      { label: '01', title: '描述一个观察', description: '现象、困惑或想验证的事情' },
-      { label: '02', title: '形成研究问题', description: '拆出对象、变量和证据计划' },
-      { label: '03', title: '确认开题草稿', description: '修改后再保存为项目' },
+      {
+        label: '01',
+        title: '描述一个观察',
+        description: '现象、困惑或想验证的事情',
+        fields: [
+          { key: 'observation', label: '观察到什么？', placeholder: '写下具体现象、困惑或反常之处', required: true },
+          { key: 'question', label: '想弄清什么？', placeholder: '写下希望解释或验证的问题', required: true },
+          { key: 'evidence', label: '已有证据或材料', placeholder: '观察记录、数据、照片或其他材料（可选）' },
+        ],
+      },
+      {
+        label: '02',
+        title: '形成研究问题',
+        description: '拆出对象、变量和证据计划',
+        fields: [
+          { key: 'observation', label: '观察或现象', placeholder: '描述你想继续研究的现象', required: true },
+          { key: 'focus', label: '重点想弄清什么？', placeholder: '写下你希望回答的核心问题', required: true },
+          { key: 'object', label: '研究对象', placeholder: '涉及的人、事物、样本或场景（可选）' },
+          { key: 'evidencePlan', label: '证据计划', placeholder: '准备观察、测量或收集什么证据（可选）' },
+        ],
+      },
+      {
+        label: '03',
+        title: '确认开题草稿',
+        description: '修改后再保存为项目',
+        fields: [
+          { key: 'researchQuestion', label: '研究问题', placeholder: '填写或粘贴准备确认的研究问题', required: true },
+          { key: 'goal', label: '研究目标', placeholder: '希望通过研究弄清或解决什么', required: true },
+          { key: 'method', label: '已有方法或证据', placeholder: '已经考虑的研究方法、数据或材料（可选）' },
+          { key: 'assumptions', label: '需要重点确认的地方', placeholder: '担心的假设、限制或不确定之处（可选）' },
+        ],
+      },
     ]
   }
   if (workbenchMode.value === 'defense') {
     return [
-      { label: '01', title: '说出要表达的成果', description: '项目亮点、过程或答辩担心的地方' },
-      { label: '02', title: '整理表达重点', description: '形成摘要、展示结构和回应思路' },
-      { label: '03', title: '确认展示内容', description: '按需修改后用于汇报或答辩' },
+      {
+        label: '01',
+        title: '说出要表达的成果',
+        description: '项目亮点、过程或答辩担心的地方',
+        fields: [
+          { key: 'result', label: '要表达的成果', placeholder: '项目亮点、结果或关键过程', required: true },
+          { key: 'audience', label: '听众和使用场景', placeholder: '汇报、答辩、展板或其他场景', required: true },
+          { key: 'concern', label: '最担心的问题', placeholder: '担心被追问、表达不清或证据不足的地方（可选）' },
+        ],
+      },
+      {
+        label: '02',
+        title: '整理表达重点',
+        description: '形成摘要、展示结构和回应思路',
+        fields: [
+          { key: 'resultEvidence', label: '成果与证据', placeholder: '填写或粘贴已有成果、数据和依据', required: true },
+          { key: 'highlight', label: '希望重点突出什么？', placeholder: '最希望听众记住的贡献或亮点', required: true },
+          { key: 'scenario', label: '表达场景和限制', placeholder: '时长、展示形式或其他限制（可选）' },
+        ],
+      },
+      {
+        label: '03',
+        title: '确认展示内容',
+        description: '按需修改后用于汇报或答辩',
+        fields: [
+          { key: 'presentation', label: '展示内容', placeholder: '填写或粘贴讲稿、展板文案或答辩提纲', required: true },
+          { key: 'audience', label: '答辩场景或限制', placeholder: '听众、时长、形式或必须遵守的要求' },
+          { key: 'reviewFocus', label: '希望重点检查什么？', placeholder: '逻辑跳跃、证据不足或可能被追问的地方（可选）' },
+        ],
+      },
     ]
   }
   return [
-    { label: '01', title: '说出当前任务', description: '实验、数据、材料或卡住的位置' },
-    { label: '02', title: '得到下一步方案', description: '明确动作、证据和需要核验的风险' },
-    { label: '03', title: '留存研究记录', description: '确认后再保存到项目材料' },
+    {
+      label: '01',
+      title: '说出当前任务',
+      description: '实验、数据、材料或卡住的位置',
+      fields: [
+        { key: 'currentTask', label: '当前要推进的任务', placeholder: '实验、数据处理、材料整理或卡住的位置', required: true },
+        { key: 'progress', label: '已有进展和材料', placeholder: '填写目前的进展、数据或关键线索（可选）' },
+        { key: 'nextStep', label: '希望得到的下一步', placeholder: '行动清单、判断标准或风险提醒', required: true },
+      ],
+    },
+    {
+      label: '02',
+      title: '得到下一步方案',
+      description: '明确动作、证据和需要核验的风险',
+      fields: [
+        { key: 'currentTask', label: '当前任务', placeholder: '填写或粘贴需要拆解的研究任务', required: true },
+        { key: 'progress', label: '已有进展和材料', placeholder: '填写目前已经完成的工作和可用材料（可选）' },
+        { key: 'constraints', label: '限制或风险', placeholder: '时间、资源、证据缺口或担心的风险（可选）' },
+      ],
+    },
+    {
+      label: '03',
+      title: '留存研究记录',
+      description: '确认后再保存到项目材料',
+      fields: [
+        { key: 'process', label: '研究过程或结果', placeholder: '填写或粘贴实验、观察、分析或讨论过程', required: true },
+        { key: 'evidence', label: '已确认的证据', placeholder: '列出可以保留或引用的数据、材料和事实（可选）' },
+        { key: 'nextAction', label: '希望保留的重点', placeholder: '下一步行动、待核验问题或记录重点（可选）' },
+      ],
+    },
   ]
 })
 const composerDisabled = computed(() => loading.value || conversationLoading.value || sending.value || Boolean(current.value?.is_archived) || (projectRequired.value && !currentProject.value))
 const composerCanSend = computed(() => Boolean(draft.value.trim() && !composerDisabled.value))
 const pendingMaterialMessage = computed(() => messages.value.find((message) => message.id === pendingMaterialMessageId.value) || null)
+const guideDialogComplete = computed(() => {
+  const step = guideDialogStep.value
+  if (!step) return false
+  return step.fields.filter((field) => field.required).every((field) => Boolean(guideDialogValues.value[field.key]?.trim()))
+})
+const guideDialogPrompt = computed(() => {
+  const step = guideDialogStep.value
+  if (!step) return ''
+  const filledFields = step.fields
+    .map((field) => ({ field, value: guideDialogValues.value[field.key]?.trim() || '' }))
+    .filter(({ value }) => value)
+  return [
+    `请帮我完成“${step.title}”：${step.description}。`,
+    '我填写的信息如下：',
+    ...filledFields.map(({ field, value }) => `${field.label}：\n${value}`),
+    '请区分已知事实与待确认内容，不要编造数据，并给出可以继续修改的结果。',
+  ].join('\n\n')
+})
+
+async function startGuideStep(step: EmptyWorkflowStep) {
+  activeGuideStep.value = step.label
+  guideDialogStep.value = step
+  guideDialogValues.value = Object.fromEntries(step.fields.map((field) => [field.key, '']))
+  guideDialogFieldRefs.value = []
+  guideDialogOpen.value = true
+  await nextTick()
+  guideDialogFieldRefs.value[0]?.focus()
+}
+
+function closeGuideDialog() {
+  guideDialogOpen.value = false
+  guideDialogStep.value = null
+  guideDialogValues.value = {}
+  guideDialogFieldRefs.value = []
+  activeGuideStep.value = null
+}
+
+function generateGuideStep() {
+  if (!guideDialogComplete.value || composerDisabled.value) return
+  const content = guideDialogPrompt.value
+  if (!content) return
+  closeGuideDialog()
+  void sendMessage(content, { includeUserMessage: true })
+}
 
 function draftKey(id: number | null, mode = draftContextMode.value) {
   return id === null ? `new:${mode}` : `conversation:${id}`
@@ -245,6 +393,7 @@ function abortActiveStream() {
 function resetConversationSelection() {
   stashDraft(selectedId.value, draftContextMode.value)
   abortActiveStream()
+  closeGuideDialog()
   requestVersion.value += 1
   selectionVersion.value += 1
   selectedId.value = null
@@ -434,7 +583,7 @@ async function conversationForSend() {
   return conversationId
 }
 
-async function sendMessage(contentOverride?: string) {
+async function sendMessage(contentOverride?: string, options: { includeUserMessage?: boolean } = {}) {
   const content = (contentOverride ?? draft.value).trim()
   if (!content || sending.value) return
   if (projectRequired.value && !currentProject.value) {
@@ -464,6 +613,7 @@ async function sendMessage(contentOverride?: string) {
   error.value = ''
   streamNotice.value = ''
   const shouldClearDraft = contentOverride === undefined
+  const shouldAddUserMessage = shouldClearDraft || options.includeUserMessage === true
   if (shouldClearDraft) {
     draft.value = ''
     stashDraft()
@@ -480,7 +630,7 @@ async function sendMessage(contentOverride?: string) {
       context_scope: {},
     })
     if (version !== requestVersion.value || controller.signal.aborted) return
-    if (shouldClearDraft) messages.value.push({ id: -Date.now(), role: 'user', content, status: 'completed', created_at: new Date().toISOString() })
+    if (shouldAddUserMessage) messages.value.push({ id: -Date.now(), role: 'user', content, status: 'completed', created_at: new Date().toISOString() })
     messages.value.push(response.data)
     assistantId = response.data.id
     maybeScrollLatest(true)
@@ -589,6 +739,7 @@ async function retryMessage(message: AIConversationMessage) {
 
 function selectWorkbenchMode(mode: AIWorkspaceMode) {
   abortActiveStream()
+  closeGuideDialog()
   skillPickerOpen.value = false
   historyModeFilter.value = mode
   skipConversationRestore.value = true
@@ -647,6 +798,33 @@ function openConversationFromHistory(item: AIConversation) {
 
 function closeHistory() {
   historyOpen.value = false
+}
+
+async function deleteConversation(conversation: AIConversation) {
+  if (deletingConversationId.value !== null) return
+  conversationDeleteError.value = ''
+  deletingConversationId.value = conversation.id
+  const deletedDraftKey = draftKey(conversation.id, conversation.workspace_mode || workbenchMode.value)
+  try {
+    await deleteAIConversation(conversation.id)
+    historyConversations.value = historyConversations.value.filter((item) => item.id !== conversation.id)
+    conversations.value = conversations.value.filter((item) => item.id !== conversation.id)
+    delete draftsByConversation.value[deletedDraftKey]
+    if (selectedId.value === conversation.id) {
+      skipConversationRestore.value = true
+      resetConversationSelection()
+      historyOpen.value = false
+      if (routeConversationId() === conversation.id) {
+        const query = { ...route.query }
+        delete query.conversationId
+        void router.replace({ path: '/student/ai', query })
+      }
+    }
+  } catch (reason) {
+    conversationDeleteError.value = errorMessage(reason, '删除会话失败，请稍后重试。')
+  } finally {
+    deletingConversationId.value = null
+  }
 }
 
 async function toggleHistoryArchived() {
@@ -766,6 +944,10 @@ function chooseProject() {
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && guideDialogOpen.value) {
+    closeGuideDialog()
+    return
+  }
   if (event.key === 'Escape' && skillPickerOpen.value) {
     closeSkillPicker()
     return
@@ -912,15 +1094,25 @@ onBeforeUnmount(() => {
             <div class="ai-workbench-empty__guide" aria-label="工作方式">
               <div class="ai-workbench-empty__guide-heading">
                 <span class="eyebrow">灵思会这样推进</span>
-                <span>一段输入，三步得到可继续修改的结果</span>
+                <span aria-live="polite">{{ activeGuideStep ? '步骤工作框已打开，可编辑后生成' : '点击步骤，打开独立工作框' }}</span>
               </div>
               <ol class="ai-workbench-empty__steps">
                 <li v-for="step in emptyWorkflow" :key="step.label">
-                  <span class="ai-workbench-empty__step-index">{{ step.label }}</span>
-                  <span class="ai-workbench-empty__step-copy">
-                    <strong>{{ step.title }}</strong>
-                    <small>{{ step.description }}</small>
-                  </span>
+                  <button
+                    class="ai-workbench-empty__step-button"
+                    :class="{ 'ai-workbench-empty__step-button--active': activeGuideStep === step.label }"
+                    type="button"
+                    :aria-label="`开始：${step.title}`"
+                    :aria-pressed="activeGuideStep === step.label"
+                    @click="startGuideStep(step)"
+                  >
+                    <span class="ai-workbench-empty__step-index">{{ step.label }}</span>
+                    <span class="ai-workbench-empty__step-copy">
+                      <strong>{{ step.title }}</strong>
+                      <small>{{ step.description }}</small>
+                    </span>
+                    <span class="ai-workbench-empty__step-action">{{ activeGuideStep === step.label ? '已打开' : '打开' }} →</span>
+                  </button>
                 </li>
               </ol>
             </div>
@@ -1016,10 +1208,14 @@ onBeforeUnmount(() => {
       :search="historySearch"
       :show-archived="showArchivedConversations"
       :mode-filter="historyModeFilter"
+      :deleting-id="deletingConversationId"
+      :delete-error="conversationDeleteError"
       @update:search="historySearch = $event"
       @update:mode-filter="historyModeFilter = $event"
       @new="startNewConversation"
       @select="openConversationFromHistory"
+      @delete="void deleteConversation($event)"
+      @clear-delete-error="conversationDeleteError = ''"
       @toggle-archived="void toggleHistoryArchived()"
       @close="closeHistory"
     />
@@ -1048,14 +1244,40 @@ onBeforeUnmount(() => {
         <footer><button class="secondary-button" type="button" @click="closeMaterialDialog">取消</button><button class="primary-button" type="button" :disabled="materialDialogLoading || savingMessage !== null || !materials.length" @click="void saveArtifact()">{{ savingMessage !== null ? '保存中…' : '保存为材料' }}</button></footer>
       </section>
     </div>
+
+    <div v-if="guideDialogOpen && guideDialogStep" class="ai-confirm-backdrop ai-guide-dialog-backdrop" role="presentation" @click.self="closeGuideDialog">
+      <section class="ai-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="guide-dialog-title" aria-describedby="guide-dialog-description">
+        <header class="ai-guide-dialog__header">
+          <div>
+            <span class="eyebrow">{{ modeLabel }} · 步骤 {{ guideDialogStep.label }}</span>
+            <h2 id="guide-dialog-title">{{ guideDialogStep.title }}</h2>
+          </div>
+          <button class="ai-dialog-close" type="button" aria-label="关闭步骤工作框" @click="closeGuideDialog">×</button>
+        </header>
+        <p id="guide-dialog-description">{{ guideDialogStep.description }}。请按字段补充信息，灵思会把整理结果带回当前对话。</p>
+        <div class="ai-guide-dialog__fields">
+          <label v-for="field in guideDialogStep.fields" :key="field.key" class="ai-guide-dialog__field">
+            <span>{{ field.label }} <em v-if="field.required">必填</em></span>
+            <textarea ref="guideDialogFieldRefs" :aria-label="field.label" :aria-required="field.required" :placeholder="field.placeholder" v-model="guideDialogValues[field.key]" rows="2" />
+          </label>
+        </div>
+        <footer class="ai-guide-dialog__footer">
+          <span>填写必填项后生成 · 不会自动发送</span>
+          <div>
+            <button class="secondary-button" type="button" @click="closeGuideDialog">取消</button>
+            <button class="primary-button" type="button" :disabled="!guideDialogComplete || composerDisabled" @click="generateGuideStep">开始生成</button>
+          </div>
+        </footer>
+      </section>
+    </div>
   </div>
 </template>
 
 <style scoped>
  .ai-workbench-main { background: var(--color-bg-canvas); color: var(--color-text-primary); }
  :global(.workspace-main:has(.ai-workbench-main)) { background: var(--color-bg-canvas); }
- .ai-center-page { display: flex; width: 100%; max-width: none; min-width: 0; min-height: calc(100vh - var(--topbar-height) - 104px); flex-direction: column; box-sizing: border-box; margin: 0 auto; padding: 28px 0 24px; overflow: hidden; }
- .ai-workbench-page--new { min-height: calc(100vh - var(--topbar-height) - 104px); padding-bottom: 24px; }
+ .ai-center-page { display: flex; width: 100%; max-width: none; min-width: 0; height: calc(100vh - var(--topbar-height) - 104px); min-height: 0; flex-direction: column; box-sizing: border-box; margin: 0 auto; padding: 28px 0 24px; overflow: hidden; }
+ .ai-workbench-page--new { height: calc(100vh - var(--topbar-height) - 104px); min-height: 0; padding-bottom: 24px; }
   .ai-workbench-page--active { height: calc(100vh - var(--topbar-height) - 104px); min-height: 0; overflow: hidden; background: var(--color-bg-canvas); }
  .ai-workbench-canvas { display: flex; width: min(100%, 1080px); min-width: 0; min-height: 0; flex: 1 1 auto; flex-direction: column; box-sizing: border-box; margin: 0 auto; padding: clamp(20px, 2.5vw, 32px) clamp(20px, 3vw, 44px) clamp(20px, 2.5vw, 28px); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--paper); box-shadow: var(--shadow-soft); }
  .ai-workbench-page--active .ai-workbench-canvas { overflow: hidden; }
@@ -1091,11 +1313,17 @@ onBeforeUnmount(() => {
   .ai-workbench-empty__guide-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 10px; color: var(--muted); font-size: 11px; }
   .ai-workbench-empty__guide-heading .eyebrow { color: var(--moss); font-size: 10px; letter-spacing: .1em; }
   .ai-workbench-empty__steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
-  .ai-workbench-empty__steps li { display: grid; gap: 7px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper-soft); }
+  .ai-workbench-empty__steps li { min-width: 0; }
+  .ai-workbench-empty__step-button { display: grid; grid-template-rows: auto 1fr auto; gap: 7px; width: 100%; min-height: 100%; box-sizing: border-box; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--paper-soft); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .16s ease, background-color .16s ease, box-shadow .16s ease, transform .16s ease; }
+  .ai-workbench-empty__step-button:hover:not(:disabled) { border-color: var(--line-dark); background: var(--sage-soft); transform: translateY(-1px); }
+  .ai-workbench-empty__step-button:focus-visible { outline: 2px solid var(--moss); outline-offset: 2px; }
+  .ai-workbench-empty__step-button--active { border-color: var(--moss); background: var(--sage-soft); box-shadow: var(--shadow-soft); }
   .ai-workbench-empty__step-index { color: var(--moss); font: 700 10px/1 var(--sans); letter-spacing: .08em; }
   .ai-workbench-empty__step-copy { display: grid; gap: 4px; }
   .ai-workbench-empty__step-copy strong { color: var(--ink); font-size: 11px; }
   .ai-workbench-empty__step-copy small { color: var(--muted); font-size: 10px; line-height: 1.5; }
+  .ai-workbench-empty__step-action { color: var(--moss-dark); font-size: 10px; font-weight: 700; opacity: 0; transition: opacity .16s ease; }
+  .ai-workbench-empty__step-button:hover .ai-workbench-empty__step-action, .ai-workbench-empty__step-button:focus-visible .ai-workbench-empty__step-action, .ai-workbench-empty__step-button--active .ai-workbench-empty__step-action { opacity: 1; }
 .ai-workbench-skeleton { display: grid; gap: 10px; width: 100%; margin: 8px auto 0; }
 .ai-workbench-skeleton i { display: block; height: 10px; border-radius: 999px; background: var(--paper-muted); animation: ai-workbench-pulse 1.2s ease-in-out infinite alternate; }
 .ai-workbench-skeleton i:nth-child(1) { width: 42%; }.ai-workbench-skeleton i:nth-child(2) { width: 68%; animation-delay: .12s; }.ai-workbench-skeleton i:nth-child(3) { width: 54%; animation-delay: .24s; }
@@ -1120,17 +1348,21 @@ onBeforeUnmount(() => {
 .jump-latest { align-self: center; border: 1px solid var(--line-dark); border-radius: 999px; padding: 6px 11px; background: var(--paper); color: var(--moss-dark); font: inherit; font-size: 10px; cursor: pointer; }
  .ai-workbench-composer-dock { width: 100%; min-width: 0; margin: 24px auto 0; }
 .ai-workbench-composer-dock--new { margin-top: 20px; }
- .ai-workbench-page--active .ai-workbench-composer-dock { width: 100%; margin-top: 8px; position: sticky; bottom: 0; z-index: 2; padding-top: 8px; background: linear-gradient(to bottom, rgba(255, 255, 255, 0), var(--paper) 26%); }
+ .ai-workbench-page--active .ai-workbench-composer-dock { width: 100%; margin-top: 20px; position: sticky; bottom: 0; z-index: 2; padding-top: 0; background: var(--paper); }
 .ai-active-chat__composer { flex: 0 0 auto; min-width: 0; }
    .ai-center-page :deep(.ai-workbench-composer) { width: 100%; box-sizing: border-box; border-color: var(--line-dark); box-shadow: var(--shadow-soft); }
   .ai-center-page :deep(.ai-workbench-composer__textarea) { min-height: 78px; }
   .ai-workbench-page--new :deep(.ai-workbench-composer) { min-height: 148px; padding: 16px 18px 12px; border: 1px solid var(--line-dark); border-radius: var(--radius-md); box-shadow: var(--shadow-soft); }
    .ai-workbench-page--new :deep(.ai-workbench-composer__textarea) { height: 68px; min-height: 68px; padding: 5px 0 8px; font-size: 13px; line-height: 1.55; resize: none; }
   .ai-workbench-page--new :deep(.ai-workbench-composer__footer) { gap: 8px; font-size: 11px; }
- .ai-workbench-page--new :deep(.composer-hint) { margin-left: 0; margin-right: auto; color: var(--muted-light); }
-   .ai-workbench-page--new :deep(.send-button) { min-width: 80px; min-height: 36px; padding: 7px 12px; border-radius: var(--radius-sm); font-size: 12px; }
+ .ai-workbench-page--new :deep(.composer-hint) { margin: 0; color: var(--muted-light); }
+   .ai-workbench-page--new :deep(.send-button) { width: 80px; min-width: 80px; min-height: 36px; padding: 7px 12px; border-radius: var(--radius-sm); font-size: 12px; }
    .ai-workbench-page--new :deep(.send-button__icon) { width: 14px; height: 14px; margin-left: 3px; }
- .ai-workbench-page--new .ai-workbench-header__actions { flex-wrap: wrap; }
+  .ai-workbench-page--active :deep(.ai-workbench-composer) { min-height: 148px; padding: 16px 18px 12px; }
+  .ai-workbench-page--active :deep(.ai-workbench-composer__textarea) { height: 68px; min-height: 68px; padding: 5px 0 8px; }
+  .ai-workbench-page--active :deep(.ai-workbench-composer__footer) { gap: 8px; font-size: 11px; }
+  .ai-workbench-page--active :deep(.send-button) { width: 80px; min-width: 80px; min-height: 36px; padding: 7px 12px; border-radius: var(--radius-sm); font-size: 12px; }
+  .ai-workbench-page--active :deep(.send-button__icon) { width: 14px; height: 14px; margin-left: 3px; }
  .ai-workbench-page--new .text-button { min-height: 32px; padding: 7px 0; border-color: transparent; background: transparent; color: var(--muted); white-space: nowrap; }
  .ai-workbench-page--new .text-button:hover:not(:disabled), .ai-workbench-page--new .text-button:focus-visible { border-color: transparent; background: transparent; color: var(--moss-dark); text-decoration: underline; text-underline-offset: 4px; }
 .ai-active-chat__notices { flex: 0 0 auto; min-width: 0; }
@@ -1140,7 +1372,22 @@ onBeforeUnmount(() => {
 .ai-resource-notice button, .error-banner button { flex: 0 0 auto; border: 0; background: transparent; color: var(--moss-dark); font: inherit; font-weight: 700; cursor: pointer; }
 .primary-button, .secondary-button { min-height: 34px; padding: 7px 13px; border-radius: var(--radius-sm); font: inherit; font-size: 11px; cursor: pointer; }.primary-button { border: 1px solid var(--moss-dark); background: var(--moss); color: #fff; font-weight: 700; }.primary-button:hover:not(:disabled), .primary-button:focus-visible { background: var(--moss-dark); }.secondary-button { border: 1px solid var(--line-dark); background: var(--paper); color: var(--moss-dark); }.secondary-button:hover:not(:disabled), .secondary-button:focus-visible { border-color: var(--moss); background: var(--paper-soft); }.primary-button:disabled, .secondary-button:disabled { cursor: wait; opacity: .55; }
 .ai-confirm-backdrop { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 24px; background: rgba(32, 47, 38, .22); }.ai-material-dialog { display: grid; gap: 14px; width: min(100%, 480px); box-sizing: border-box; padding: 22px; border: 1px solid var(--line-dark); border-radius: var(--radius-md); background: var(--paper); box-shadow: var(--shadow-hover); }.ai-material-dialog header, .ai-material-dialog footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; }.ai-material-dialog h2 { margin: 4px 0 0; color: var(--ink); font: 700 22px/1.2 var(--sans); }.ai-material-dialog > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }.ai-dialog-close { width: 28px; height: 28px; border: 0; border-radius: 50%; background: transparent; color: var(--muted); font-size: 22px; cursor: pointer; }.ai-dialog-close:hover, .ai-dialog-close:focus-visible { background: var(--paper-soft); color: var(--ink); }.ai-material-target { display: grid; gap: 6px; color: var(--muted); font-size: 11px; font-weight: 700; }.ai-material-target select { width: 100%; box-sizing: border-box; border: 1px solid var(--line-dark); border-radius: var(--radius-sm); padding: 9px 10px; background: var(--paper-soft); color: var(--ink); font: inherit; font-size: 12px; }.ai-dialog-error { padding: 9px 10px; border-radius: var(--radius-sm); background: #fff7f4; color: #8e4438; font-size: 11px; }.ai-dialog-loading, .ai-dialog-empty { color: var(--muted); font-size: 11px; }.ai-material-dialog footer { justify-content: flex-end; }
- @media (max-width: 1024px) {
+ .ai-guide-dialog-backdrop { z-index: 110; }
+ .ai-guide-dialog { display: grid; gap: 14px; width: min(100%, 620px); max-height: calc(100vh - 48px); overflow: auto; box-sizing: border-box; padding: 24px; border: 1px solid var(--line-dark); border-radius: var(--radius-md); background: var(--paper); box-shadow: var(--shadow-hover); }
+ .ai-guide-dialog__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+ .ai-guide-dialog__header .eyebrow { color: var(--moss); font-size: 10px; letter-spacing: .1em; }
+ .ai-guide-dialog h2 { margin: 5px 0 0; color: var(--ink); font: 700 22px/1.25 var(--sans); letter-spacing: -.02em; }
+ .ai-guide-dialog > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+ .ai-guide-dialog__fields { display: grid; gap: 10px; }
+ .ai-guide-dialog__field { display: grid; gap: 6px; color: var(--moss-dark); font-size: 11px; font-weight: 700; }
+ .ai-guide-dialog__field > span { display: flex; align-items: center; gap: 6px; }
+ .ai-guide-dialog__field em { color: var(--muted-light); font-size: 10px; font-style: normal; font-weight: 500; }
+ .ai-guide-dialog__field textarea { width: 100%; min-height: 58px; box-sizing: border-box; resize: vertical; padding: 9px 10px; border: 1px solid var(--line-dark); border-radius: var(--radius-sm); background: var(--paper-soft); color: var(--ink); font: inherit; font-size: 12px; font-weight: 400; line-height: 1.55; }
+ .ai-guide-dialog__field textarea:focus { outline: 2px solid var(--moss); outline-offset: 1px; }
+ .ai-guide-dialog__field textarea::placeholder { color: var(--muted-light); }
+ .ai-guide-dialog__footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--muted-light); font-size: 10px; }
+ .ai-guide-dialog__footer > div { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+@media (max-width: 1024px) {
    .ai-workbench-canvas { padding: 20px 24px 18px; }
    .ai-workbench-heading h1 { font-size: 28px; }
    .ai-workbench-heading p { font-size: 12px; }

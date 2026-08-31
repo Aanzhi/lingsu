@@ -42,7 +42,7 @@ async function submit() {
     <section class="auth-page-header">
       <p class="eyebrow">平台管理</p>
       <h1>进入平台管理工作台。</h1>
-      <p>平台管理员在这里管理学校空间、AI 模板、赛事公告和公开案例。</p>
+      <p>平台管理员在这里管理学校空间、Skills、赛事公告和公开案例。</p>
     </section>
     <div class="auth-two-col">
         <form class="auth-card paper-card" @submit.prevent="submit">

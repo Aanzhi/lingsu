@@ -32,17 +32,17 @@ export const PAGE_CONTRACTS: PageContract[] = [
   { key: 'public.entry', role: 'public', path: '/', title: '灵溯', description: '了解学生、教师和学校如何在同一条科创项目工作流中协作。', primaryAction: { label: '登录工作台', target: '/login', kind: 'route' } },
   { key: 'public.login', role: 'public', path: '/login', title: '欢迎回到灵溯', description: '登录后进入与你身份匹配的工作台，继续处理项目或指导任务。', primaryAction: { label: '登录', kind: 'submit' } },
   { key: 'public.register', role: 'public', path: '/register', title: '创建工作台账号', description: '使用学校邀请码创建学生或教师账号，注册后直接进入对应工作台。', primaryAction: { label: '创建账号', kind: 'submit' }, allowedQuery: ['role'] },
-  { key: 'public.platform-login', role: 'public', path: '/platform/login', title: '进入平台管理工作台', description: '平台管理员在这里管理学校空间、AI 模板、赛事公告和公开案例。', primaryAction: { label: '登录平台工作台', kind: 'submit' } },
+  { key: 'public.platform-login', role: 'public', path: '/platform/login', title: '进入平台管理工作台', description: '平台管理员在这里管理学校空间、Skills、赛事公告和公开案例。', primaryAction: { label: '登录平台工作台', kind: 'submit' } },
 
   { key: 'student.home', role: 'student', path: '/student/home', title: '继续当前研究', description: '从当前项目的待办开始，查看进度、材料状态和下一项可完成任务。', primaryAction: { label: '开始任务', kind: 'route' } },
   { key: 'student.projects', role: 'student', path: '/student/projects', title: '我的项目', description: '查看项目进度，进入研究进程，管理已归档和回收站项目。', primaryAction: { label: '新建项目', kind: 'event' }, allowedQuery: studentProjectQuery },
   { key: 'student.project.map', role: 'student', path: '/student/projects/:id/map', title: '研究进程', description: '按章节推进任务，在具体任务中提交材料并查看审核意见。', primaryAction: { label: '继续当前任务', kind: 'route' } },
   { key: 'student.project.task', role: 'student', path: '/student/projects/:id/tasks/:taskId', title: '任务处理', description: '完成当前任务要求，补充证据后提交给指导教师审核。', primaryAction: { label: '提交材料', kind: 'submit' } },
   { key: 'student.project.report', role: 'student', path: '/student/projects/:id/report', title: '研究报告', description: '根据已通过材料查看报告结构，满足条件后导出 Word 或 PDF。' },
-  { key: 'student.ai', role: 'student', path: '/student/ai', title: '灵思 AI', description: '围绕开题、研究推进和成果表达提供可核对的辅助建议。', primaryAction: { label: '发送问题', kind: 'submit' }, allowedQuery: ['mode', 'projectId', 'taskId', 'agent', 'researchQuestion'] },
+  { key: 'student.ai', role: 'student', path: '/student/ai', title: '灵思 AI', description: '围绕开题、研究推进和成果表达提供可核对的辅助建议。', primaryAction: { label: '发送问题', kind: 'submit' }, allowedQuery: ['mode', 'projectId', 'taskId', 'agent', 'researchQuestion', 'conversationId'] },
   { key: 'student.notifications', role: 'student', path: '/student/notifications', title: '消息', description: '查看审核结果、项目邀请、成员变化和成果状态等与你有关的动态。' },
   { key: 'student.invitations', role: 'student', path: '/student/invitations', title: '项目邀请', description: '处理同学或教师发来的项目邀请；新邀请从具体项目的成员区域发起。' },
-  { key: 'student.cases', role: 'student', path: '/student/cases', title: '案例库', description: '浏览公开案例，并在同一页面管理项目公开展示申请。', allowedQuery: ['view', 'projectId'] },
+  { key: 'student.cases', role: 'student', path: '/student/cases', title: '案例库', description: '浏览已完成并公开的研究成果，公开申请从页面右上角进入管理。', allowedQuery: ['view', 'projectId', 'caseId'] },
   { key: 'student.competitions', role: 'student', path: '/student/competitions', title: '赛事信息', description: '查看平台发布的赛事和截止时间，判断当前项目是否适合参加。' },
   { key: 'student.announcements', role: 'student', path: '/student/announcements', title: '校内通知', description: '查看学校和平台发布的通知，了解与研究、活动和项目相关的安排。' },
 
@@ -63,7 +63,7 @@ export const PAGE_CONTRACTS: PageContract[] = [
   { key: 'platform.home', role: 'platform', path: '/platform/home', title: '平台概览', description: '查看学校授权、项目活跃度和服务状态，具体管理操作进入对应工作页。', primaryAction: { label: '查看学校空间', target: '/platform/schools', kind: 'route' } },
   { key: 'platform.schools', role: 'platform', path: '/platform/schools', title: '学校空间', description: '管理学校空间和授权状态；进入详情查看数据，开关只控制授权。', primaryAction: { label: '添加学校', kind: 'event' } },
   { key: 'platform.school', role: 'platform', path: '/platform/schools/:id', title: '学校详情', description: '查看该学校的成员、项目、邀请码和服务配额。' },
-  { key: 'platform.ai-agents', role: 'platform', path: '/platform/ai-agents', title: 'AI 助手模板', description: '维护师生端可用的 AI 模板、角色、分组、上下文范围和启用状态。', primaryAction: { label: '新建模板', kind: 'event' } },
+  { key: 'platform.ai-agents', role: 'platform', path: '/platform/ai-agents', title: 'Skills', description: '维护师生端可用的 Skills、角色、分组、上下文范围和启用状态。', primaryAction: { label: '新建 Skill', kind: 'event' } },
   { key: 'platform.competitions', role: 'platform', path: '/platform/competitions', title: '赛事管理', description: '创建、发布或撤回面向师生的赛事信息。', primaryAction: { label: '发布赛事', kind: 'event' } },
   { key: 'platform.announcements', role: 'platform', path: '/platform/announcements', title: '系统公告', description: '发布平台公告，学校端会在公开内容中查看。', primaryAction: { label: '发布公告', kind: 'event' } },
   { key: 'platform.cases', role: 'platform', path: '/platform/cases', title: '案例治理', description: '审核学生公开成果申请，决定发布、下架或恢复。' },
@@ -104,6 +104,10 @@ export function studentProjectsLocation(focus?: StudentProjectFocus): RouteLocat
 export function studentProjectsPath(focus?: StudentProjectFocus) {
   if (focus === 'apply') return '/student/cases?view=applications'
   return focus ? `/student/projects?focus=${focus === 'materials' ? 'journey' : focus}` : '/student/projects'
+}
+
+export function studentCaseRoute(id: number | string) {
+  return `/student/cases?caseId=${encodeURIComponent(String(id))}`
 }
 
 export function teacherReviewRoute(submissionId?: number | string, projectId?: number | string): string | RouteLocationTarget {

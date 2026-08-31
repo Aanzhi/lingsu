@@ -53,6 +53,32 @@ def respond_to_invitation(invitation, student, accept):
         return invitation
 
 
+def cancel_member_invitation(invitation, inviter):
+    """Cancel an invitation while the invited student has not responded yet."""
+    with transaction.atomic():
+        invitation = MemberInvitation.objects.select_for_update().select_related("project", "invitee").get(pk=invitation.pk)
+        if invitation.inviter_id != inviter.id:
+            raise PermissionDenied("仅发出邀请的项目负责人可取消邀请。")
+        if invitation.status != MemberInvitation.Status.PENDING_STUDENT:
+            raise ValidationError("学生已处理该邀请，当前不能取消。")
+        AuditEvent.objects.create(
+            school=invitation.project.school,
+            actor=inviter,
+            action=AuditEvent.Action.MEMBER_INVITATION_DECIDED,
+            changes={"project_id": invitation.project_id, "invitation_id": invitation.id, "decision": "cancelled_by_inviter"},
+        )
+        notify(
+            invitation.invitee,
+            kind=Notification.Kind.INVITATION_REJECTED,
+            title=f"项目负责人取消了项目「{invitation.project.title}」的邀请",
+            body="该邀请已不再需要处理。",
+            actor=inviter,
+            project=invitation.project,
+            link="/student/invitations",
+        )
+        invitation.delete()
+
+
 def decide_member_invitation(invitation, teacher, approved):
     with transaction.atomic():
         invitation = MemberInvitation.objects.select_for_update().select_related("project").get(pk=invitation.pk)

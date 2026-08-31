@@ -15,7 +15,7 @@ from django.utils import timezone
 from docx import Document
 
 from .models import AgentTemplate, AIConversationMessage
-from .ai_agents import PAPER_AGENT_KEYS, parse_research_question_output, render_agent_prompt
+from .ai_agents import PAPER_AGENT_KEYS, parse_research_question_output, render_agent_prompt, render_conversation_agent_prompt
 from .workflows.ai import publish_conversation_event
 
 DEFAULT_AI_INSTRUCTION = (
@@ -247,10 +247,12 @@ def generate_general_ai_response(self, message_id):
             f"{item.role}: {item.content}" for item in reversed(list(history)) if item.content
         )
         latest_user_message = next((item.content for item in history if item.role == AIConversationMessage.Role.USER and item.content), message.content)
-        instructions = DEFAULT_AI_INSTRUCTION
+        template = AgentTemplate.resolve(agent_key, conversation.owner.school, conversation.owner.role) if agent_key else None
+        instructions = template.system_instruction if template else DEFAULT_AI_INSTRUCTION
+        rendered_prompt = render_conversation_agent_prompt(template, conversation, latest_user_message) if template else latest_user_message
         if agent_key == "proposal-topic":
             instructions = (
-                f"{DEFAULT_AI_INSTRUCTION} 你正在执行研究问题助手工作流。"
+                f"{instructions} 你正在执行研究问题助手工作流。"
                 "只输出严格 JSON，不要 Markdown。JSON 必须包含 project_title、project_type、project_plan、"
                 "candidates、recommended_index、missing_information。project_type 只能是 research、invention、engineering；"
                 "candidates 必须正好 3 个，每个包含 question、scope、why、evidence_plan、limitations 和 scores，"
@@ -262,7 +264,7 @@ def generate_general_ai_response(self, message_id):
         response = OpenAI(**client_kwargs).responses.create(
             model=settings.OPENAI_MODEL,
             instructions=instructions,
-            input=(f"对话历史：\n{transcript}\n\n" if transcript else "") + f"用户问题：\n{latest_user_message}",
+            input=(f"对话历史：\n{transcript}\n\n" if transcript else "") + f"Skill 指令：\n{rendered_prompt}\n用户问题：\n{latest_user_message}",
         )
         artifact = _research_question_artifact(response.output_text) if agent_key == "proposal-topic" else None
         _finish_conversation_message(message, response.output_text, artifact)
@@ -422,13 +424,19 @@ def generate_ai_response(self, record_id):
                 base_url = getattr(settings, "OPENAI_BASE_URL", "")
                 if base_url:
                     client_kwargs["base_url"] = base_url
+                template = AgentTemplate.resolve(record.agent_key, record.actor.school, record.actor.role) if record.agent_key else None
+                system = template.system_instruction if template else DEFAULT_AI_INSTRUCTION
+                rendered_prompt = render_agent_prompt(template, record) if template else record.prompt
+                if record.agent_key == "proposal-topic":
+                    system = (
+                        f"{system} 你正在执行研究问题助手工作流。"
+                        "只输出严格 JSON，必须包含 project_title、project_type、project_plan、"
+                        "candidates、recommended_index、missing_information；candidates 必须正好 3 个，并包含 question、scope、why、evidence_plan、limitations 和 scores。"
+                    )
                 response = OpenAI(**client_kwargs).responses.create(
                     model=settings.OPENAI_MODEL,
-                    instructions=(
-                        f"{DEFAULT_AI_INSTRUCTION} 你正在执行开题工作流。只输出严格 JSON，必须包含 project_title、project_type、project_plan、"
-                        "candidates、recommended_index、missing_information；candidates 必须正好 3 个，并包含 question、scope、why、evidence_plan、limitations 和 scores。"
-                    ),
-                    input=f"用户开题想法：{record.prompt}",
+                    instructions=system,
+                    input=f"Skill 指令：{rendered_prompt}\n用户开题想法：{record.prompt}",
                 )
                 output = response.output_text
                 model_name = settings.OPENAI_MODEL
@@ -609,7 +617,7 @@ def generate_ai_response(self, record_id):
             input=(
                 f"用途：{record.purpose}\n" + "\n".join(context_parts)
                 + paper_type_context
-                + f"\nAgent 指令：{rendered_prompt}\n用户补充：{record.prompt}"
+                + f"\nSkill 指令：{rendered_prompt}\n用户补充：{record.prompt}"
             ),
         )
         record.output = response.output_text

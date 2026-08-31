@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { AIAgent } from '../api'
-import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, resolveStudentAgent, starterPrompts, visibleAgents, workspaceModeDescription, type AIWorkspaceMode } from './aiWorkbenchModel'
+import { AI_WORKBENCH_MODES, draftActions, materialSelectionScope, resolveAIContext, resolveStudentAgent, starterPrompts, visibleAgents, workbenchPaths, workspaceModeDescription, type AIWorkspaceMode } from './aiWorkbenchModel'
 
 const agent = (overrides: Partial<AIAgent>): AIAgent => ({
   id: 1,
@@ -42,15 +42,34 @@ describe('AI workbench model', () => {
     ])
   })
 
+  it('derives useful work paths from available Skills instead of prompt fragments', () => {
+    const paths = workbenchPaths([
+      agent({ key: 'proposal-topic', name: '研究问题助手', description: '把观察收敛为可研究的问题。', workflow: 'proposal_topic', quick_tasks: ['选题建议', '问题澄清'], input_schema: [{ key: 'topic', label: '项目主题', placeholder: '你想研究的主题', required: true, type: 'text' }] }),
+      agent({ key: 'proposal-objectives', name: '研究目标与内容', description: '把问题转成可执行方案。', workflow: 'proposal_objectives', quick_tasks: ['设计实验'], input_schema: [{ key: 'research_question', label: '研究问题', placeholder: '要回答的问题', required: true, type: 'text' }] }),
+      agent({ key: 'proposal-consistency', name: '一致性检查', description: '检查开题材料的逻辑。', workflow: 'proposal_consistency', quick_tasks: ['检查证据缺口'], input_schema: [{ key: 'draft', label: '申报材料', placeholder: '粘贴申报书片段', required: true, type: 'textarea' }] }),
+      agent({ key: 'extra', name: '不应显示的第四项', quick_tasks: ['不应出现'] }),
+    ])
+
+    expect(paths).toHaveLength(3)
+    expect(paths[0]).toMatchObject({ agentKey: 'proposal-topic', title: '研究问题助手', output: expect.stringContaining('选题建议'), inputHint: expect.stringContaining('你想研究的主题') })
+    expect(paths.every((path) => path.description && path.output && path.inputHint)).toBe(true)
+  })
+
+  it('uses the Skill description as the work result when no quick task is configured', () => {
+    const [path] = workbenchPaths([agent({ key: 'opening-report', name: '开题报告助手', description: '梳理论证链条与开题结构。', quick_tasks: [] })])
+
+    expect(path.output).toContain('梳理论证链条与开题结构')
+  })
+
   it('maps research and defense to the current project', () => {
     expect(resolveAIContext('research', 8)).toEqual({ projectId: 8, scope: 'current_project' })
     expect(resolveAIContext('defense', 8)).toEqual({ projectId: 8, scope: 'current_project' })
   })
 
   it('uses mode responsibilities for the assistant bar copy', () => {
-    expect(workspaceModeDescription('opening')).toBe('整理观察和研究问题，形成可以确认的开题草稿。')
+    expect(workspaceModeDescription('opening')).toBe('直接说出要处理的研究问题，不需要先填写表格。')
     expect(workspaceModeDescription('research')).toBe('围绕当前项目的任务、材料和进度，推进下一步研究工作。')
-    expect(workspaceModeDescription('defense')).toBe('围绕已完成成果整理展示内容，练习清晰、可核验地表达研究结论。')
+    expect(workspaceModeDescription('defense')).toBe('整理摘要、展示内容和答辩表达。')
   })
 
   it('keeps opening project-free even when a current project exists', () => {

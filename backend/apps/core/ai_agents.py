@@ -149,15 +149,41 @@ def validate_agent_inputs(template, values):
     return {key: value.strip() if isinstance(value, str) else "" for key, value in values.items()}
 
 
-def render_agent_prompt(template, record):
-    """Render a template with validated values plus project-level facts."""
-    values = defaultdict(str, (record.context_scope or {}).get("agent_inputs") or {})
+def _render_agent_prompt(template, input_values, project=None, paper_type="", user_prompt=""):
+    values = defaultdict(str, input_values or {})
     values.update({
-        "project_title": record.project.title or "",
-        "project_problem": record.project.problem or "",
-        "project_plan": record.project.plan or "",
-        "project_type": record.project.project_type or "",
-        "paper_type": record.paper_type or "",
-        "user_prompt": record.prompt or "",
+        "project_title": project.title if project else "",
+        "project_problem": project.problem if project else "",
+        "project_plan": project.plan if project else "",
+        "project_type": project.project_type if project else "",
+        "paper_type": paper_type or "",
+        "user_prompt": user_prompt or "",
     })
     return (template.prompt_template or "").format_map(values)
+
+
+def render_agent_prompt(template, record):
+    """Render a template with validated values plus project-level facts."""
+    return _render_agent_prompt(
+        template,
+        (record.context_scope or {}).get("agent_inputs") or {},
+        project=getattr(record, "project", None),
+        paper_type=getattr(record, "paper_type", ""),
+        user_prompt=getattr(record, "prompt", ""),
+    )
+
+
+def render_conversation_agent_prompt(template, conversation, user_prompt):
+    """Render a Skill for a free-form conversation without a generation log."""
+    input_values = {
+        field.get("key"): user_prompt
+        for field in (template.input_schema or [])
+        if isinstance(field, dict) and field.get("key") and field.get("required")
+    }
+    return _render_agent_prompt(
+        template,
+        input_values,
+        project=getattr(conversation, "project", None),
+        paper_type=getattr(conversation, "paper_type", ""),
+        user_prompt=user_prompt,
+    )

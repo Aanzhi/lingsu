@@ -58,7 +58,7 @@ async function load() {
     agents.value = []
     agents.value = (await getAIAgents()).data
   } catch (reason) {
-    feedback.value = makeFeedback('error', errorMessage(reason), 'AI 模板没有加载完成，可以重试。', '重试')
+    feedback.value = makeFeedback('error', errorMessage(reason), 'Skill 没有加载完成，可以重试。', '重试')
   } finally { loading.value = false }
 }
 
@@ -98,7 +98,7 @@ async function save() {
     else await createAIAgent(payload)
     dialogOpen.value = false
     await load()
-    feedback.value = makeFeedback('success', 'AI 模板已保存。', '师生端的 AI 助手列表会立即按角色更新。')
+    feedback.value = makeFeedback('success', 'Skill 已保存。', '师生端的 Skill 列表会立即按角色更新。')
   } catch (reason) {
     feedback.value = makeFeedback('error', errorMessage(reason), '未保存的内容仍保留，可以修正后重试。', '重试')
   } finally { saving.value = false }
@@ -111,7 +111,7 @@ async function confirmRemove() {
   try {
     await deleteAIAgent(target.id)
     await load()
-    feedback.value = makeFeedback('success', 'AI 模板已删除。', '该模板不再出现在师生端的助手列表中。')
+    feedback.value = makeFeedback('success', 'Skill 已删除。', '该 Skill 不再出现在师生端的技能列表中。')
   } catch (reason) {
     feedback.value = makeFeedback('error', errorMessage(reason), '没有删除成功，可以重试。', '重试')
   }
@@ -122,9 +122,9 @@ async function toggleAgent(agent: AIAgent) {
   try {
     await updateAIAgent(agent.id, { is_active: !agent.is_active })
     await load()
-    feedback.value = makeFeedback('success', agent.is_active ? 'AI 模板已停用。' : 'AI 模板已启用。', agent.is_active ? '学生和教师不会再看到该模板。' : '模板已按角色重新出现在可用 Agent 列表。')
+    feedback.value = makeFeedback('success', agent.is_active ? 'Skill 已停用。' : 'Skill 已启用。', agent.is_active ? '学生和教师不会再看到该 Skill。' : 'Skill 已按角色重新出现在可用列表。')
   } catch (reason) {
-    feedback.value = makeFeedback('error', errorMessage(reason), '模板启用状态没有改变，可以重试。', '重试')
+    feedback.value = makeFeedback('error', errorMessage(reason), 'Skill 启用状态没有改变，可以重试。', '重试')
   } finally { saving.value = false }
 }
 
@@ -150,17 +150,17 @@ onMounted(load)
 
 <template>
   <div class="page platform-page">
-    <PageHeader eyebrow="AI 助手模板" title="AI 助手模板" description="维护师生端可用的 AI 模板、角色、分组、上下文范围和启用状态。使用流程从师生任务入口进入。"><template #actions><button class="primary-button" type="button" @click="openCreate">+ 新建模板</button></template></PageHeader>
+    <PageHeader eyebrow="Skill 管理" title="Skills" description="维护师生端可用的 Skill、角色、分组、上下文范围和启用状态。使用流程从师生任务入口进入。"><template #actions><button class="primary-button" type="button" @click="openCreate">+ 新建 Skill</button></template></PageHeader>
     <FeedbackBanner v-model="feedback" @action="load" />
     <section class="paper-card agent-admin-panel">
-      <div class="agent-filters filter-bar" role="search" aria-label="筛选 AI 助手模板">
-        <input v-model="search" class="input" type="search" placeholder="搜索模板名称" />
+      <div class="agent-filters filter-bar" role="search" aria-label="筛选 Skill">
+        <input v-model="search" class="input" type="search" placeholder="搜索 Skill 名称" />
         <select v-model="roleFilter" class="select"><option value="all">全部角色</option><option value="student">学生</option><option value="teacher">教师</option><option value="both">师生通用</option></select>
         <select v-model="categoryFilter" class="select"><option v-for="category in categories" :key="category" :value="category">{{ category === 'all' ? '全部分组' : category }}</option></select>
         <select v-model="statusFilter" class="select"><option value="all">全部状态</option><option value="active">已启用</option><option value="inactive">已停用</option></select>
       </div>
-      <p v-if="loading" class="loading-state" role="status">正在读取 AI 助手模板…</p>
-      <div v-if="!loading && sortedAgents.length" class="demo-agent-table table-wrap"><table><thead><tr><th>模板名称</th><th>角色</th><th>分组</th><th>最近更新</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="agent in pagedAgents" :key="agent.id"><td><div class="row-title">{{ agent.name }}</div><div class="row-meta">{{ agent.description || '暂无描述' }}</div></td><td>{{ roleLabels[agent.role] }}</td><td><span class="chip">{{ agent.category || '其他' }}</span></td><td>今天</td><td><StatusTag :status="agent.is_active ? 'active' : 'disabled'" /></td><td><div class="agent-table-actions"><button class="secondary-button" type="button" @click="openEdit(agent)">编辑</button><button class="text-link" type="button" @click="toggleAgent(agent)">{{ agent.is_active ? '停用' : '启用' }}</button></div></td></tr></tbody></table></div>
+      <p v-if="loading" class="loading-state" role="status">正在读取 Skills…</p>
+      <div v-if="!loading && sortedAgents.length" class="demo-agent-table table-wrap"><table><thead><tr><th>Skill 名称</th><th>角色</th><th>分组</th><th>最近更新</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="agent in pagedAgents" :key="agent.id"><td><div class="row-title">{{ agent.name }}</div><div class="row-meta">{{ agent.description || '暂无描述' }}</div></td><td>{{ roleLabels[agent.role] }}</td><td><span class="chip">{{ agent.category || '其他' }}</span></td><td>今天</td><td><StatusTag :status="agent.is_active ? 'active' : 'disabled'" /></td><td><div class="agent-table-actions"><button class="secondary-button" type="button" @click="openEdit(agent)">编辑</button><button class="text-link" type="button" @click="toggleAgent(agent)">{{ agent.is_active ? '停用' : '启用' }}</button></div></td></tr></tbody></table></div>
       <div v-if="!loading && sortedAgents.length" class="agent-card-list agent-card-list--mobile">
         <article v-for="agent in pagedAgents" :key="agent.id" class="agent-card">
           <div class="agent-card__heading"><div><strong>{{ agent.name }}</strong><small>{{ roleLabels[agent.role] }} · {{ agent.category || '其他' }}</small></div><el-tag :type="agent.is_active ? 'success' : 'info'" size="small">{{ agent.is_active ? '启用' : '停用' }}</el-tag></div>
@@ -169,23 +169,23 @@ onMounted(load)
           <div class="agent-card__actions"><button class="secondary-button" type="button" @click="openEdit(agent)">编辑</button><button class="text-link" type="button" @click="toggleAgent(agent)">{{ agent.is_active ? '停用' : '启用' }}</button><button class="text-link danger" type="button" @click="confirmDelete = agent">删除</button></div>
         </article>
       </div>
-      <nav v-if="sortedAgents.length > pageSize" class="agent-pagination" aria-label="AI 模板分页">
+      <nav v-if="sortedAgents.length > pageSize" class="agent-pagination" aria-label="Skill 分页">
         <button class="secondary-button" type="button" :disabled="page === 1" @click="page -= 1">上一页</button>
         <span>第 {{ page }} / {{ totalPages }} 页</span>
         <button class="secondary-button" type="button" :disabled="page === totalPages" @click="page += 1">下一页</button>
       </nav>
-      <EmptyState v-else-if="agents.length && !sortedAgents.length" title="没有匹配模板" description="调整关键词或筛选条件后重试。" compact />
-      <EmptyState v-else-if="!loading" title="暂无 AI 助手模板" description="点击右上角新建第一个 AI 助手。" />
+      <EmptyState v-else-if="agents.length && !sortedAgents.length" title="没有匹配 Skill" description="调整关键词或筛选条件后重试。" compact />
+      <EmptyState v-else-if="!loading" title="暂无 Skill" description="点击右上角新建第一个 Skill。" />
     </section>
 
-    <el-dialog v-model="dialogOpen" :title="editingId ? '编辑 AI 助手' : '新建 AI 助手'" width="720px">
+    <el-dialog v-model="dialogOpen" :title="editingId ? '编辑 Skill' : '新建 Skill'" width="720px">
       <div v-if="formError" class="form-error" role="alert">{{ formError }}</div>
       <form class="agent-form" @submit.prevent="save">
         <div class="form-row">
-          <label>key（唯一标识）<input v-model="form.key" :disabled="!!editingId" placeholder="如 opening-report"></label>
-          <label>名称<input v-model="form.name" placeholder="如 开题报告助手"></label>
+          <label>key（Skill 唯一标识）<input v-model="form.key" :disabled="!!editingId" placeholder="如 opening-report"></label>
+          <label>Skill 名称<input v-model="form.name" placeholder="如 研究问题助手"></label>
         </div>
-        <label>描述<input v-model="form.description" placeholder="一句话说明这个助手做什么"></label>
+        <label>描述<input v-model="form.description" placeholder="一句话说明这个 Skill 做什么"></label>
         <div class="form-row">
           <label>角色
             <select v-model="form.role">
@@ -203,7 +203,7 @@ onMounted(load)
         <label>资料范围默认（JSON）<textarea v-model="form.context_scope_text" rows="4"></textarea></label>
         <label class="switch-line">启用 <el-switch v-model="form.is_active" /></label>
         <footer class="dialog-footer">
-          <button v-if="editingId" class="text-link danger" type="button" @click="confirmDelete = agents.find((agent) => agent.id === editingId) || null; dialogOpen = false">删除模板</button>
+          <button v-if="editingId" class="text-link danger" type="button" @click="confirmDelete = agents.find((agent) => agent.id === editingId) || null; dialogOpen = false">删除 Skill</button>
           <button class="secondary-button" type="button" @click="dialogOpen = false">取消</button>
           <button class="primary-button" type="submit" :disabled="saving">{{ saving ? '正在保存…' : '保存' }}</button>
         </footer>
@@ -211,8 +211,8 @@ onMounted(load)
     </el-dialog>
 
     <ConfirmDialog
-      v-if="confirmDelete" :model-value="true" title="删除 AI 助手？"
-      :description="`「${confirmDelete.name}」删除后不再出现在师生端助手列表中，已生成的历史记录不受影响。`"
+      v-if="confirmDelete" :model-value="true" title="删除 Skill？"
+      :description="`「${confirmDelete.name}」删除后不再出现在师生端 Skill 列表中，已生成的历史记录不受影响。`"
       confirm-text="确认删除" danger @update:model-value="confirmDelete = null" @confirm="confirmRemove"
     />
   </div>

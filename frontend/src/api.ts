@@ -184,6 +184,8 @@ export const addProjectMember = (project: number, invitee: number) => api.post<P
 export const getPendingStudentInvitations = () => api.get<MemberInvitation[]>('member-invitations/pending_student/')
 export const acceptMemberInvitation = (id: number) => api.post<MemberInvitation>(`member-invitations/${id}/accept/`)
 export const rejectMemberInvitation = (id: number) => api.post<MemberInvitation>(`member-invitations/${id}/reject/`)
+export const getMemberInvitations = () => api.get<MemberInvitation[]>('member-invitations/')
+export const cancelMemberInvitation = (id: number) => api.post<void>(`member-invitations/${id}/cancel/`)
 export const createAnnouncement = (payload: Pick<Announcement, 'title' | 'body' | 'audience'> & { status: 'draft' | 'published' }) => api.post<Announcement>('announcements/', payload)
 export const getSchools = () => api.get<ApiSchool[]>('schools/')
 export const getSchool = (id: number) => api.get<ApiSchool>(`schools/${id}/`)
@@ -220,13 +222,14 @@ function normalizeProjectTaskResponse(response: AxiosResponse<ProjectTaskApiResp
 
 export const getProjectTasks = (project?: number) => api.get<ProjectTaskApiResponse[]>('project-tasks/', { params: project ? { project } : undefined }).then(normalizeProjectTaskResponse)
 export const createAIGeneration = (payload: { project?: number | null; workspace_mode?: AIWorkspaceMode; purpose?: string; prompt: string; input_values?: Record<string, string>; context_scope: AIContextScope; agent_key?: string; task?: number; material?: number; paper_type?: 'empirical' | 'case' | 'literature-review' | 'theoretical' }) => api.post<AIGeneration>('ai-logs/', payload)
-export interface AIConversation { id: number; title: string; project: Project['id'] | null; opening_project?: Project['id'] | null; project_title: string | null; paper_type: string | null; current_agent: string | null; workspace_mode?: AIWorkspaceMode | null; current_project?: CurrentProjectContext | null; is_archived: boolean; updated_at: string; created_at: string }
+export interface AIConversation { id: number; title: string; preview?: string; message_count?: number; project: Project['id'] | null; opening_project?: Project['id'] | null; project_title: string | null; paper_type: string | null; current_agent: string | null; workspace_mode?: AIWorkspaceMode | null; current_project?: CurrentProjectContext | null; is_archived: boolean; updated_at: string; created_at: string }
 export interface AIConversationMessage { id: number; role: 'user' | 'assistant' | 'system'; content: string; status: 'queued' | 'streaming' | 'completed' | 'failed'; generation_log?: number | null; artifact_payload?: AIArtifactOutput | null; verification_items?: Array<VerificationItem | string>; error_message?: string; created_at: string }
 export interface AIConversationMessageInput { content: string; agent_key?: string; project?: number | null; workspace_mode?: AIWorkspaceMode; task?: number; paper_type?: string; input_values?: Record<string, string>; context_scope?: AIContextScope & { selected_materials?: number[] } }
 export const getAIConversations = (params?: { project?: number; include_archived?: boolean }) => api.get<AIConversation[]>('ai-conversations/', { params })
 export const createAIConversation = (payload: { title?: string; project?: number | null; workspace_mode?: AIWorkspaceMode; paper_type?: string | null; current_agent?: string | null }) => api.post<AIConversation>('ai-conversations/', payload)
 export const updateAIConversation = (id: number, payload: Partial<Pick<AIConversation, 'title' | 'paper_type' | 'current_agent' | 'workspace_mode'>>) => api.patch<AIConversation>(`ai-conversations/${id}/`, payload)
 export const archiveAIConversation = (id: number) => api.post<AIConversation>(`ai-conversations/${id}/archive/`)
+export const deleteAIConversation = (id: number) => api.delete(`ai-conversations/${id}/`)
 export const getAIConversationMessages = (id: number) => api.get<AIConversationMessage[]>(`ai-conversations/${id}/messages/`)
 export const createAIConversationMessage = (id: number, payload: AIConversationMessageInput) => api.post<AIConversationMessage>(`ai-conversations/${id}/messages/`, payload)
 export const retryAIConversationMessage = (conversationId: number, messageId: number) => api.post<AIConversationMessage>(`ai-conversations/${conversationId}/messages/${messageId}/retry/`)
@@ -257,7 +260,7 @@ export interface SaveAIGenerationAsMaterialPayload {
   current_project?: CurrentProjectContext | null
 }
 export const saveAIGenerationAsMaterial = (id: number, payload: SaveAIGenerationAsMaterialPayload) => api.post<MaterialRevision>(`ai-logs/${id}/save_as_material/`, payload)
-// ── AI Agent 模板（平台/校本管理 + 学生/教师按角色拉取）──────────────
+// ── Skills（平台/校本管理 + 学生/教师按角色拉取；内部仍保留 Agent API 兼容）──────────────
 export const getAIAgents = () => api.get<AIAgent[]>('ai-agents/')
 export const createAIAgent = (payload: Partial<AIAgent>) => api.post<AIAgent>('ai-agents/', payload)
 export const updateAIAgent = (id: number, payload: Partial<AIAgent>) => api.patch<AIAgent>(`ai-agents/${id}/`, payload)

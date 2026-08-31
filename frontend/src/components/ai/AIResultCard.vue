@@ -42,6 +42,11 @@ const verificationOpen = ref(false)
 
 const artifact = computed(() => props.message.artifact_payload)
 const isOpening = computed(() => props.mode === 'opening')
+const resultTitle = computed(() => {
+  if (isOpening.value) return '开题草稿'
+  if (props.mode === 'defense') return '成果表达建议'
+  return '研究建议'
+})
 const hasOpeningResult = computed(() => Boolean(artifact.value && (
   artifact.value.candidates?.length
   || artifact.value.project_title
@@ -74,11 +79,11 @@ function confirmCreateProject() {
 </script>
 
 <template>
-  <section v-if="(isOpening && hasOpeningResult) || (!isOpening && hasEditableResult)" class="ai-result-card" aria-label="灵思 AI 生成结果">
+  <section v-if="(isOpening && hasOpeningResult) || (!isOpening && hasEditableResult)" class="ai-result-card" aria-label="需要确认的 AI 内容">
     <header class="ai-result-card__header">
       <div>
         <span class="eyebrow">需要你确认</span>
-        <h3>{{ isOpening ? '开题草稿' : (artifact?.title || '可编辑建议') }}</h3>
+        <h3>{{ resultTitle }}</h3>
       </div>
       <span class="ai-result-card__status">{{ props.message.status === 'completed' ? '已生成' : '处理中' }}</span>
     </header>
