@@ -65,6 +65,7 @@ export interface AIGeneration { id: number; project: number | null; workspace_mo
 export interface ProjectTask extends Omit<ApiTask, 'status'> { status: JourneyTaskState; legacy_status: 'locked' | null }
 export interface ProjectTaskBrief extends ProjectTask {}
 export interface ServiceStatus { database: string; task_queue: string; virus_scan: string; document_converter: string; storage: string; ai: string }
+export interface PlatformAIConfig { configured: boolean; masked_key: string; model: string; base_url: string }
 export interface RuntimeCapabilities { attachments: boolean; pdf_export: boolean }
 export interface HealthResponse { status: string; capabilities?: RuntimeCapabilities }
 export interface AIAvailability { status: 'configured' | 'not_configured' | 'quota_exhausted' | 'unavailable'; remaining_quota: number }
@@ -127,6 +128,8 @@ export function errorMessage(error: unknown, fallback = '操作失败，请稍�
 export const getMe = () => api.get<SessionMeResponse>('me/')
 export const getHealth = () => api.get<HealthResponse>('health/')
 export const getServiceStatus = () => api.get<ServiceStatus>('service-status/')
+export const getPlatformAIConfig = () => api.get<PlatformAIConfig>('platform-ai-config/')
+export const savePlatformAIConfig = (apiKey: string) => api.put<PlatformAIConfig>('platform-ai-config/', { api_key: apiKey })
 export const getAIAvailability = () => api.get<AIAvailability>('ai-availability/')
 export const getCsrf = () => api.get<{ detail: string }>('csrf/')
 export const login = (username: string, password: string) => api.post<MeResponse>('login/', { username, password })
