@@ -35,6 +35,8 @@ class PlatformAIConfiguration(models.Model):
     key = models.CharField(max_length=32, unique=True, default="default")
     encrypted_api_key = models.TextField()
     masked_api_key = models.CharField(max_length=128)
+    model = models.CharField(max_length=128, blank=True)
+    base_url = models.CharField(max_length=512, blank=True)
     updated_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

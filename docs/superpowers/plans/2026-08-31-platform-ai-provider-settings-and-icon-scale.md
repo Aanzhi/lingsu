@@ -30,7 +30,7 @@
 }
 ```
 
-并断言 PUT 与后续 GET 都返回这两个非敏感字段，同时继续断言响应不包含明文 Key 或 `encrypted_api_key`。新增一个测试：第一次保存后再次 PUT `{ "api_key": "", "model": "new-model", "base_url": "https://example.test/v1" }`，断言掩码不变、数据库解密后的 Key 不变、模型和地址更新。新增一个测试，提交空模型或非 HTTP(S) Base URL 时返回 400 且错误字段分别为 `model` 或 `base_url`。
+并断言 PUT 与后续 GET 都返回这两个非敏感字段，同时继续断言响应不包含明文 Key 或 `encrypted_api_key`。新增一个测试：第一次保存后再次 PUT `{ "api_key": "", "model": "new-model", "base_url": "https://example.test/v1" }`，断言掩码不变、数据库解密后的 Key 不变、模型和地址更新。新增一个测试：无数据库记录但有环境变量 Key 时，PUT 空 Key 仍能保存 provider 参数，并把环境 Key 加密迁移到数据库。新增一个测试，提交空模型或非 HTTP(S) Base URL 时返回 400 且错误字段分别为 `model` 或 `base_url`。
 
 - [ ] **Step 2: 扩展服务测试，要求 worker 使用数据库 provider 参数。**
 
@@ -98,7 +98,7 @@ base_url = models.CharField(max_length=512, blank=True)
 
 - [ ] **Step 4: 实现三项配置事务保存。**
 
-新增 `save_platform_ai_configuration(api_key, model, base_url, actor)`：先校验模型和 URL；没有默认记录且 API Key 为空时抛出 `AIConfigValidationError("api_key", ...)`；已有记录且 API Key 为空时保留原加密字段；提供新 Key 时按现有 Fernet 流程加密并更新掩码。使用 `select_for_update()` 在事务中更新模型、地址、Key 和 `updated_by`，保存成功后返回安全状态。
+新增 `save_platform_ai_configuration(api_key, model, base_url, actor)`：先校验模型和 URL；没有默认记录且 API Key 为空时，如果环境变量已有 Key 则用它完成加密迁移，否则抛出 `AIConfigValidationError("api_key", ...)`；已有记录且 API Key 为空时保留原加密字段；提供新 Key 时按现有 Fernet 流程加密并更新掩码。使用 `select_for_update()` 在事务中更新模型、地址、Key 和 `updated_by`，保存成功后返回安全状态。
 
 - [ ] **Step 5: 运行服务层测试。**
 
@@ -153,7 +153,7 @@ cd backend && python manage.py test apps.core.tests.test_ai_config apps.core.tes
 
 - [ ] **Step 2: 增加模型和 Base URL 表单状态。**
 
-在 `PlatformSettings.vue` 增加 `modelInput`、`baseUrlInput`，加载成功后用 `config.model` 和 `config.base_url` 填充。保存前校验三项：首次未配置时 API Key 必填；模型和 Base URL 始终非空；已配置时 API Key 为空代表保留旧 Key。保存按钮只要模型/URL有效且满足首次 Key 条件就可用，保存成功清空 Key 输入并保留模型、URL与掩码。
+在 `PlatformSettings.vue` 增加 `modelInput`、`baseUrlInput`，加载成功后用 `config.model` 和 `config.base_url` 填充。保存前校验三项：没有任何已配置 Key 时 API Key 必填；模型和 Base URL 始终非空；已配置时 API Key 为空代表保留旧 Key。保存按钮只要模型/URL有效且满足 Key 条件就可用，保存成功清空 Key 输入并保留模型、URL与掩码。
 
 - [ ] **Step 3: 修正图标渲染尺寸。**
 

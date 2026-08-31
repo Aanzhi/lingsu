@@ -28,7 +28,7 @@ import hashlib
 import secrets
 from pathlib import Path
 from io import BytesIO
-from .ai_config import AIConfigError, get_ai_configuration_state, get_configured_ai_api_key, save_configured_ai_api_key
+from .ai_config import AIConfigError, AIConfigValidationError, get_ai_configuration_state, get_configured_ai_api_key, get_configured_ai_runtime, save_platform_ai_configuration
 from .models import AIGenerationLog, AIConversation, AIConversationMessage, Account, AgentTemplate, Announcement, AnnouncementRead, AuditEvent, Competition, Material, MaterialAttachment, MaterialRevision, MemberInvitation, Notification, Project, ProjectGrowth, ProjectMember, ProjectTask, PublicCaseRequest, ReportExport, School, Template, UploadPart, UploadSession
 from .ai_agents import normalize_workspace_mode, workspace_mode_requires_project
 from .notifiers import notify
@@ -512,26 +512,26 @@ class PlatformAIConfigurationView(APIView):
         if not platform_admin(request.user):
             raise PermissionDenied("仅平台管理员可配置 AI 服务。")
 
-    def _response(self, state):
-        return {
-            **state,
-            "model": settings.OPENAI_MODEL,
-            "base_url": settings.OPENAI_BASE_URL,
-        }
-
     def get(self, request):
         self._check_platform_admin(request)
-        return Response(self._response(get_ai_configuration_state()))
+        return Response(get_ai_configuration_state())
 
     def put(self, request):
         self._check_platform_admin(request)
         try:
-            state = save_configured_ai_api_key(request.data.get("api_key"), request.user)
+            state = save_platform_ai_configuration(
+                request.data.get("api_key"),
+                request.data.get("model"),
+                request.data.get("base_url"),
+                request.user,
+            )
+        except AIConfigValidationError as exc:
+            raise ValidationError({exc.field: [str(exc)]})
         except ValueError as exc:
             raise ValidationError({"api_key": str(exc)})
         except AIConfigError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        return Response(self._response(state))
+        return Response(state)
 
 
 class AIAvailabilityView(APIView):
@@ -1383,7 +1383,7 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             log_serializer.is_valid(raise_exception=True)
             values = log_serializer.validated_data
             values.pop("input_values", None)
-            new_log = create_ai_request(log_serializer, request.user, settings.OPENAI_MODEL)
+            new_log = create_ai_request(log_serializer, request.user, get_configured_ai_runtime()["model"])
             new_log.conversation = conversation
             new_log.message = message
             new_log.status = AIGenerationLog.Status.QUEUED
@@ -1476,7 +1476,7 @@ class AIConversationViewSet(viewsets.ModelViewSet):
             log_serializer.is_valid(raise_exception=True)
             values = log_serializer.validated_data
             values.pop("input_values", None)
-            log = create_ai_request(log_serializer, request.user, settings.OPENAI_MODEL)
+            log = create_ai_request(log_serializer, request.user, get_configured_ai_runtime()["model"])
             log.conversation = conversation
             log.message = assistant
             log.status = AIGenerationLog.Status.QUEUED
@@ -1607,7 +1607,7 @@ class AIGenerationLogViewSet(viewsets.ModelViewSet):
                 raise ValidationError({"project": "研究或答辩 AI 必须绑定当前项目。"})
         elif not project_member(project, self.request.user):
             raise PermissionDenied("无项目权限。")
-        record = create_ai_request(serializer, self.request.user, settings.OPENAI_MODEL)
+        record = create_ai_request(serializer, self.request.user, get_configured_ai_runtime()["model"])
         transaction.on_commit(lambda: generate_ai_response.delay(record.id))
 
     @action(detail=True, methods=["post"], url_path="save_as_material")

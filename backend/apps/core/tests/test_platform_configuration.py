@@ -98,18 +98,94 @@ class PlatformConfigurationTests(TestCase):
         with override_settings(AI_CONFIG_ENCRYPTION_KEY=Fernet.generate_key().decode()):
             response = client.put(
                 "/api/platform-ai-config/",
-                {"api_key": "sk-live-1234567890-END"},
+                {
+                    "api_key": "sk-live-1234567890-END",
+                    "model": "deepseek-v4-flash-260425",
+                    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+                },
                 format="json",
             )
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.data["masked_key"], "sk-l********-END")
+            self.assertEqual(response.data["model"], "deepseek-v4-flash-260425")
+            self.assertEqual(response.data["base_url"], "https://ark.cn-beijing.volces.com/api/v3")
             self.assertNotIn("sk-live-1234567890-END", str(response.data))
             self.assertNotIn("encrypted_api_key", response.data)
 
             read = client.get("/api/platform-ai-config/")
             self.assertEqual(read.status_code, 200)
             self.assertEqual(read.data["masked_key"], "sk-l********-END")
+            self.assertEqual(read.data["model"], "deepseek-v4-flash-260425")
+            self.assertEqual(read.data["base_url"], "https://ark.cn-beijing.volces.com/api/v3")
             self.assertNotIn("sk-live-1234567890-END", str(read.data))
+
+    def test_platform_can_update_provider_settings_without_resubmitting_existing_key(self):
+        client = APIClient(); client.force_authenticate(self.platform)
+        encryption_key = Fernet.generate_key().decode()
+        with override_settings(AI_CONFIG_ENCRYPTION_KEY=encryption_key):
+            first = client.put(
+                "/api/platform-ai-config/",
+                {
+                    "api_key": "sk-live-1234567890-END",
+                    "model": "deepseek-v4-flash-260425",
+                    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+                },
+                format="json",
+            )
+            second = client.put(
+                "/api/platform-ai-config/",
+                {"api_key": "", "model": "new-model", "base_url": "https://example.test/v1"},
+                format="json",
+            )
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(second.data["masked_key"], first.data["masked_key"])
+        self.assertEqual(second.data["model"], "new-model")
+        self.assertEqual(second.data["base_url"], "https://example.test/v1")
+        record = self.platform.updated_platform_ai_configurations.get(key="default")
+        self.assertEqual(Fernet(encryption_key).decrypt(record.encrypted_api_key.encode()).decode(), "sk-live-1234567890-END")
+
+    def test_platform_can_persist_provider_settings_using_existing_environment_key(self):
+        client = APIClient(); client.force_authenticate(self.platform)
+        encryption_key = Fernet.generate_key().decode()
+        with override_settings(
+            AI_CONFIG_ENCRYPTION_KEY=encryption_key,
+            OPENAI_API_KEY="sk-env-fallback",
+            OPENAI_MODEL="env-model",
+            OPENAI_BASE_URL="https://env.example/v1",
+        ):
+            response = client.put(
+                "/api/platform-ai-config/",
+                {"api_key": "", "model": "db-model", "base_url": "https://db.example/v1"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["masked_key"], "sk-e********back")
+        record = self.platform.updated_platform_ai_configurations.get(key="default")
+        self.assertEqual(Fernet(encryption_key).decrypt(record.encrypted_api_key.encode()).decode(), "sk-env-fallback")
+        self.assertEqual(record.model, "db-model")
+        self.assertEqual(record.base_url, "https://db.example/v1")
+
+    def test_platform_rejects_empty_model_and_non_http_provider_url(self):
+        client = APIClient(); client.force_authenticate(self.platform)
+        with override_settings(AI_CONFIG_ENCRYPTION_KEY=Fernet.generate_key().decode()):
+            empty_model = client.put(
+                "/api/platform-ai-config/",
+                {"api_key": "sk-test", "model": "", "base_url": "https://example.test/v1"},
+                format="json",
+            )
+            invalid_url = client.put(
+                "/api/platform-ai-config/",
+                {"api_key": "sk-test", "model": "test-model", "base_url": "ftp://example.test/v1"},
+                format="json",
+            )
+
+        self.assertEqual(empty_model.status_code, 400)
+        self.assertIn("model", empty_model.data)
+        self.assertEqual(invalid_url.status_code, 400)
+        self.assertIn("base_url", invalid_url.data)
 
     def test_non_platform_accounts_cannot_read_or_write_ai_configuration(self):
         client = APIClient(); client.force_authenticate(self.teacher)
@@ -124,7 +200,11 @@ class PlatformConfigurationTests(TestCase):
         client = APIClient(); client.force_authenticate(self.platform)
         response = client.put(
             "/api/platform-ai-config/",
-            {"api_key": "sk-no-encryption"},
+            {
+                "api_key": "sk-no-encryption",
+                "model": "test-model",
+                "base_url": "https://example.test/v1",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 503)

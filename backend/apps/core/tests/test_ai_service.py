@@ -97,6 +97,35 @@ class AIServiceTests(TestCase):
         client_class.assert_called_once_with(api_key="configured", base_url="https://example.test/v1")
 
     @override_settings(
+        OPENAI_API_KEY="sk-env-key",
+        OPENAI_BASE_URL="https://env.example/v1",
+        OPENAI_MODEL="env-model",
+    )
+    @patch("apps.core.tasks.OpenAI")
+    def test_worker_uses_saved_database_provider_settings(self, client_class):
+        client_class.return_value.responses.create.return_value.output_text = "数据库参数回复"
+        record = AIGenerationLog.objects.create(
+            project=self.project, actor=self.student, purpose="问题梳理", prompt="帮我明确变量",
+            context_scope={"project_basics": True}, status=AIGenerationLog.Status.QUEUED,
+        )
+        client = self.client_for(self.platform)
+        with override_settings(AI_CONFIG_ENCRYPTION_KEY=Fernet.generate_key().decode()):
+            response = client.put(
+                "/api/platform-ai-config/",
+                {
+                    "api_key": "sk-db-runtime-key",
+                    "model": "db-model",
+                    "base_url": "https://db.example/v1",
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200)
+            generate_ai_response(record.id)
+
+        client_class.assert_called_once_with(api_key="sk-db-runtime-key", base_url="https://db.example/v1")
+        self.assertEqual(client_class.return_value.responses.create.call_args.kwargs["model"], "db-model")
+
+    @override_settings(
         OPENAI_API_KEY="sk-env-fallback",
         OPENAI_BASE_URL="",
         AI_CONFIG_ENCRYPTION_KEY="",

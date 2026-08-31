@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Key } from '@element-plus/icons-vue'
-import { errorMessage, getPlatformAIConfig, getServiceStatus, savePlatformAIConfig, type PlatformAIConfig, type ServiceStatus } from '../../api'
+import { errorMessage, getPlatformAIConfig, getServiceStatus, savePlatformAIConfig, type PlatformAIConfig, type PlatformAIConfigPayload, type ServiceStatus } from '../../api'
 import FeedbackBanner from '../../components/FeedbackBanner.vue'
 import PageHeader from '../../components/PageHeader.vue'
 import StatusTag from '../../components/StatusTag.vue'
@@ -10,9 +10,18 @@ import { makeFeedback, type FeedbackState } from '../../stores/feedbackModel'
 const status = ref<ServiceStatus | null>(null)
 const config = ref<PlatformAIConfig | null>(null)
 const apiKeyInput = ref('')
+const modelInput = ref('')
+const baseUrlInput = ref('')
 const feedback = ref<FeedbackState | null>(null)
 const loading = ref(true)
 const saving = ref(false)
+const canSaveConfig = computed(() => Boolean(
+  config.value
+  && modelInput.value.trim()
+  && baseUrlInput.value.trim()
+  && (config.value.configured || apiKeyInput.value.trim())
+  && !saving.value,
+))
 const labels: Record<keyof ServiceStatus, string> = { database: '数据库', task_queue: '任务队列', virus_scan: '病毒扫描', document_converter: '文档转换', storage: '文件存储', ai: 'AI 服务' }
 function statusLabel(value: string) { return value === 'healthy' || value === 'configured' || value === 'local' ? '正常' : value === 'not_configured' ? '未配置' : '不可用' }
 function statusTone(value: string) { return value === 'healthy' || value === 'configured' || value === 'local' ? 'active' : 'disabled' }
@@ -22,6 +31,8 @@ async function load() {
     const [serviceResponse, configResponse] = await Promise.all([getServiceStatus(), getPlatformAIConfig()])
     status.value = serviceResponse.data
     config.value = configResponse.data
+    modelInput.value = configResponse.data.model
+    baseUrlInput.value = configResponse.data.base_url
   } catch (reason) {
     status.value = null
     config.value = null
@@ -29,17 +40,31 @@ async function load() {
   }
   finally { loading.value = false }
 }
-async function saveApiKey() {
-  const value = apiKeyInput.value.trim()
-  if (!value) {
-    feedback.value = makeFeedback('error', 'API Key 不能为空。', '请输入新的 API Key 后再保存。')
+async function saveApiConfig() {
+  const apiKey = apiKeyInput.value.trim()
+  const model = modelInput.value.trim()
+  const baseUrl = baseUrlInput.value.trim()
+  if (!model) {
+    feedback.value = makeFeedback('error', '模型名称不能为空。', '请输入模型名称后再保存。')
+    return
+  }
+  if (!baseUrl) {
+    feedback.value = makeFeedback('error', 'Base URL 不能为空。', '请输入 AI 服务 Base URL 后再保存。')
+    return
+  }
+  if (!config.value?.configured && !apiKey) {
+    feedback.value = makeFeedback('error', 'API Key 不能为空。', '首次配置请输入 API Key 后再保存。')
     return
   }
   saving.value = true
   try {
-    config.value = (await savePlatformAIConfig(value)).data
+    const payload: PlatformAIConfigPayload = { model, base_url: baseUrl }
+    if (apiKey) payload.api_key = apiKey
+    config.value = (await savePlatformAIConfig(payload)).data
     apiKeyInput.value = ''
-    feedback.value = makeFeedback('success', 'AI API Key 已安全更新。', '页面只保留首尾 4 位脱敏信息，完整 Key 不会再次显示。')
+    modelInput.value = config.value.model
+    baseUrlInput.value = config.value.base_url
+    feedback.value = makeFeedback('success', 'AI 服务配置已安全更新。', '页面只保留 API Key 首尾 4 位，完整 Key 不会再次显示。')
   } catch (reason) {
     feedback.value = makeFeedback('error', errorMessage(reason), 'API Key 没有保存成功，可以检查配置后重试。')
   } finally { saving.value = false }
@@ -56,7 +81,7 @@ onMounted(load)
         <section class="paper-card ai-config-card">
           <div class="settings-section-head">
             <div>
-              <div class="section-title-with-icon"><Key :size="18" aria-hidden="true" /><h2>AI 服务配置</h2></div>
+              <div class="section-title-with-icon"><el-icon :size="18" aria-hidden="true"><Key /></el-icon><h2>AI 服务配置</h2></div>
               <p class="section-note">平台统一配置，所有学校共用。完整 API Key 只在首次输入时提交，首次保存后不会再次显示完整 API Key。</p>
             </div>
             <span class="chip">平台级</span>
@@ -69,11 +94,15 @@ onMounted(load)
               <span v-else class="muted">尚未配置</span>
               <small>{{ config.model }}<span v-if="config.base_url"> · {{ config.base_url }}</span></small>
             </div>
-            <label class="field-label" for="platform-ai-key">{{ config.configured ? '替换 API Key' : '输入 API Key' }}</label>
-            <input id="platform-ai-key" v-model="apiKeyInput" class="text-input" type="password" autocomplete="new-password" placeholder="请输入新的 API Key" :disabled="saving" />
+            <label class="field-label" for="platform-ai-model">模型名称</label>
+            <input id="platform-ai-model" v-model="modelInput" class="text-input" type="text" autocomplete="off" placeholder="例如 deepseek-v4-flash-260425" :disabled="saving" />
+            <label class="field-label" for="platform-ai-base-url">Base URL</label>
+            <input id="platform-ai-base-url" v-model="baseUrlInput" class="text-input" type="url" inputmode="url" autocomplete="url" placeholder="例如 https://api.openai.com/v1" :disabled="saving" />
+            <label class="field-label" for="platform-ai-key">{{ config.configured ? '替换 API Key（可选）' : '输入 API Key' }}</label>
+            <input id="platform-ai-key" v-model="apiKeyInput" class="text-input" type="password" autocomplete="new-password" :placeholder="config.configured ? '留空表示保留当前 Key' : '请输入 API Key'" :disabled="saving" />
             <div class="ai-config-actions">
-              <small class="form-hint">保存后仅显示首尾 4 位，中间字符以星号遮挡。</small>
-              <button class="primary-button" type="button" :disabled="saving || !apiKeyInput.trim()" @click="saveApiKey">{{ saving ? '保存中…' : '保存 API Key' }}</button>
+              <small class="form-hint">API Key 保存后仅显示首尾 4 位；已配置时留空即可只更新模型和 Base URL。</small>
+              <button class="primary-button" type="button" :disabled="!canSaveConfig" @click="saveApiConfig">{{ saving ? '保存中…' : '保存 AI 配置' }}</button>
             </div>
           </div>
           <p v-else class="form-hint" role="status">AI 配置暂时不可用，请使用上方“重试”。</p>
@@ -108,6 +137,7 @@ onMounted(load)
 .demo-settings-list small { color: var(--muted); }
 .demo-settings-layout aside .secondary-button { margin-top: 16px; }
 .section-title-with-icon { display: flex; align-items: center; gap: 8px; }
+.section-title-with-icon .el-icon { width: 18px; height: 18px; flex: 0 0 18px; }
 .section-title-with-icon h2 { margin-bottom: 0; }
 .ai-config-form { display: grid; gap: 10px; }
 .masked-key-panel { display: grid; gap: 4px; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper-soft); }

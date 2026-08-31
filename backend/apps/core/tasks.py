@@ -15,7 +15,7 @@ from django.utils import timezone
 from docx import Document
 
 from .models import AgentTemplate, AIConversationMessage
-from .ai_config import get_configured_ai_api_key
+from .ai_config import get_configured_ai_runtime
 from .ai_agents import PAPER_AGENT_KEYS, parse_research_question_output, render_agent_prompt, render_conversation_agent_prompt
 from .workflows.ai import publish_conversation_event
 
@@ -259,14 +259,15 @@ def generate_general_ai_response(self, message_id):
                 "candidates 必须正好 3 个，每个包含 question、scope、why、evidence_plan、limitations 和 scores，"
                 "scores 的 researchability、clarity、verifiability、resource_fit 均为 1-5。"
             )
-        api_key = get_configured_ai_api_key()
+        runtime = get_configured_ai_runtime()
+        api_key = runtime["api_key"]
         if not api_key:
             raise ValueError("AI 服务尚未配置 API Key。")
         client_kwargs = {"api_key": api_key}
-        if settings.OPENAI_BASE_URL:
-            client_kwargs["base_url"] = settings.OPENAI_BASE_URL
+        if runtime["base_url"]:
+            client_kwargs["base_url"] = runtime["base_url"]
         response = OpenAI(**client_kwargs).responses.create(
-            model=settings.OPENAI_MODEL,
+            model=runtime["model"],
             instructions=instructions,
             input=(f"对话历史：\n{transcript}\n\n" if transcript else "") + f"Skill 指令：\n{rendered_prompt}\n用户问题：\n{latest_user_message}",
         )
@@ -422,12 +423,12 @@ def generate_ai_response(self, record_id):
         if project is None:
             if record.workspace_mode != "opening":
                 raise ValueError("研究或答辩 AI 记录必须绑定当前项目。")
-            api_key = get_configured_ai_api_key()
+            runtime = get_configured_ai_runtime()
+            api_key = runtime["api_key"]
             if api_key:
                 client_kwargs = {"api_key": api_key}
-                base_url = getattr(settings, "OPENAI_BASE_URL", "")
-                if base_url:
-                    client_kwargs["base_url"] = base_url
+                if runtime["base_url"]:
+                    client_kwargs["base_url"] = runtime["base_url"]
                 template = AgentTemplate.resolve(record.agent_key, record.actor.school, record.actor.role) if record.agent_key else None
                 system = template.system_instruction if template else DEFAULT_AI_INSTRUCTION
                 rendered_prompt = render_agent_prompt(template, record) if template else record.prompt
@@ -438,12 +439,12 @@ def generate_ai_response(self, record_id):
                         "candidates、recommended_index、missing_information；candidates 必须正好 3 个，并包含 question、scope、why、evidence_plan、limitations 和 scores。"
                     )
                 response = OpenAI(**client_kwargs).responses.create(
-                    model=settings.OPENAI_MODEL,
+                    model=runtime["model"],
                     instructions=system,
                     input=f"Skill 指令：{rendered_prompt}\n用户开题想法：{record.prompt}",
                 )
                 output = response.output_text
-                model_name = settings.OPENAI_MODEL
+                model_name = runtime["model"]
             else:
                 output = _demo_ai_response(record, [], [], record.prompt)
                 model_name = "演示模式（未接入真实模型）"
@@ -596,7 +597,8 @@ def generate_ai_response(self, record_id):
             f"\n论文类型：{record.paper_type}\n"
             if record.agent_key in PAPER_AGENT_KEYS else ""
         )
-        api_key = get_configured_ai_api_key()
+        runtime = get_configured_ai_runtime()
+        api_key = runtime["api_key"]
         if not api_key:
             record.output = _demo_ai_response(record, context_parts, referenced, rendered_prompt)
             artifact = _artifact_fields(record, record.output)
@@ -611,12 +613,11 @@ def generate_ai_response(self, record_id):
                 _finish_conversation_message(conversation_message, record.output, artifact)
             return {"record_id": record.id, "status": record.status, "mode": "demo"}
         client_kwargs = {"api_key": api_key}
-        base_url = getattr(settings, "OPENAI_BASE_URL", "")
-        if base_url:
-            client_kwargs["base_url"] = base_url
+        if runtime["base_url"]:
+            client_kwargs["base_url"] = runtime["base_url"]
         client = OpenAI(**client_kwargs)
         response = client.responses.create(
-            model=settings.OPENAI_MODEL,
+            model=runtime["model"],
             instructions=system,
             input=(
                 f"用途：{record.purpose}\n" + "\n".join(context_parts)
@@ -628,7 +629,7 @@ def generate_ai_response(self, record_id):
         artifact = _artifact_fields(record, record.output)
         record.artifact_payload = artifact["artifact_payload"]
         record.verification_items = artifact["verification_items"]
-        record.model_name = settings.OPENAI_MODEL
+        record.model_name = runtime["model"]
         record.status = AIGenerationLog.Status.COMPLETED
         record.referenced_sources = referenced
         record.completed_at = timezone.now()
