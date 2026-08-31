@@ -96,7 +96,11 @@ class AIServiceTests(TestCase):
 
         client_class.assert_called_once_with(api_key="configured", base_url="https://example.test/v1")
 
-    @override_settings(OPENAI_API_KEY="sk-env-fallback", AI_CONFIG_ENCRYPTION_KEY="")
+    @override_settings(
+        OPENAI_API_KEY="sk-env-fallback",
+        OPENAI_BASE_URL="",
+        AI_CONFIG_ENCRYPTION_KEY="",
+    )
     @patch("apps.core.tasks.OpenAI")
     def test_worker_uses_the_saved_database_key_over_the_environment_key(self, client_class):
         client_class.return_value.responses.create.return_value.output_text = "数据库配置回复"
