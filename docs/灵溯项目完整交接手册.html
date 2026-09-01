@@ -26,24 +26,37 @@ th,td { padding:10px 12px; border:1px solid var(--line); text-align:left; vertic
 th { background:var(--soft); font-weight:650; }
 tr:nth-child(even) td { background:#fafbfc; }
 hr { margin:44px 0; border:0; border-top:1px solid var(--line); }
+.back-to-top { position:fixed; right:22px; bottom:22px; z-index:10; padding:9px 13px; border:1px solid var(--line); border-radius:999px; background:rgba(255,255,255,.94); box-shadow:0 4px 16px rgba(23,32,51,.12); text-decoration:none; font-size:.88rem; }
 @media (max-width:760px) { main { width:100%; margin:0; padding:28px 18px 52px; border:0; border-radius:0; } h1{font-size:1.75rem} h2{font-size:1.4rem} table{display:block;overflow-x:auto;white-space:nowrap} }
-@media print { body{background:#fff;font-size:11pt} main{width:auto;margin:0;padding:0;border:0;box-shadow:none} h2{break-before:page} pre,table,blockquote{break-inside:avoid} }
+@media print { body{background:#fff;font-size:11pt} main{width:auto;margin:0;padding:0;border:0;box-shadow:none} h2{break-before:page} pre,table,blockquote{break-inside:avoid} .back-to-top{display:none} }
 </style>
 </head>
 <body>
+<a class="back-to-top" href="#section-1">↑ 返回顶部</a>
 <main>
 
 <h1>灵溯项目完整交接手册</h1>
 <blockquote>
-<p>最后核验日期：2026-08-31（Asia/Shanghai）<br>交接性质：原负责人彻底退出，接手者需能独立维护<br>线上服务器：<code>ubuntu@1.15.230.239</code><br>本地项目目录：<code>/Users/anzhi/Desktop/雷灵/星辰/lingsu</code><br>证据标记：<strong>已实测</strong> / <strong>源码确认</strong> / <strong>文档记录</strong> / <strong>待确认</strong></p>
+<p>最后核验日期：2026-09-01（Asia/Shanghai）<br>
+交接性质：原负责人彻底退出，接手者需能独立维护<br>线上服务器：<code>ubuntu@1.15.230.239</code><br>本地项目目录：<code>/Users/anzhi/Desktop/雷灵/星辰/lingsu</code><br>证据标记：<strong>已实测</strong> / <strong>源码确认</strong> / <strong>文档记录</strong> / <strong>待确认</strong></p>
 </blockquote>
 <blockquote>
 <p>[!CAUTION]
 线上环境正在承载真实业务数据。本地代码显著领先于线上运行镜像，严禁直接覆盖、迁移或重建生产环境。本文不保存密码、API Key、私钥或数据库明文凭据。</p>
 </blockquote>
+<p><a id="section-1"></a></p>
 <h2>1. 交接首页</h2>
 <h3>1.1 一句话说明</h3>
 <p>灵溯是一套面向学校的青少年科学创新协作平台。学生完成“开题—项目—任务—材料—报告—成果展示”，教师负责认领、指导和审核，平台管理员负责学校授权、赛事、公告、案例和 AI 配置治理。</p>
+<p><strong>当前用户入口（已实测）：</strong> <code>http://1.15.230.239/</code>。目前通过公网 IP 和 HTTP 访问，尚未确认正式域名，也未配置 HTTPS；接手后应尽快处理。</p>
+<h3>1.1.1 按角色阅读</h3>
+<ul>
+<li><strong>业务负责人：</strong> 先读<a href="#section-4">当前真实状态</a>、<a href="#section-13">资产移交</a>和<a href="#section-14">接手验收</a>。</li>
+<li><strong>开发负责人：</strong> 先读<a href="#section-5">架构与代码地图</a>、<a href="#section-7">本地环境</a>、<a href="#section-9">环境差异</a>和<a href="#section-16">操作手册</a>。</li>
+<li><strong>运维负责人：</strong> 先读<a href="#section-8">生产环境</a>、<a href="#section-10">发布与回滚</a>、<a href="#section-11">故障处理</a>和<a href="#section-16">操作手册</a>。</li>
+</ul>
+<h3>1.1.2 快速目录</h3>
+<p><a href="#section-1">1 交接首页</a> · <a href="#section-2">2 接手第一天</a> · <a href="#section-3">3 产品业务</a> · <a href="#section-4">4 真实状态</a> · <a href="#section-5">5 架构代码</a> · <a href="#section-6">6 数据权限</a> · <a href="#section-7">7 本地环境</a> · <a href="#section-8">8 生产环境</a> · <a href="#section-9">9 环境差异</a> · <a href="#section-10">10 发布回滚</a> · <a href="#section-11">11 故障处理</a> · <a href="#section-12">12 质量风险</a> · <a href="#section-13">13 资产移交</a> · <a href="#section-14">14 接手验收</a> · <a href="#section-15">15 附录</a> · <a href="#section-16">16 操作手册</a></p>
 <h3>1.2 当前结论</h3>
 <table>
 <thead>
@@ -57,6 +70,11 @@ hr { margin:44px 0; border:0; border-top:1px solid var(--line); }
 <td>线上业务</td>
 <td>正在使用真实数据</td>
 <td>用户确认，2026-08-31</td>
+</tr>
+<tr>
+<td>用户访问入口</td>
+<td><code>http://1.15.230.239/</code> 可访问，API 健康</td>
+<td><strong>已实测</strong>，2026-09-01</td>
 </tr>
 <tr>
 <td>线上核心服务</td>
@@ -99,6 +117,35 @@ hr { margin:44px 0; border:0; border-top:1px solid var(--line); }
 <td><strong>已实测</strong>，P0</td>
 </tr>
 </tbody></table>
+<h3>1.2.1 现在可以做与暂时禁止做</h3>
+<table>
+<thead>
+<tr>
+<th>现在可以做</th>
+<th>暂时禁止做</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>查看线上容器、日志和健康接口</td>
+<td>发布当前本地最新版</td>
+</tr>
+<tr>
+<td>在本地启动测试环境</td>
+<td>在生产应用迁移 0040/0041</td>
+</tr>
+<tr>
+<td>运行前后端单元测试和构建</td>
+<td>在生产执行 <code>seed_demo</code>、E2E seed 或恢复脚本</td>
+</tr>
+<tr>
+<td>创建并校验生产备份文件</td>
+<td>修改生产数据库业务状态</td>
+</tr>
+<tr>
+<td>盘点账号、密钥、域名和资产所有权</td>
+<td>运行 <code>docker compose down -v</code></td>
+</tr>
+</tbody></table>
 <h3>1.3 三个版本基线</h3>
 <table>
 <thead>
@@ -132,6 +179,8 @@ hr { margin:44px 0; border:0; border-top:1px solid var(--line); }
 <p><strong>重要解释：</strong>“服务器目录里有新代码”不代表“线上已经运行新代码”。生产容器仍使用旧镜像；判断线上功能必须以运行镜像和数据库迁移为准。</p>
 <h3>1.4 联系人与所有权</h3>
 <p>代码无法确认服务器、域名、云账号、GitHub 组织和 AI 服务的最终所有者。正式退出前必须完成第 13 节资产移交表；所有“待确认”项必须指定新责任人。</p>
+<p>交接签收时不允许只写“待确认”。每项必须填写管理平台、登录入口、当前所有者、新所有者、绑定邮箱/手机号、续费或到期日期、轮换结果和验收证据；确实无法确认的项目应升级为 P0 阻塞项。</p>
+<p><a id="section-2"></a></p>
 <h2>2. 接手者第一天</h2>
 <h3>2.1 命令风险标签</h3>
 <ul>
@@ -169,6 +218,7 @@ ssh ubuntu@1.15.230.239 &#39;curl -fsS http://127.0.0.1/api/health/&#39;
 <li>不要通过数据库客户端编辑业务状态；状态流转包含权限、通知和审计逻辑。</li>
 <li>不要把线上 <code>.env</code>、数据库备份或媒体文件提交到 Git。</li>
 </ul>
+<p>特别注意：<code>seed_demo</code>、<code>seed_core_e2e</code>、<code>restore.sh</code> 和任何带 <code>--reset</code> 的命令，只允许在明确隔离的环境中执行。看到终端提示符包含生产服务器地址时立即停止。</p>
 <h3>2.4 本地快速检查</h3>
 <pre><code class="language-bash">cd /Users/anzhi/Desktop/雷灵/星辰/lingsu
 
@@ -178,6 +228,7 @@ curl -fsS http://127.0.0.1:18001/api/health/
 curl -fsSI http://127.0.0.1:5173/
 </code></pre>
 <p>本次实测：本地 8 个容器运行，后端和前端均返回 200。</p>
+<p><a id="section-3"></a></p>
 <h2>3. 产品与业务全景</h2>
 <h3>3.1 三类角色</h3>
 <table>
@@ -238,6 +289,7 @@ curl -fsSI http://127.0.0.1:5173/
 <h3>3.4 AI 的产品边界</h3>
 <p>AI 是可追溯的辅助工具，不应替学生编造数据或自动提交。系统保存输入、上下文范围、引用来源、生成结果、核验项和采用到材料的关联。学生/教师对话分为开题、研究、答辩工作区。</p>
 <p>本地最新版新增平台 AI 密钥配置，使用加密字段保存；该能力依赖迁移 <code>0041_platform_ai_configuration</code>，生产尚未具备。</p>
+<p><a id="section-4"></a></p>
 <h2>4. 当前真实状态</h2>
 <h3>4.1 已完成并有较强证据的能力</h3>
 <ul>
@@ -312,6 +364,7 @@ curl -fsSI http://127.0.0.1:5173/
 </tbody></table>
 <h3>4.4 旧文档纠偏</h3>
 <p><code>docs/项目分析-2026-08-18.md</code> 中“无 Git、无 E2E、无 CI”的判断已经失效。当前已有 Git、4 个 Playwright spec 和 2 个 GitHub Actions 工作流。旧报告只能用来理解历史，不能作为当前验收依据。</p>
+<p><a id="section-5"></a></p>
 <h2>5. 系统架构与代码地图</h2>
 <h3>5.1 运行架构</h3>
 <pre><code class="language-text">浏览器
@@ -414,6 +467,7 @@ curl -fsSI http://127.0.0.1:5173/
 <h3>5.4 API 总览</h3>
 <p>主要资源：projects、project-tasks、materials、material-revisions、attachments、upload-sessions、templates、public-case-requests、ai-logs、ai-conversations、ai-agents、report-exports、competitions、announcements、schools、member-invitations、notifications。</p>
 <p>公共/会话端点包括：<code>health</code>、<code>service-status</code>、<code>me</code>、登录/登出、注册、改密、AI 可用性和平台 AI 配置。</p>
+<p><a id="section-6"></a></p>
 <h2>6. 数据与权限</h2>
 <h3>6.1 核心模型</h3>
 <ul>
@@ -439,12 +493,24 @@ curl -fsSI http://127.0.0.1:5173/
 <h3>6.3 数据持久化</h3>
 <p>生产命名卷：<code>postgres_data</code>、<code>media_data</code>、<code>redis_data</code>。PostgreSQL 是业务事实源；媒体卷存储私有附件；Redis 主要用于队列，不应被当作永久业务数据库。</p>
 <p>生产部署、恢复或服务器迁移必须同时处理 PostgreSQL 与 <code>media_data</code>。只备份数据库会导致附件记录存在但文件丢失。</p>
+<p><a id="section-7"></a></p>
 <h2>7. 本地测试环境</h2>
 <h3>7.1 当前启动方式</h3>
+<p>最小开发环境只包含前端、后端、PostgreSQL 和 Redis：</p>
 <pre><code class="language-bash">cd /Users/anzhi/Desktop/雷灵/星辰/lingsu
 
-# [变更] 启动/更新本地容器，不得在生产服务器照抄
+# [变更] 只启动本地最小环境，不得在生产服务器照抄
 docker compose --env-file .env.integration --profile dev up --build -d
+</code></pre>
+<p>需要验证 AI 队列、定时任务、附件扫描和 PDF 时，使用完整环境：</p>
+<pre><code class="language-bash"># [变更] 只启动本地完整环境
+docker compose --env-file .env.integration \
+  --profile dev \
+  --profile async \
+  --profile async-beat \
+  --profile scanner \
+  --profile documents \
+  up --build -d
 
 # [只读]
 docker compose --env-file .env.integration ps
@@ -481,6 +547,7 @@ docker compose --env-file .env.integration exec -T backend python manage.py test
 <li>E2E：25 个测试启动，观察到 6 组失败；运行超过 5 分钟仍未收敛后人工终止。已确认两类根因：多个 worker 并发执行 <code>seed_core_e2e --reset</code> 产生冲突，以及导航/AI 历史入口的断言落后于当前界面。不可宣称 E2E 全绿。</li>
 </ul>
 <p>后端首次测试若提示 <code>test_lingsu_integration</code> 已存在，使用 <code>--keepdb</code>。不要为了消除提示去删除生产或集成数据库。</p>
+<p><a id="section-8"></a></p>
 <h2>8. 线上生产环境</h2>
 <h3>8.1 主机与资源</h3>
 <ul>
@@ -546,6 +613,46 @@ ssh ubuntu@1.15.230.239 &#39;docker logs --since 30m --tail 200 lingsu-backend-1
 <h3>8.5 凭据存放</h3>
 <p>线上敏感配置位于 <code>/home/ubuntu/lingsu/.env</code>，只应由服务器管理员读取，权限应为 600。文档只确认存在以下类别，不记录值：Django 密钥、数据库口令、AI Key、允许域名、CSRF 来源、镜像标签和服务开关。</p>
 <p>本地最新版还需要 <code>AI_CONFIG_ENCRYPTION_KEY</code>；生产升级到迁移 0041 前必须生成、备份并安全保存该密钥，否则平台保存的 AI 配置无法解密。</p>
+<h3>8.6 生产数据基线</h3>
+<p>2026-09-01 只读统计，不包含任何业务正文：</p>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th align="right">当前值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>学校</td>
+<td align="right">1</td>
+</tr>
+<tr>
+<td>启用账号</td>
+<td align="right">4</td>
+</tr>
+<tr>
+<td>项目（含归档/回收站）</td>
+<td align="right">2</td>
+</tr>
+<tr>
+<td>材料</td>
+<td align="right">44</td>
+</tr>
+<tr>
+<td>附件</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td>附件总字节</td>
+<td align="right">0</td>
+</tr>
+<tr>
+<td>最近项目创建时间</td>
+<td align="right">2026-08-28 15:11:28（北京时间）</td>
+</tr>
+</tbody></table>
+<p>每次发布、恢复和服务器迁移后都应重新取得这些统计，并解释合理变化。数量突然减少时停止开放写入并调查。</p>
+<p><a id="section-9"></a></p>
 <h2>9. 线上与本地差异</h2>
 <h3>9.1 差异摘要</h3>
 <p>本地相对线上服务器工作区有 92 个文件变化、约 7017 行新增和 565 行删除。主要包括：</p>
@@ -577,7 +684,21 @@ ssh ubuntu@1.15.230.239 &#39;docker logs --since 30m --tail 200 lingsu-backend-1
 <li>修复或明确 E2E 失败原因，至少完成三角色主流程烟雾测试。</li>
 <li>安排维护窗口和业务通知。</li>
 </ol>
+<p><a id="section-10"></a></p>
 <h2>10. 安全发布与回滚</h2>
+<blockquote>
+<p><strong>当前发布冻结：</strong> 在生产备份完成隔离恢复演练、迁移 0040/0041 验证通过、固定镜像 SHA、补齐 <code>AI_CONFIG_ENCRYPTION_KEY</code> 并完成核心烟雾测试之前，禁止发布当前本地最新版。接手初期只允许巡检和备份。</p>
+</blockquote>
+<h3>10.0 解除发布冻结的条件</h3>
+<ul>
+<li><input disabled="" type="checkbox"> 数据库、媒体、环境快照已生成并复制到服务器之外。</li>
+<li><input disabled="" type="checkbox"> 在隔离环境完整恢复成功，三角色能登录并查看预期数据。</li>
+<li><input disabled="" type="checkbox"> 迁移 0040/0041 在生产副本上通过，耗时和结果已记录。</li>
+<li><input disabled="" type="checkbox"> 当前运行镜像和新镜像均使用完整 Git SHA，可拉取。</li>
+<li><input disabled="" type="checkbox"> <code>AI_CONFIG_ENCRYPTION_KEY</code> 已生成并存入密码管理器。</li>
+<li><input disabled="" type="checkbox"> E2E 失败原因已修复，或至少人工完成核心烟雾测试并签字。</li>
+<li><input disabled="" type="checkbox"> 发布、回滚负责人及维护窗口已经确认。</li>
+</ul>
 <h3>10.1 发布前清单</h3>
 <ul>
 <li><input disabled="" type="checkbox"> 新负责人批准变更窗口。</li>
@@ -610,6 +731,7 @@ ssh ubuntu@1.15.230.239 &#39;docker logs --since 30m --tail 200 lingsu-backend-1
 <li>AI 配置无法解密且影响现网功能。</li>
 </ul>
 <p>代码镜像可以回退，数据库结构不一定能安全反向迁移。涉及 0040/0041 的回滚应优先使用发布前完整备份在维护窗口恢复，不能盲目执行 <code>migrate core 0039</code>。</p>
+<p><a id="section-11"></a></p>
 <h2>11. 运维与故障处理</h2>
 <table>
 <thead>
@@ -676,6 +798,7 @@ ssh ubuntu@1.15.230.239 &#39;docker logs --since 30m --tail 200 lingsu-celery-1&
 ssh ubuntu@1.15.230.239 &#39;cd /home/ubuntu/lingsu &amp;&amp; docker compose exec -T backend python manage.py showmigrations --plan&#39;
 </code></pre>
 <p>不要通过反复重启掩盖问题。先保存时间、症状、请求路径、容器状态和相关日志，再决定变更。</p>
+<p><a id="section-12"></a></p>
 <h2>12. 质量与风险报告</h2>
 <h3>12.1 2026-08-31 实测质量基线</h3>
 <table>
@@ -732,7 +855,10 @@ ssh ubuntu@1.15.230.239 &#39;cd /home/ubuntu/lingsu &amp;&amp; docker compose ex
 <li>P1：决定是否正式启用附件和 PDF，并准备相应安全/资源能力。</li>
 <li>P2：监控、告警、备份成功通知和恢复演练常态化。</li>
 </ul>
+<p><a id="section-13"></a></p>
 <h2>13. 资产与权限移交</h2>
+<h3>13.1 每项资产必须填写的信息</h3>
+<p>除下表外，正式签收记录必须补齐：管理平台名称、登录网址、当前所有者姓名、新所有者姓名、绑定企业邮箱/手机号、计费与续费日期、双因素认证归属、恢复码保管位置、权限轮换日期和验收截图/工单号。密码和恢复码本身不得写入本文。</p>
 <table>
 <thead>
 <tr>
@@ -890,6 +1016,7 @@ ssh ubuntu@1.15.230.239 &#39;cd /home/ubuntu/lingsu &amp;&amp; docker compose ex
 <td>P0</td>
 </tr>
 </tbody></table>
+<p><a id="section-14"></a></p>
 <h2>14. 接手验收清单</h2>
 <h3>14.1 业务负责人</h3>
 <ul>
@@ -951,6 +1078,7 @@ ssh ubuntu@1.15.230.239 &#39;cd /home/ubuntu/lingsu &amp;&amp; docker compose ex
 <td></td>
 </tr>
 </tbody></table>
+<p><a id="section-15"></a></p>
 <h2>15. 附录</h2>
 <h3>15.1 命令速查</h3>
 <pre><code class="language-bash"># [只读] 本地状态
@@ -1034,13 +1162,24 @@ git diff --stat 620aa599bc224bb0a9e9ff72d8fe89a2ac0a3cab..HEAD
 <td>2026-08-31</td>
 <td>通过；未发现明文密码、Key、Token、私钥或数据库连接串</td>
 </tr>
+<tr>
+<td>生产公网入口与数据基线</td>
+<td>2026-09-01</td>
+<td>只读核验完成</td>
+</tr>
+<tr>
+<td>接手可操作性修订</td>
+<td>2026-09-01</td>
+<td>profiles、发布冻结、恢复演练、发布单和资产签收已补充</td>
+</tr>
 </tbody></table>
+<p><a id="section-16"></a></p>
 <h2>16. 可照做的操作手册</h2>
 <p>本章面向第一次接手项目的人。命令在哪台机器执行、执行前检查什么、成功时看到什么、失败时如何停止，均写在步骤中。</p>
 <h3>16.1 从零启动本地测试环境</h3>
 <p><strong>执行人：</strong> 开发负责人。</p>
-<p><strong>执行位置：</strong> 本地 Mac 的“终端”应用。
-<strong>影响：</strong> 只改变本地 Docker/Colima 和本地集成数据，不影响线上。</p>
+<p><strong>执行位置：</strong> 本地 Mac 的“终端”应用。</p>
+<p><strong>影响：</strong> 只改变本地 Docker/Colima 和本地集成数据，不影响线上。</p>
 <ol>
 <li><p>进入项目目录：</p>
 <pre><code class="language-bash">cd /Users/anzhi/Desktop/雷灵/星辰/lingsu
@@ -1064,9 +1203,15 @@ test -f .env.integration &amp;&amp; echo &#39;integration config exists&#39;
 </code></pre>
 <p>成功标准：输出 <code>integration config exists</code>。如果没有该文件，从负责人处取得本地测试配置；不要复制线上 <code>.env</code>。</p>
 </li>
-<li><p>启动本地服务：</p>
-<pre><code class="language-bash"># [变更] 只作用于本地
-docker compose --env-file .env.integration --profile dev up --build -d
+<li><p>启动本地完整服务。若电脑资源不足、只需要改普通页面，可使用第 7.1 节的最小环境；交接验收必须使用完整环境：</p>
+<pre><code class="language-bash"># [变更] 只作用于本地完整环境
+docker compose --env-file .env.integration \
+  --profile dev \
+  --profile async \
+  --profile async-beat \
+  --profile scanner \
+  --profile documents \
+  up --build -d
 </code></pre>
 <p>第一次可能需要数分钟下载镜像和安装依赖。命令返回终端提示符后继续。</p>
 </li>
@@ -1100,20 +1245,52 @@ docker compose --env-file .env.integration exec -T postgres sh -lc &#39;printf &
 </code></pre>
 <p>如果输出像生产库或无法确认，立即停止。</p>
 </li>
-<li><p>播种演示数据：</p>
+<li><p>初始化 AI Skills：</p>
 <pre><code class="language-bash"># [变更] 仅本地
-docker compose --env-file .env.integration exec -T backend python manage.py seed_demo
 docker compose --env-file .env.integration exec -T backend python manage.py seed_ai_agents
 </code></pre>
 </li>
-<li><p>成功标准：命令明确提示演示学校、账号或 Skills 已创建；使用 <code>docs/项目运行说明.md</code> 中的演示账号登录。</p>
+<li><p>为本地演示账号设置一个临时、非生产密码。输入时终端不会回显：</p>
+<pre><code class="language-bash"># [变更] 仅本地；不要复用生产或个人密码
+read -s -p &#39;Local demo password: &#39; demo_password; echo
+docker compose --env-file .env.integration exec -T backend \
+  python manage.py seed_demo --password &quot;$demo_password&quot;
+unset demo_password
+</code></pre>
+</li>
+<li><p>使用以下本地演示账号登录：</p>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>用户名</th>
+<th>入口</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>学生</td>
+<td><code>demo-student</code></td>
+<td><code>/student</code></td>
+</tr>
+<tr>
+<td>教师</td>
+<td><code>demo-teacher</code></td>
+<td><code>/teacher</code></td>
+</tr>
+<tr>
+<td>平台管理员</td>
+<td><code>demo-platform</code></td>
+<td><code>/platform</code></td>
+</tr>
+</tbody></table>
+<p>密码是上一步刚设置的本地临时密码。成功标准：三个账号都能登录到对应入口。</p>
 </li>
 <li><p>只有明确要清空并重建演示数据时才使用 <code>--reset</code>。生产服务器永远禁止执行。</p>
 </li>
 </ol>
 <h3>16.3 每次接手代码后的本地验收</h3>
-<p><strong>执行人：</strong> 开发负责人。
-<strong>执行时机：</strong> 拉取代码后、准备发布前、合并重要改动前。</p>
+<p><strong>执行人：</strong> 开发负责人。</p>
+<p><strong>执行时机：</strong> 拉取代码后、准备发布前、合并重要改动前。</p>
 <ol>
 <li><p>确认代码状态：</p>
 <pre><code class="language-bash"># [只读]
@@ -1148,8 +1325,8 @@ npm run test:e2e
 </ol>
 <h3>16.4 线上每日巡检</h3>
 <p><strong>执行人：</strong> 运维负责人。</p>
-<p><strong>执行位置：</strong> 任意已配置新负责人 SSH Key 的安全电脑。
-<strong>影响：</strong> 以下全部只读。</p>
+<p><strong>执行位置：</strong> 任意已配置新负责人 SSH Key 的安全电脑。</p>
+<p><strong>影响：</strong> 以下全部只读。</p>
 <ol>
 <li><p>登录并确认身份：</p>
 <pre><code class="language-bash">ssh ubuntu@1.15.230.239
@@ -1189,8 +1366,8 @@ docker logs --since 24h --tail 500 lingsu-celery-1 2&gt;&amp;1 | grep -Ei &#39;e
 </li>
 </ol>
 <h3>16.5 第一次建立生产备份</h3>
-<p><strong>执行人：</strong> 新运维负责人。
-<strong>风险：</strong> <code>[高风险]</code>。虽然备份不应修改业务数据，但会读取全库、占用磁盘并保存敏感环境快照。必须先获得新负责人批准，在低峰期执行。</p>
+<p><strong>执行人：</strong> 新运维负责人。</p>
+<p><strong>风险：</strong> <code>[高风险]</code>。虽然备份不应修改业务数据，但会读取全库、占用磁盘并保存敏感环境快照。必须先获得新负责人批准，在低峰期执行。</p>
 <ol>
 <li><p>登录后检查预计空间：</p>
 <pre><code class="language-bash">ssh ubuntu@1.15.230.239
@@ -1225,19 +1402,89 @@ test -s &quot;$latest/environment.snapshot&quot;
 <li><p>不要在生产直接运行 <code>restore.sh</code> 验证恢复。应在隔离服务器或隔离数据库演练。</p>
 </li>
 </ol>
-<h3>16.6 生产发布操作</h3>
-<p><strong>执行人：</strong> 开发负责人和运维负责人共同执行。
-<strong>风险：</strong> <code>[高风险]</code>。当前版本漂移和迁移 0040/0041 未经过生产副本演练，因此在第 10 节清单全部完成前禁止执行。</p>
+<h3>16.6 隔离恢复演练</h3>
+<p><strong>执行人：</strong> 运维负责人和开发负责人共同执行。</p>
+<p><strong>执行位置：</strong> 一台不对外提供业务的隔离服务器，或明确使用独立 Docker 项目名、独立端口和独立卷的测试主机。严禁在生产目录和生产 Docker context 中执行。</p>
+<p><strong>完成标准：</strong> 只有“数据库恢复成功、媒体恢复成功、对应版本服务启动成功、三角色登录成功、数据基线核对通过”五项全部满足，备份才可标记为“已验证”。</p>
 <ol>
-<li><p>在发布单中记录：旧后端镜像 SHA、旧 Web 镜像 SHA、新 Git SHA、备份目录、维护窗口和回滚负责人。</p>
+<li><p>从生产备份中选择一个明确时间戳目录，不允许自动选择“最新”后直接恢复。记录目录名、文件大小和 SHA-256：</p>
+<pre><code class="language-bash"># [只读] 在备份存放位置执行
+backup_dir=/安全备份位置/YYYYMMDDTHHMMSSZ
+test -s &quot;$backup_dir/database.dump&quot;
+test -s &quot;$backup_dir/media.tar.gz&quot;
+sha256sum &quot;$backup_dir/database.dump&quot; &quot;$backup_dir/media.tar.gz&quot;
+</code></pre>
+</li>
+<li><p>在隔离主机建立单独目录，复制与备份时相匹配的代码/镜像、备份文件和专用环境配置。数据库名、端口、Compose 项目名均不得与生产相同。</p>
+</li>
+<li><p>启动隔离 PostgreSQL 和 Redis，确认容器名不含生产正在运行的实例：</p>
+<pre><code class="language-bash"># [变更] 仅隔离环境
+docker compose -p lingsu-restore-drill --env-file .env.restore up -d postgres redis
+docker compose -p lingsu-restore-drill --env-file .env.restore ps
+</code></pre>
+</li>
+<li><p>把数据库备份恢复到隔离数据库。下面的 <code>restore-postgres-1</code> 必须先用上一条 <code>ps</code> 确认是隔离容器：</p>
+<pre><code class="language-bash"># [高风险] 仅隔离环境
+docker exec -i lingsu-restore-drill-postgres-1 sh -lc \
+  &#39;pg_restore --clean --if-exists --no-owner -U &quot;$POSTGRES_USER&quot; -d &quot;$POSTGRES_DB&quot;&#39; \
+  &lt; &quot;$backup_dir/database.dump&quot;
+</code></pre>
+</li>
+<li><p>恢复媒体到隔离环境的 <code>media_data</code> 卷，不能挂载生产媒体卷。启动对应版本 backend、celery、nginx 后检查：</p>
+<pre><code class="language-bash"># [变更] 仅隔离环境
+docker compose -p lingsu-restore-drill --env-file .env.restore \
+  --profile production --profile async up -d backend celery nginx
+docker compose -p lingsu-restore-drill --env-file .env.restore ps
+curl -fsS http://127.0.0.1:隔离端口/api/health/
+</code></pre>
+<p><code>隔离端口</code> 必须替换为 <code>.env.restore</code> 中明确配置、且不与生产冲突的实际端口。</p>
+</li>
+<li><p>验证三类角色登录、项目列表、材料数量和最近项目时间。把结果与第 8.6 节的备份时点数据基线比较；合理新增可以接受，减少必须解释。</p>
+</li>
+<li><p>填写恢复演练记录：备份时间、镜像 SHA、开始/结束时间、恢复耗时、执行人、数据核对结果、失败与修复过程。</p>
+</li>
+<li><p>演练完成后只清理 <code>lingsu-restore-drill</code> 项目。先再次核对项目名，再执行：</p>
+<pre><code class="language-bash"># [高风险] 仅隔离环境
+docker compose -p lingsu-restore-drill --env-file .env.restore down -v
+</code></pre>
+<p>生产项目绝对禁止执行 <code>down -v</code>。</p>
+</li>
+</ol>
+<h3>16.7 生产发布操作</h3>
+<p><strong>执行人：</strong> 开发负责人和运维负责人共同执行。</p>
+<p><strong>风险：</strong> <code>[高风险]</code>。当前版本漂移和迁移 0040/0041 未经过生产副本演练，因此在第 10 节清单全部完成前禁止执行。</p>
+<ol>
+<li><p>复制并填写发布单，缺一项不发布：</p>
+<pre><code class="language-text">发布日期与维护窗口：
+业务批准人：
+开发执行人：
+运维执行人：
+回滚负责人：
+当前服务器 Git SHA：
+旧后端镜像 SHA：
+旧 Web 镜像 SHA：
+新 Git SHA：
+新后端镜像 SHA：
+新 Web 镜像 SHA：
+发布前备份目录：
+备份异地位置：
+隔离恢复演练记录：
+新增数据库迁移：
+配置项变更：
+烟雾测试负责人：
+回滚触发条件：
+发布结果：
+</code></pre>
 </li>
 <li><p>确认新镜像已由 GitHub Actions 发布，标签必须是完整提交 SHA，不能写 <code>latest</code>。</p>
 </li>
-<li><p>在服务器只修改 <code>.env</code> 中的 <code>BACKEND_IMAGE</code>、<code>WEB_IMAGE</code> 以及本次明确新增的配置；先备份旧配置：</p>
+<li><p>在服务器只修改 <code>.env</code> 中的 <code>BACKEND_IMAGE</code>、<code>WEB_IMAGE</code> 以及本次明确新增的配置；先用唯一文件名备份旧配置：</p>
 <pre><code class="language-bash"># [高风险]
 cd /home/ubuntu/lingsu
-cp .env &quot;.env.before-release-$(date +%Y%m%dT%H%M%S)&quot;
-chmod 600 .env.before-release-*
+env_backup=&quot;.env.before-release-$(date +%Y%m%dT%H%M%S)&quot;
+cp .env &quot;$env_backup&quot;
+chmod 600 &quot;$env_backup&quot;
+printf &#39;%s\n&#39; &quot;$env_backup&quot;
 </code></pre>
 </li>
 <li><p>本地最新版升级还必须配置 <code>AI_CONFIG_ENCRYPTION_KEY</code>。密钥应由密码管理器生成和保存，不得写入 Git、聊天或发布单。</p>
@@ -1265,7 +1512,7 @@ docker logs --since 10m --tail 300 lingsu-celery-1
 <li><p>任一 P0 功能失败，立即停止业务写入并进入回滚判断，不要连续反复发布。</p>
 </li>
 </ol>
-<h3>16.7 回滚操作</h3>
+<h3>16.8 回滚操作</h3>
 <ol>
 <li><p><strong>仅前端异常且数据库/后端正常：</strong> 把 <code>WEB_IMAGE</code> 改回发布单记录的旧 SHA，执行 Nginx 的 <code>up -d --no-build</code>，再验证页面。</p>
 </li>
@@ -1275,15 +1522,16 @@ docker logs --since 10m --tail 300 lingsu-celery-1
 </li>
 <li><p>恢复脚本会清理现有数据库对象、删除媒体内容并重启服务：</p>
 <pre><code class="language-bash"># [高风险] 仅展示，未经批准禁止在生产执行
-backup_dir=$(find /home/ubuntu/backups -mindepth 1 -maxdepth 1 -type d | sort | tail -1)
-test -n &quot;$backup_dir&quot;
+backup_dir=/home/ubuntu/backups/发布单中记录的明确时间戳
+test -s &quot;$backup_dir/database.dump&quot;
+test -s &quot;$backup_dir/media.tar.gz&quot;
 ./scripts/restore.sh &quot;$backup_dir&quot;
 </code></pre>
 </li>
 <li><p>回滚后必须再次检查容器、健康接口、迁移状态、三角色登录和核心业务数据；记录原因和受影响时间段。</p>
 </li>
 </ol>
-<h3>16.8 常见故障的明确处理顺序</h3>
+<h3>16.9 常见故障的明确处理顺序</h3>
 <h4>网页打不开</h4>
 <ol>
 <li>从外部浏览器确认是否所有人都打不开。</li>
@@ -1316,7 +1564,7 @@ test -n &quot;$backup_dir&quot;
 <li>永远不要删除 <code>postgres_data</code>、<code>media_data</code>，也不要运行 <code>docker compose down -v</code>。</li>
 </ol>
 <hr>
-<p>本手册记录的是 2026-08-31 的可验证状态。接手后每次生产发布都应更新第 1.3 节版本基线、第 9 节差异和第 15.4 节核验日期。</p>
+<p>本手册记录的是截至 2026-09-01 的可验证状态。接手后每次生产发布都应更新第 1.3 节版本基线、第 8.6 节数据基线、第 9 节差异和第 15.4 节核验日期。</p>
 
 </main>
 </body>
